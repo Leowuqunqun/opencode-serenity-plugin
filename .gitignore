@@ -1,0 +1,38 @@
+# Node / TypeScript
+node_modules/
+dist/
+build/
+*.js.map
+*.d.ts.map
+*.tsbuildinfo
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# 日志
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 测试覆盖率
+coverage/
+.nyc_output/
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 宁静号特定：避免污染主仓
+AGENT_SESSIONS/
+.opencode/

@@ -16,7 +16,7 @@ import {
   MsmNotRegisteredError,
   MsmTimeoutError,
 } from './errors.js';
-import { getState } from './state.js';
+import { getState, ensureReady } from './state.js';
 import { isPathInside } from './util/git.js';
 
 /** 30s 超时（v0 固定，v1 可配置） */
@@ -131,8 +131,11 @@ export const msmListTool: ToolDefinition = tool({
     'Returns one MSM per line: `name | skill | category | description`.',
   args: {},
   execute: async () => {
-    if (!getState().activated) {
-      return 'serenity plugin is not active in this directory (RR1+RR6 not satisfied)';
+    // v0.1: 阻塞等待 Phase 2 完成（如果 plugin 不激活，throw 友好提示）
+    try {
+      await ensureReady();
+    } catch (err) {
+      return `serenity plugin is not active: ${err instanceof Error ? err.message : String(err)}`;
     }
     const registry = loadMechRegistry();
     if (registry.length === 0) {
@@ -156,9 +159,8 @@ export const msmExecTool: ToolDefinition = tool({
       .describe('JSON object of flag→value pairs; default "{}" for MSMs that take no args'),
   },
   execute: async (input) => {
-    if (!getState().activated) {
-      throw new Error('serenity plugin is not active in this directory');
-    }
+    // v0.1: 阻塞等待 Phase 2 完成
+    await ensureReady();
     const registry = loadMechRegistry();
     const entry = findMsm(input.msm_name, registry);
     const argv = parseArgs(input.args, entry);

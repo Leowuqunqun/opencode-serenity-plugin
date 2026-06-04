@@ -1,5 +1,5 @@
 /**
- * activation 流程单测
+ * activation 流程单测 — v0.1 两阶段 init
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -7,8 +7,8 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { tryActivate } from '../src/activation.js';
-import { isActive, resetState } from '../src/state.js';
+import { tryActivateSync } from '../src/activation.js';
+import { isActive, resetState, ensureReady } from '../src/state.js';
 import type { PluginInput } from '@opencode-ai/plugin';
 
 /** 构造一个完整的"serenity 工作仓"：git repo + /.serenity + skill 目录 */
@@ -37,27 +37,33 @@ function fakeInput(directory: string): PluginInput {
   };
 }
 
-describe('activation.tryActivate', () => {
+/** v0.1：fire-and-forget 后等待异步完成 */
+async function waitForReady(): Promise<void> {
+  await ensureReady();
+}
+
+describe('activation.tryActivateSync (v0.1 two-phase init)', () => {
   beforeEach(() => {
     resetState();
   });
 
-  it('成功路径：git repo + /.serenity + SKILL.md 存在', () => {
+  it('成功路径：git repo + /.serenity + SKILL.md 存在', async () => {
     const tmp = makeSerenityRepo('home-serenity');
-    const result = tryActivate(fakeInput(tmp));
+    const result = tryActivateSync(fakeInput(tmp));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.state.instanceName).toBe('home-serenity');
-      expect(result.state.cwdRoot).toBe(tmp);
-      expect(result.state.activated).toBe(true);
+      expect(result.cwdRoot).toBe(tmp);
+      // Phase 1 同步完成后：state 仍 INACTIVE（Phase 2 后台跑）
+      // Phase 2 完成后：state.activated = true
+      await waitForReady();
       expect(isActive()).toBe(true);
     }
     rmSync(tmp, { recursive: true });
   });
 
-  it('失败：非 git 目录', () => {
+  it('失败：非 git 目录（RR6 同步短路）', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'serenity-nogit-'));
-    const result = tryActivate(fakeInput(tmp));
+    const result = tryActivateSync(fakeInput(tmp));
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toMatch(/RR6/);
@@ -66,37 +72,37 @@ describe('activation.tryActivate', () => {
     rmSync(tmp, { recursive: true });
   });
 
-  it('失败：git repo 但缺 /.serenity', () => {
+  it('失败：git repo 但缺 /.serenity（RR1 异步失败）', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'serenity-noserenity-'));
     execFileSync('git', ['init', '-b', 'main'], { cwd: tmp, stdio: 'ignore' });
-    const result = tryActivate(fakeInput(tmp));
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.reason).toMatch(/RR1/);
-    }
+    const result = tryActivateSync(fakeInput(tmp));
+    // Phase 1 通过（RR6 同步 OK）
+    expect(result.ok).toBe(true);
+    // Phase 2 失败（RR1 缺 /.serenity）
+    await expect(waitForReady()).rejects.toThrow(/RR1/);
+    expect(isActive()).toBe(false);
     rmSync(tmp, { recursive: true });
   });
 
-  it('失败：/.serenity 内容为空', () => {
+  it('失败：/.serenity 内容为空（RR1 异步失败）', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'serenity-empty-'));
     execFileSync('git', ['init', '-b', 'main'], { cwd: tmp, stdio: 'ignore' });
     writeFileSync(join(tmp, '.serenity'), '   \n');
-    const result = tryActivate(fakeInput(tmp));
-    expect(result.ok).toBe(false);
+    const result = tryActivateSync(fakeInput(tmp));
+    expect(result.ok).toBe(true);
+    await expect(waitForReady()).rejects.toThrow(/RR1/);
     rmSync(tmp, { recursive: true });
   });
 
-  it('失败：/.serenity 存在但 SKILL.md 缺失', () => {
+  it('失败：/.serenity 存在但 SKILL.md 缺失（RR2 异步失败）', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'serenity-noskill-'));
     execFileSync('git', ['init', '-b', 'main'], { cwd: tmp, stdio: 'ignore' });
     execFileSync('git', ['config', 'user.email', 'test@test'], { cwd: tmp, stdio: 'ignore' });
     execFileSync('git', ['config', 'user.name', 'Test'], { cwd: tmp, stdio: 'ignore' });
     writeFileSync(join(tmp, '.serenity'), 'home-serenity');
-    const result = tryActivate(fakeInput(tmp));
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.reason).toMatch(/RR2/);
-    }
+    const result = tryActivateSync(fakeInput(tmp));
+    expect(result.ok).toBe(true);
+    await expect(waitForReady()).rejects.toThrow(/RR2/);
     rmSync(tmp, { recursive: true });
   });
 });

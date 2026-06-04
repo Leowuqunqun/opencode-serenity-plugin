@@ -18,7 +18,7 @@
 import type { Hooks } from '@opencode-ai/plugin';
 import { resolve as pathResolve } from 'node:path';
 import { isPathInside } from './util/git.js';
-import { getState } from './state.js';
+import { getState, ensureReady } from './state.js';
 import { BashDisabledError } from './errors.js';
 
 type ToolArgs = Record<string, unknown>;
@@ -50,8 +50,12 @@ function pathAppearsOutsideRoot(value: string, cwdRoot: string): boolean {
 }
 
 export const toolExecuteBeforeHook: NonNullable<Hooks['tool.execute.before']> = async (input, _output) => {
-  // 不激活时：放行所有（plugin 不工作）
-  if (!getState().activated) return;
+  // v0.1: 阻塞等待 Phase 2 完成（失败时：放行所有 = plugin 不工作 = "就像没装一样"）
+  try {
+    await ensureReady();
+  } catch {
+    return;
+  }
 
   const state = getState();
   const args = (input as unknown as { args: ToolArgs }).args ?? {};

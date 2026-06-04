@@ -11,20 +11,24 @@
  */
 
 import type { Hooks } from '@opencode-ai/plugin';
-import { getState } from './state.js';
+import { ensureReady } from './state.js';
 
 export const chatMessageHook: NonNullable<Hooks['chat.message']> = async (_input, _output) => {
   // 注：当前 SDK 类型中 chat.message 没有 messages in output（只有 message + parts）
   // v0 简化：不在此 hook 实际注入；改在 system.transform hook 中根据激活状态注入
   // 实际 RR7 触发由 system.transform 处理
-  void getState();
 };
 
 export const systemTransformHook: NonNullable<Hooks['experimental.chat.system.transform']> = async (
   _input,
   output,
 ) => {
-  if (!getState().activated) return;
+  // v0.1: 阻塞等待 Phase 2 完成（失败时不注入提示）
+  try {
+    await ensureReady();
+  } catch {
+    return;
+  }
 
   // RR7 触发提示：如果 system prompt 中已包含提示文本，LLM 知道如何响应用户输入 /serenity-init
   // 注：这是条件性——只有当用户**当前**输入了 /serenity-init 时才需要注入

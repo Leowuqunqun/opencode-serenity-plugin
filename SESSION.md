@@ -69,6 +69,9 @@
 | 3 | **permission schema 真实集成（v1）** | 当前 v0 用 tool.execute.before hook 拦截；v1 可改用 permission.ask hook（若宿主触发）+ opencode.json |
 | 4 | **RR7 完整 slash command（v1）** | v0 用 system.transform 注入；v1 期望 SDK 暴露 registerCommand 或自实现 |
 | 5 | **plugin 仓的"开发期测试"** | 当前 vitest 测纯逻辑；v1 可加集成测试（在真实 serenity 主仓中跑）|
+| 6 | **v0.1 候选 — 两阶段 init**（skillful 模式）| v0 one-phase sync → v0.1 fire-and-forget + ReadyStateMachine；~30 行；详见 `docs/v0.1-candidates.md` |
+| 7 | **v0.1 候选 — Pre-indexed resources 轻量** | 修复 `msm_exec` path escape 隐患；路径型参数强制 `isPathInside`；~80 行 |
+| 8 | **v0.1 候选 — Hook 工厂分层**（oMo 模式）| 拆 `createPermissionGuards` / `createSessionCompacting` / `createShellEnv`；~100 行重构 |
 
 ---
 
@@ -85,7 +88,8 @@
 | 21:30 | 范围层 RR1-RR7 文档化 | `70db320` |
 | 22:00 | 方案层 10 步协议 + 5 模块 | `b92eed6` |
 | 22:30 | 接口层 6 契约 + 10 错误类 | `f2b3845` |
-| 23:30 | 实现层（src/ 9 文件 + tests/ 6 文件）| `b3a1f9c`（待定）|
+| 23:30 | 实现层（src/ 9 文件 + tests/ 6 文件）| `e91f8cc` |
+| 06-05 00:00 | oMo + skillful 代码级对照（v0.1 候选）| 待 commit |
 
 ### 22 文件清单（最终）
 
@@ -117,18 +121,20 @@
 | `docs/architecture-v0.md` | 方案层（10 步 + 5 模块，219 行）|
 | `docs/contract-v0.md` | 接口层（6 契约 + 10 错误，431 行）|
 | `docs/requirements-v0-summary.md` | 旧 R1-R5 引用（保留演进历史）|
+| `docs/v0.1-candidates.md` | v0.1 候选（oMo + skillful 对照分析，待用户拍板）|
 
 ### 远程仓
 
 - `git@home.gitlab:yh/opencode-serenity-plugin.git` — private, default_branch=main
 - Web: `http://home.gitlab/yh/opencode-serenity-plugin`
-- commits（5+）：`99e95a3` → `09810ef` → `70db320` → `b92eed6` → `f2b3845` → `b3a1f9c`（实现层，待定）
+- commits（6+）：`99e95a3` → `09810ef` → `70db320` → `b92eed6` → `f2b3845` → `e91f8cc`（实现层）
 
 ---
 
 ## 最近变更
 
-- 2026-06-04 23:30 — v0 实现层完成：24 tests pass / typecheck green / build green（待 commit `b3a1f9c`）
+- 2026-06-04 23:30 — v0 实现层完成：24 tests pass / typecheck green / build green（commit `e91f8cc`）
+- 2026-06-05 00:00 — oMo + skillful 代码级对照：写 `docs/v0.1-candidates.md` 沉淀 3 候选改进（两阶段 init / pre-indexed / hook 工厂）
 - 2026-06-04 22:30 — 接口层 6 契约 + 10 错误类（commit `f2b3845`）
 - 2026-06-04 22:00 — 方案层 10 步启动协议（commit `b92eed6`）
 - 2026-06-04 21:30 — 范围层 RR1-RR7 文档化（commit `70db320`）

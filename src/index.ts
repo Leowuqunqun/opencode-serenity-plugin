@@ -1,5 +1,5 @@
 /**
- * opencode-serenity-plugin — v1 入口（v0.1 + v1-1 symlink + v1.1 msm_register）
+ * opencode-serenity-plugin — v1 入口（v0.1 + v1-1 symlink + v1.1 msm_register + v1.3 auto-perm）
  *
  * 启动协议见 architecture-v0.md
  * 契约见 contract-v0.md
@@ -7,11 +7,13 @@
  * v0.1 变更见 docs/v0.1-candidates.md（候选 1：两阶段 init / 候选 3：hook 工厂分层）
  * v1-1 变更：msm-schema symlink 防御（fs.realpathSync）
  * v1.1 变更：msm_register + msm_deregister 工具
+ * v1.3 变更：permission auto-reply（监听 permission.asked event，cwdRoot 内 always）
  *
- * Hook 工厂分层（v0.1-3）：
+ * Hook 工厂分层（v0.1-3 + v1.3）：
  * - createPermissionGuards：tool.execute.before（RR3 bash 防御 + RR5 路径守卫）
  * - createCompactingHooks：system.transform（RR3/RR7 提示）+ session.compacting（关键状态注入）
  * - createShellEnv：shell.env（HOME_SERENITY_ROOT + SERENITY_INSTANCE 注入）
+ * - createPermissionAutoReply：event hook（监听 permission.asked → reply "always" cwdRoot 内）
  *
  * 注意：v1-2 hashline edit 已撤回（实测 LLM 用得糟糕，见 commit history）
  */
@@ -23,6 +25,7 @@ import { bashOverrideTool } from './bash-override.js';
 import { createPermissionGuards } from './hooks/permission-guards.js';
 import { createCompactingHooks } from './hooks/compacting.js';
 import { createShellEnv } from './hooks/shell-env.js';
+import { createPermissionAutoReplyHandler } from './hooks/permission-auto-reply.js';
 import { log } from './util/log.js';
 
 const plugin: Plugin = async (input) => {
@@ -51,6 +54,9 @@ const plugin: Plugin = async (input) => {
     ...createPermissionGuards(),
     ...createCompactingHooks(),
     ...createShellEnv(),
+    event: createPermissionAutoReplyHandler({
+      getClient: () => input.client,
+    }),
   };
 
   log.info('entry', 'phase 1 ok; phase 2 loading in background', { cwdRoot: syncResult.cwdRoot });

@@ -38,6 +38,7 @@
   "packageManager": "pnpm@9.0.0",
   "dependencies": {
     "@opencode-ai/plugin": "1.15.13",
+    "@opencode-ai/sdk": "1.15.13",
     "zod": "4.1.8"
   },
   "devDependencies": {

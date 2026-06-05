@@ -18,6 +18,7 @@ import {
 } from './errors.js';
 import { getState, ensureReady } from './state.js';
 import { isPathInside } from './util/git.js';
+import { validatePathArgs } from './msm-schema.js';
 
 /** 30s 超时（v0 固定，v1 可配置） */
 const MSM_TIMEOUT_MS = 30_000;
@@ -56,7 +57,7 @@ function findMsm(name: string, registry: MechEntry[]): MechEntry {
 }
 
 /** 解析 args 字符串为 object（msm_exec 接收 string，转换为 flags） */
-function parseArgs(rawArgs: string, entry: MechEntry): string[] {
+function parseArgs(rawArgs: string, entry: MechEntry, cwdRoot: string): string[] {
   let parsed: Record<string, unknown> = {};
   if (rawArgs.trim() === '') {
     parsed = {};
@@ -68,6 +69,9 @@ function parseArgs(rawArgs: string, entry: MechEntry): string[] {
       throw new MsmArgsParseError(rawArgs, reason);
     }
   }
+
+  // v0.1-2: path-arg 预校验（在拼 argv 之前，避免 cwdRoot 外的路径传递给 msm）
+  validatePathArgs(parsed, entry, cwdRoot);
 
   // 转换为 --key value 形式
   const argv: string[] = [];
@@ -161,9 +165,10 @@ export const msmExecTool: ToolDefinition = tool({
   execute: async (input) => {
     // v0.1: 阻塞等待 Phase 2 完成
     await ensureReady();
+    const state = getState();
     const registry = loadMechRegistry();
     const entry = findMsm(input.msm_name, registry);
-    const argv = parseArgs(input.args, entry);
+    const argv = parseArgs(input.args, entry, state.cwdRoot);
     const result = await runMsm(entry, argv);
     if (result.exitCode !== 0) {
       throw new MsmExecutionError(entry.name, result.exitCode, result.stderr);

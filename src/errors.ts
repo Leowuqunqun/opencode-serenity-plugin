@@ -94,3 +94,14 @@ export class InitGitCommitError extends SerenityError {
     this.name = 'InitGitCommitError';
   }
 }
+
+/** msm_exec 失败：path-arg 解析为 cwdRoot 之外的路径（v0.1-2 path escape guard）*/
+export class MsmPathEscapeError extends SerenityError {
+  constructor(msmName: string, argName: string, value: string, resolved: string) {
+    super(
+      `MSM "${msmName}" path-arg "${argName}"="${value}" resolves to "${resolved}" ` +
+      `which is outside cwdRoot; serenity plugin blocks path traversal (v0.1-2 pre-indexed guard)`,
+    );
+    this.name = 'MsmPathEscapeError';
+  }
+}

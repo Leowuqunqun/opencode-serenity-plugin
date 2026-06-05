@@ -20,7 +20,7 @@
 
 import type { Plugin, Hooks } from '@opencode-ai/plugin';
 import { tryActivateSync } from './activation.js';
-import { msmListTool, msmExecTool } from './msm.js';
+import { msmListTool, msmExecTool, msmRegisterTool, msmDeregisterTool } from './msm.js';
 import { bashOverrideTool } from './bash-override.js';
 import { createPermissionGuards } from './hooks/permission-guards.js';
 import { createCompactingHooks } from './hooks/compacting.js';
@@ -51,6 +51,8 @@ const plugin: Plugin = async (input) => {
       bash: bashOverrideTool, // 同名覆盖（RR3 第三层）
       msm_list: msmListTool,
       msm_exec: msmExecTool,
+      msm_register: msmRegisterTool, // v1.1: 填补"写了 MSM 无法注册"空白
+      msm_deregister: msmDeregisterTool, // v1.1: 对称删除
       hashline_edit: hashlineEditTool, // v1-2: 替代 edit 工具
     },
     // v0.1-3 hook 工厂（包含 v1-2 edit 拦截：permission-guards 内部已加 edit 检查）

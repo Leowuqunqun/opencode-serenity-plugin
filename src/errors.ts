@@ -79,6 +79,30 @@ export class MsmTimeoutError extends SerenityError {
   }
 }
 
+/** msm_register 失败：name 已被注册 */
+export class MsmAlreadyRegisteredError extends SerenityError {
+  constructor(msmName: string) {
+    super(`MSM "${msmName}" is already registered; use msm_deregister first to replace, or pick a different name`);
+    this.name = 'MsmAlreadyRegisteredError';
+  }
+}
+
+/** msm_register 失败：脚本文件不存在（拒绝注册空路径）*/
+export class MsmScriptNotFoundError extends SerenityError {
+  constructor(msmName: string, scriptPath: string) {
+    super(`MSM "${msmName}" script not found at "${scriptPath}"; serenity plugin refuses to register MSMs whose script does not exist`);
+    this.name = 'MsmScriptNotFoundError';
+  }
+}
+
+/** msm_deregister 失败：name 不在 registry */
+export class MsmNotInRegistryError extends SerenityError {
+  constructor(msmName: string) {
+    super(`MSM "${msmName}" is not in mech-registry.json; nothing to deregister`);
+    this.name = 'MsmNotInRegistryError';
+  }
+}
+
 /** msm_exec 失败：MSM 子进程 exit code != 0 */
 export class MsmExecutionError extends SerenityError {
   constructor(msmName: string, exitCode: number, stderr: string) {

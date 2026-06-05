@@ -5,20 +5,23 @@
  * 验证 MSM 注册后才允许执行
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import { z } from 'zod';
 import { spawn } from 'node:child_process';
 import { log } from './util/log.js';
 import {
+  MsmAlreadyRegisteredError,
   MsmArgsParseError,
   MsmExecutionError,
+  MsmNotInRegistryError,
   MsmNotRegisteredError,
+  MsmScriptNotFoundError,
   MsmTimeoutError,
 } from './errors.js';
 import { getState, ensureReady } from './state.js';
-import { isPathInside } from './util/git.js';
+import { isPathInside, gitAddAndCommit } from './util/git.js';
 import { validatePathArgs } from './msm-schema.js';
 
 /** 30s 超时（v0 固定，v1 可配置） */
@@ -42,22 +45,55 @@ type MechEntry = {
  * 返回统一 MechEntry[]
  */
 export function loadMechRegistryFrom(cwdRoot: string, instanceName: string): MechEntry[] {
-  const path = join(cwdRoot, '.opencode', 'skills', instanceName, 'references', 'mech-registry.json');
+  return loadRegistryFile(cwdRoot, instanceName).entries;
+}
+
+/** 完整 registry 文件结构（保留原 schema 用于回写）*/
+export type RegistryFile = {
+  entries: MechEntry[];
+  isV1Wrapped: boolean;
+  version?: number;
+  description?: string;
+};
+
+function registryFilePath(cwdRoot: string, instanceName: string): string {
+  return join(cwdRoot, '.opencode', 'skills', instanceName, 'references', 'mech-registry.json');
+}
+
+export function loadRegistryFile(cwdRoot: string, instanceName: string): RegistryFile {
+  const path = registryFilePath(cwdRoot, instanceName);
   try {
     const raw = readFileSync(path, 'utf8');
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed as MechEntry[];
+      return { entries: parsed as MechEntry[], isV1Wrapped: false };
     }
     if (parsed && typeof parsed === 'object' && Array.isArray(parsed.entries)) {
-      return parsed.entries as MechEntry[];
+      return {
+        entries: parsed.entries as MechEntry[],
+        isV1Wrapped: true,
+        version: typeof parsed.version === 'number' ? parsed.version : undefined,
+        description: typeof parsed.description === 'string' ? parsed.description : undefined,
+      };
     }
     log.warn('msm', 'mech-registry.json 顶层既不是数组也无 entries 字段', { path });
-    return [];
+    return { entries: [], isV1Wrapped: false };
   } catch (err) {
     log.warn('msm', 'mech-registry.json 读取/解析失败', { path, err: String(err) });
-    return [];
+    return { entries: [], isV1Wrapped: false };
   }
+}
+
+export function writeRegistryFile(cwdRoot: string, instanceName: string, file: RegistryFile): void {
+  const path = registryFilePath(cwdRoot, instanceName);
+  const payload = file.isV1Wrapped
+    ? {
+        version: file.version ?? 1,
+        description: file.description ?? 'serenity plugin: MSM registry',
+        entries: file.entries,
+      }
+    : file.entries;
+  writeFileSync(path, JSON.stringify(payload, null, 2) + '\n', 'utf8');
 }
 
 function loadMechRegistry(): MechEntry[] {
@@ -201,5 +237,124 @@ export const msmExecTool: ToolDefinition = tool({
       throw new MsmExecutionError(entry.name, result.exitCode, result.stderr);
     }
     return result.stdout || '(no output)';
+  },
+});
+
+/* ===== msm_register tool（v1.1 增补：填补"LLM 写了 MSM 无法注册"的空白）===== */
+export const msmRegisterTool: ToolDefinition = tool({
+  description:
+    'Register a new MSM (Mech/Semi-Mech) into mech-registry.json. ' +
+    'Use this after writing a new MSM script — without registration, msm_exec cannot find it. ' +
+    'Path must be relative to the serenity cwd root and the script file must already exist. ' +
+    'Auto-commits the registry change as "chore(msm): register <name>".',
+  args: {
+    name: z.string().min(1).describe('unique MSM name (kebab-case recommended)'),
+    path: z.string().min(1).describe('script path, relative to cwd root (e.g. ".opencode/skills/home-serenity/scripts/foo.ts")'),
+    description: z.string().min(1).describe('one-line description of what the MSM does'),
+    category: z.enum(['mech', 'semi-mech']).default('mech').describe('mech = pure TS, no LLM; semi-mech = TS + LLM decision points'),
+    flags: z
+      .array(
+        z.object({
+          name: z.string(),
+          type: z.string().default('string'),
+          description: z.string().optional(),
+          required: z.boolean().optional(),
+          default: z.unknown().optional(),
+        }),
+      )
+      .default([])
+      .describe('flag schema; type:"path" enables v0.1-2 path-escape guard'),
+    usage: z.string().optional().describe('one-line usage hint; default = "npx tsx <path> --<flags>"'),
+  },
+  execute: async (input) => {
+    log.info('msm', 'msm_register called', { name: input.name, path: input.path });
+    await ensureReady();
+    const state = getState();
+
+    // 1. 读 registry（含 schema 信息）
+    const file = loadRegistryFile(state.cwdRoot, state.instanceName);
+
+    // 2. 查重
+    if (file.entries.some((e) => e.name === input.name)) {
+      throw new MsmAlreadyRegisteredError(input.name);
+    }
+
+    // 3. 路径必须在 cwdRoot 内
+    const absPath = resolve(state.cwdRoot, input.path);
+    if (!isPathInside(state.cwdRoot, absPath)) {
+      throw new Error(`msm_register: path "${input.path}" resolves to "${absPath}" which is outside cwdRoot; serenity plugin blocks path traversal`);
+    }
+
+    // 4. 脚本文件必须存在
+    if (!existsSync(absPath)) {
+      throw new MsmScriptNotFoundError(input.name, absPath);
+    }
+
+    // 5. 构造 entry
+    const usage = input.usage ?? `npx tsx ${input.path}`;
+    const newEntry: MechEntry = {
+      name: input.name,
+      path: input.path,
+      skill: state.instanceName,
+      category: input.category,
+      description: input.description,
+      usage,
+      flags: input.flags.map((f) => ({
+        name: f.name,
+        type: f.type,
+        ...(f.description !== undefined ? { description: f.description } : {}),
+        ...(f.required !== undefined ? { required: f.required } : {}),
+        ...(f.default !== undefined ? { default: f.default } : {}),
+      })),
+    };
+
+    // 6. 写回（保留 schema）
+    file.entries.push(newEntry);
+    writeRegistryFile(state.cwdRoot, state.instanceName, file);
+    log.info('msm', 'msm_register wrote registry', { name: input.name, absPath });
+
+    // 7. 自动 commit
+    const relRegistry = `.opencode/skills/${state.instanceName}/references/mech-registry.json`;
+    try {
+      gitAddAndCommit(state.cwdRoot, relRegistry, `chore(msm): register ${input.name}`);
+    } catch (err) {
+      log.warn('msm', 'git commit failed (continuing)', { err: String(err) });
+    }
+
+    return `registered "${input.name}" at ${absPath} (commit created)`;
+  },
+});
+
+/* ===== msm_deregister tool（v1.1 增补）===== */
+export const msmDeregisterTool: ToolDefinition = tool({
+  description:
+    'Remove an MSM from mech-registry.json. Does NOT delete the script file (you handle that separately). ' +
+    'Auto-commits as "chore(msm): deregister <name>".',
+  args: {
+    name: z.string().min(1).describe('MSM name to remove (must already be registered)'),
+  },
+  execute: async (input) => {
+    log.info('msm', 'msm_deregister called', { name: input.name });
+    await ensureReady();
+    const state = getState();
+
+    const file = loadRegistryFile(state.cwdRoot, state.instanceName);
+    const idx = file.entries.findIndex((e) => e.name === input.name);
+    if (idx === -1) {
+      throw new MsmNotInRegistryError(input.name);
+    }
+
+    const removed = file.entries.splice(idx, 1)[0]!;
+    writeRegistryFile(state.cwdRoot, state.instanceName, file);
+    log.info('msm', 'msm_deregister wrote registry', { name: input.name, path: removed.path });
+
+    const relRegistry = `.opencode/skills/${state.instanceName}/references/mech-registry.json`;
+    try {
+      gitAddAndCommit(state.cwdRoot, relRegistry, `chore(msm): deregister ${input.name}`);
+    } catch (err) {
+      log.warn('msm', 'git commit failed (continuing)', { err: String(err) });
+    }
+
+    return `deregistered "${input.name}" (was at ${removed.path}; script file NOT deleted — clean up manually if needed)`;
   },
 });

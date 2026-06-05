@@ -1,21 +1,19 @@
 /**
- * opencode-serenity-plugin — v1 入口（v0.1 + v1-1 symlink + v1-2 hashline）
+ * opencode-serenity-plugin — v1 入口（v0.1 + v1-1 symlink + v1.1 msm_register）
  *
  * 启动协议见 architecture-v0.md
  * 契约见 contract-v0.md
  * 范围层见 docs/requirements-v0-scope.md（RR1-RR7）
  * v0.1 变更见 docs/v0.1-candidates.md（候选 1：两阶段 init / 候选 3：hook 工厂分层）
  * v1-1 变更：msm-schema symlink 防御（fs.realpathSync）
- * v1-2 变更：hashline edit（read annotator + edit interceptor + hashline_edit tool）
+ * v1.1 变更：msm_register + msm_deregister 工具
  *
  * Hook 工厂分层（v0.1-3）：
  * - createPermissionGuards：tool.execute.before（RR3 bash 防御 + RR5 路径守卫）
  * - createCompactingHooks：system.transform（RR3/RR7 提示）+ session.compacting（关键状态注入）
  * - createShellEnv：shell.env（HOME_SERENITY_ROOT + SERENITY_INSTANCE 注入）
  *
- * v1-2 额外 hooks：
- * - readAnnotatorHook：tool.execute.after（read 输出加 LINE#ID| 注释）
- * - editInterceptorHook：tool.execute.before（拦截 edit 工具，提示改用 hashline_edit）
+ * 注意：v1-2 hashline edit 已撤回（实测 LLM 用得糟糕，见 commit history）
  */
 
 import type { Plugin, Hooks } from '@opencode-ai/plugin';
@@ -25,10 +23,6 @@ import { bashOverrideTool } from './bash-override.js';
 import { createPermissionGuards } from './hooks/permission-guards.js';
 import { createCompactingHooks } from './hooks/compacting.js';
 import { createShellEnv } from './hooks/shell-env.js';
-import {
-  hashlineEditTool,
-  readAnnotatorHook,
-} from './hashline/edit-tool.js';
 import { log } from './util/log.js';
 
 const plugin: Plugin = async (input) => {
@@ -53,14 +47,10 @@ const plugin: Plugin = async (input) => {
       msm_exec: msmExecTool,
       msm_register: msmRegisterTool, // v1.1: 填补"写了 MSM 无法注册"空白
       msm_deregister: msmDeregisterTool, // v1.1: 对称删除
-      hashline_edit: hashlineEditTool, // v1-2: 替代 edit 工具
     },
-    // v0.1-3 hook 工厂（包含 v1-2 edit 拦截：permission-guards 内部已加 edit 检查）
     ...createPermissionGuards(),
     ...createCompactingHooks(),
     ...createShellEnv(),
-    // v1-2 read annotator
-    'tool.execute.after': readAnnotatorHook,
   };
 
   log.info('entry', 'phase 1 ok; phase 2 loading in background', { cwdRoot: syncResult.cwdRoot });

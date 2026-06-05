@@ -72,16 +72,6 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
     log.info('guard', 'blocked bash tool call');
     throw new BashDisabledError();
   }
-
-  // v1-2: edit 工具被 hashline_edit 替代（hashline 防止文件变更后误编辑）
-  if (input.tool === 'edit') {
-    log.info('guard', 'blocked edit tool call; LLM should use hashline_edit');
-    throw new Error(
-      'edit tool is disabled by serenity policy (v1-2 hashline edit). ' +
-        'Use `hashline_edit` with a pos like "11#VK" (visible in read output) instead. ' +
-        'The hash prevents editing the wrong line after the file changes.',
-    );
-  }
 };
 
 /** 工厂：返回 permission guards 相关的 hooks 集合 */

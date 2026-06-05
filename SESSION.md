@@ -8,16 +8,22 @@
 
 ## 当前焦点
 
-**v0 实现完成** — 22 文件 / 5 commits / typecheck + 24 tests + build 全绿。
+**v1 + v0.1 全部完成** — 28 文件 / 11 commits / **69/69 tests pass** / typecheck + build green。
 
 | 阶段 | 状态 | commit |
 |------|:----:|--------|
 | 范围层（RR1-RR7）| ✅ | `70db320` |
 | 方案层（10 步协议 + 模块）| ✅ | `b92eed6` |
 | 接口层（6 契约 + 错误类）| ✅ | `f2b3845` |
-| 实现层（src/ + tests/）| ✅ | 见下 |
+| v0 实现层（24 tests）| ✅ | `e91f8cc` |
+| v0.1 候选文档 | ✅ | `ac9b7ec` |
+| **v0.1-1** 两阶段 init（13 tests）| ✅ | `fc1f6a7` |
+| **v0.1-2** path-arg 守卫（4 tests）| ✅ | `1c4ce6b` |
+| **v0.1-3** hook 工厂分层（9 tests）| ✅ | `ca4360f` |
+| **v1-1** symlink 防御（6 tests）| ✅ | `20bf791` |
+| **v1-2** hashline edit（13 tests）| ✅ | `e39ed23` |
 
-> **下一步**：v1 候选（msm_exec 完整签名 + permission schema 真实集成 / opencode.json 主仓集成 / RR7 完整 slash command）。
+> **下一步**：主仓实地验证（用户授权"开发完了一起搞验证"）。主仓 R4 部署 `0460bf1` 已就绪。
 
 ---
 
@@ -69,9 +75,12 @@
 | 3 | **permission schema 真实集成（v1）** | 当前 v0 用 tool.execute.before hook 拦截；v1 可改用 permission.ask hook（若宿主触发）+ opencode.json |
 | 4 | **RR7 完整 slash command（v1）** | v0 用 system.transform 注入；v1 期望 SDK 暴露 registerCommand 或自实现 |
 | 5 | **plugin 仓的"开发期测试"** | 当前 vitest 测纯逻辑；v1 可加集成测试（在真实 serenity 主仓中跑）|
-| 6 | **v0.1 候选 — 两阶段 init**（skillful 模式）| v0 one-phase sync → v0.1 fire-and-forget + ReadyStateMachine；~30 行；详见 `docs/v0.1-candidates.md` |
-| 7 | **v0.1 候选 — Pre-indexed resources 轻量** | 修复 `msm_exec` path escape 隐患；路径型参数强制 `isPathInside`；~80 行 |
-| 8 | **v0.1 候选 — Hook 工厂分层**（oMo 模式）| 拆 `createPermissionGuards` / `createSessionCompacting` / `createShellEnv`；~100 行重构 |
+| 6 | **v0.1 候选 — 两阶段 init**（skillful 模式）| ✅ v0.1-1 完成（commit `fc1f6a7`，13 tests）|
+| 7 | **v0.1 候选 — Pre-indexed resources 轻量** | ✅ v0.1-2 完成（commit `1c4ce6b`，4 tests）|
+| 8 | **v0.1 候选 — Hook 工厂分层**（oMo 模式）| ✅ v0.1-3 完成（commit `ca4360f`，9 tests）|
+| 9 | **v1 候选 — symlink 防御** | ✅ v1-1 完成（commit `20bf791`，6 tests）|
+| 10 | **v1 候选 — Hashline Edit** | ✅ v1-2 完成（commit `e39ed23`，13 tests；自实现算法，npm 无 hashline-core 包）|
+| 11 | **主仓实地验证**（v0 + v0.1 + v1 全集）| 🟡 待用户启动；主仓 `0460bf1` 已部署 |
 
 ---
 
@@ -89,35 +98,59 @@
 | 22:00 | 方案层 10 步协议 + 5 模块 | `b92eed6` |
 | 22:30 | 接口层 6 契约 + 10 错误类 | `f2b3845` |
 | 23:30 | 实现层（src/ 9 文件 + tests/ 6 文件）| `e91f8cc` |
-| 06-05 00:00 | oMo + skillful 代码级对照（v0.1 候选）| 待 commit |
+| 06-05 00:00 | oMo + skillful 代码级对照（v0.1 候选）| `ac9b7ec` |
+| 06-05 00:00 | v0.1-1 两阶段 init | `fc1f6a7` |
+| 06-05 00:05 | v0.1-2 path-arg 守卫 | `1c4ce6b` |
+| 06-05 00:10 | v0.1-3 hook 工厂分层 | `ca4360f` |
+| 06-05 00:15 | v1-1 symlink 防御 | `20bf791` |
+| 06-05 00:30 | v1-2 hashline edit | `e39ed23` |
 
-### 22 文件清单（最终）
+### 28 文件清单（v1 完成后）
 
 | 路径 | 用途 |
 |------|------|
+| **顶层** | |
 | `README.md` | 决策对账表 D1-D12 + 5 条 R1-R5 引用（旧版入口）|
 | `SESSION.md` | 本文件 |
-| `.gitignore` | Node + TS + 编辑器 |
-| `.npmrc` | pnpm 友好配置 |
-| `.nvmrc` | Node 20 |
-| `package.json` | scripts + deps（含 `@opencode-ai/plugin@1.15.13` + `zod@4.1.8`）|
-| `tsconfig.json` | TS 5.x + ES2022 + strict + Node 20+（rootDir=src）|
-| `tsconfig.test.json` | tests include 扩展 |
+| `.gitignore` / `.npmrc` / `.nvmrc` | Node/TS/pnpm 友好配置 |
+| `package.json` | scripts + deps（`@opencode-ai/plugin@1.15.13` + `zod@4.1.8`）|
+| `tsconfig.json` / `tsconfig.test.json` | TS 5.x strict + Node 20+ |
 | `vitest.config.ts` | vitest + node 环境 |
-| `src/index.ts` | plugin 入口（10 步启动协议）|
-| `src/activation.ts` | tryActivate：RR1+RR2+RR6 验证 |
-| `src/state.ts` | 全局激活状态 singleton |
+| **src/ 核心** | |
+| `src/index.ts` | plugin 入口（10 步启动 + 注册所有 hooks/tools）|
+| `src/activation.ts` | tryActivateSync（RR6 同步）+ activateAsync（RR1+RR2 fire-and-forget）|
+| `src/state.ts` | 全局激活状态 singleton + ReadyStateMachine 接入 |
 | `src/types/index.ts` | 内部类型（SerenityState 等）|
-| `src/errors.ts` | 10 个 SerenityError 子类 |
+| `src/errors.ts` | 13 个 SerenityError 子类（v0.1-2 + v1-1 各加 1）|
 | `src/util/git.ts` | findGitRoot + isPathInside + git 操作 |
 | `src/util/serenity-file.ts` | 读 `/.serenity` 文件 |
 | `src/util/path.ts` | buildSkillPath + validateSkillExists + isValidInstanceName |
-| `src/msm.ts` | msmListTool + msmExecTool |
+| `src/util/ready-state.ts` | **v0.1-1** ReadyStateMachine（idle/loading/ready/error/disabled）|
+| `src/msm.ts` | msmListTool + msmExecTool（含 symlink 守卫）|
+| `src/msm-schema.ts` | getPathArgNames + validatePathArgs（**v0.1-2** + **v1-1** 增强）|
 | `src/bash-override.ts` | bashOverrideTool（同名 bash 抛 BashDisabledError）|
-| `src/permission.ts` | tool.execute.before hook（防 cwdRoot 外访问）|
-| `src/commands.ts` | systemTransformHook（注入 RR3/RR7 提示）|
-| `tests/*.test.ts` | 6 test files / 24 tests |
+| `src/hashline/util.ts` | **v1-2** hashLine / annotateLines / parsePos / verifyPos |
+| `src/hashline/edit-tool.ts` | **v1-2** hashlineEdit tool + read annotator + edit interceptor |
+| **src/hooks/ 工厂（v0.1-3）** | |
+| `src/hooks/util.ts` | isHookEnabled + safeHook（try/catch 包装）|
+| `src/hooks/permission-guards.ts` | createPermissionGuards（path guard + bash 防御 + **v1-2** edit 拦截）|
+| `src/hooks/compacting.ts` | createCompactingHooks（system.transform + session.compacting）|
+| `src/hooks/shell-env.ts` | createShellEnv（shell.env 注入 HOME_SERENITY_ROOT + SERENITY_INSTANCE）|
+| **tests/ 10 文件 / 69 tests** | |
+| `tests/activation.test.ts` | 5 tests（v0.1-1 改用 tryActivateSync API）|
+| `tests/ready-state.test.ts` | **v0.1-1** 13 tests |
+| `tests/hooks-util.test.ts` | **v0.1-3** 9 tests |
+| `tests/msm-schema.test.ts` | v0.1-2 4 tests + **v1-1** 6 tests |
+| `tests/hashline-util.test.ts` | **v1-2** 13 tests |
+| `tests/util-*.test.ts` | 11 tests（git/path/serenity-file）|
+| `tests/errors.test.ts` | 1 test |
+| `tests/plugin.test.ts` | 3 tests（full plugin entry）|
+| **docs/** | |
 | `docs/requirements-v0-scope.md` | RR1-RR7 正式范围层（102 行）|
+| `docs/architecture-v0.md` | 方案层（10 步 + 5 模块，219 行）|
+| `docs/contract-v0.md` | 接口层（6 契约 + 13 错误，~440 行）|
+| `docs/requirements-v0-summary.md` | 旧 R1-R5 引用（保留演进历史）|
+| `docs/v0.1-candidates.md` | v0.1 候选（oMo + skillful 对照分析，**3 候选全部已实施**）|
 | `docs/architecture-v0.md` | 方案层（10 步 + 5 模块，219 行）|
 | `docs/contract-v0.md` | 接口层（6 契约 + 10 错误，431 行）|
 | `docs/requirements-v0-summary.md` | 旧 R1-R5 引用（保留演进历史）|
@@ -127,16 +160,21 @@
 
 - `git@home.gitlab:yh/opencode-serenity-plugin.git` — private, default_branch=main
 - Web: `http://home.gitlab/yh/opencode-serenity-plugin`
-- commits（6+）：`99e95a3` → `09810ef` → `70db320` → `b92eed6` → `f2b3845` → `e91f8cc`（实现层）
+- commits（11）：`99e95a3` → `09810ef` → `70db320` → `b92eed6` → `f2b3845` → `e91f8cc` → `ac9b7ec` → `fc1f6a7` → `1c4ce6b` → `ca4360f` → `20bf791` → `e39ed23`
 
 ---
 
 ## 最近变更
 
+- 2026-06-05 00:30 — v1-2 hashline edit：自实现 FNV-1a 算法（npm 无 hashline-core）；13 tests pass（commit `e39ed23`）
+- 2026-06-05 00:15 — v1-1 symlink 防御：fs.realpathSync + MsmSymlinkError；6 tests pass（commit `20bf791`）
+- 2026-06-05 00:05 — v0.1-3 hook 工厂分层（oMo 模式）：拆 createPermissionGuards / createCompactingHooks / createShellEnv；9 tests pass（commit `ca4360f`）
+- 2026-06-05 00:00 — v0.1-2 path-arg 守卫：识别 type:path 标记 + isPathInside 黑名单；4 tests pass（commit `1c4ce6b`）
+- 2026-06-05 00:00 — v0.1-1 两阶段 init：ReadyStateMachine + fire-and-forget；13 tests pass（commit `fc1f6a7`）
+- 2026-06-05 00:00 — oMo + skillful 代码级对照：写 `docs/v0.1-candidates.md` 沉淀 3 候选改进（commit `ac9b7ec`）
 - 2026-06-04 23:30 — v0 实现层完成：24 tests pass / typecheck green / build green（commit `e91f8cc`）
-- 2026-06-05 00:00 — oMo + skillful 代码级对照：写 `docs/v0.1-candidates.md` 沉淀 3 候选改进（两阶段 init / pre-indexed / hook 工厂）
 - 2026-06-04 22:30 — 接口层 6 契约 + 10 错误类（commit `f2b3845`）
-- 2026-06-04 22:00 — 方案层 10 步启动协议（commit `b92eed6`）
+- 2026-06-04 22:00 — 方案层 10 步协议（commit `b92eed6`）
 - 2026-06-04 21:30 — 范围层 RR1-RR7 文档化（commit `70db320`）
 - 2026-06-04 21:00 — SESSION 模式迁移（commit `09810ef`）
 - 2026-06-04 21:00 — 项目框架 12 文件（commit `99e95a3`）

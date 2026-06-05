@@ -105,3 +105,14 @@ export class MsmPathEscapeError extends SerenityError {
     this.name = 'MsmPathEscapeError';
   }
 }
+
+/** msm_exec 失败：path-arg 指向 symlink / symlink 链（v1-1 symlink 防御）*/
+export class MsmSymlinkError extends SerenityError {
+  constructor(msmName: string, argName: string, value: string, resolved: string, reason: string) {
+    super(
+      `MSM "${msmName}" path-arg "${argName}"="${value}" → "${resolved}": ${reason}; ` +
+      `serenity plugin blocks symlink attacks (v1-1 symlink guard)`,
+    );
+    this.name = 'MsmSymlinkError';
+  }
+}

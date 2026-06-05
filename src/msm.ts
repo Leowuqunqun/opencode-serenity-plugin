@@ -13,7 +13,6 @@ import { spawn } from 'node:child_process';
 import { log } from './util/log.js';
 import {
   MsmAlreadyRegisteredError,
-  MsmArgsParseError,
   MsmExecutionError,
   MsmNotInRegistryError,
   MsmNotRegisteredError,
@@ -22,7 +21,7 @@ import {
 } from './errors.js';
 import { getState, ensureReady } from './state.js';
 import { isPathInside, gitAddAndCommit } from './util/git.js';
-import { validatePathArgs } from './msm-schema.js';
+import { tokenizeArgs, normalizeFlags, validatePathArgsFromTokens } from './msm-schema.js';
 
 /** 30s 超时（v0 固定，v1 可配置） */
 const MSM_TIMEOUT_MS = 30_000;
@@ -111,39 +110,6 @@ function findMsm(name: string, registry: MechEntry[]): MechEntry {
   return entry;
 }
 
-/** 解析 args 字符串为 object（msm_exec 接收 string，转换为 flags） */
-function parseArgs(rawArgs: string, entry: MechEntry, cwdRoot: string): string[] {
-  let parsed: Record<string, unknown> = {};
-  if (rawArgs.trim() === '') {
-    parsed = {};
-  } else {
-    try {
-      parsed = JSON.parse(rawArgs) as Record<string, unknown>;
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      throw new MsmArgsParseError(rawArgs, reason);
-    }
-  }
-
-  // v0.1-2: path-arg 预校验（在拼 argv 之前，避免 cwdRoot 外的路径传递给 msm）
-  validatePathArgs(parsed, entry, cwdRoot);
-
-  // 转换为 --key value 形式
-  const argv: string[] = [];
-  for (const flag of entry.flags) {
-    const value = parsed[flag.name];
-    if (value === undefined) {
-      if (flag.required) {
-        throw new MsmArgsParseError(rawArgs, `required flag "${flag.name}" missing`);
-      }
-      continue;
-    }
-    argv.push(`--${flag.name}`);
-    argv.push(String(value));
-  }
-  return argv;
-}
-
 /** spawn tsx 执行 MSM */
 function runMsm(entry: MechEntry, argv: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolveRun, rejectRun) => {
@@ -213,14 +179,15 @@ export const msmListTool: ToolDefinition = tool({
 export const msmExecTool: ToolDefinition = tool({
   description:
     '[PRIMARY] Execute a registered MSM tool. ALWAYS call `msm_list` first to discover the name. ' +
-    'Args is a JSON object of flag→value pairs (e.g. `{"--root": true, "host": "ubuntu"}`). ' +
+    '**args is a CLI command string** passed directly to `npx tsx <script> <args>` — same as you would type in a terminal ' +
+    '(e.g. `"--check .opencode/skills/home-serenity/scripts/resolve-path.ts"` or `"--root"`). ' +
     '30s timeout. **Direct `bash` is disabled by serenity policy (RR3)** — msm_exec is the only path for shell work.',
   args: {
     msm_name: z.string().describe('MSM name as registered in mech-registry.json (call msm_list first)'),
     args: z
       .string()
-      .default('{}')
-      .describe('JSON object of flag→value pairs; default "{}" for MSMs that take no args'),
+      .default('')
+      .describe('CLI args string, passed verbatim to `npx tsx <script> <args>`. e.g. `"--root"` or `"--host ubuntu --exec whoami"`. Leave empty "" for MSMs with no args.'),
   },
   execute: async (input) => {
     log.info('msm', 'msm_exec called', { msm_name: input.msm_name, rawArgs: input.args });
@@ -229,7 +196,17 @@ export const msmExecTool: ToolDefinition = tool({
     const registry = loadMechRegistry();
     const entry = findMsm(input.msm_name, registry);
     log.info('msm', 'msm found in registry', { name: entry.name, skill: entry.skill });
-    const argv = parseArgs(input.args, entry, state.cwdRoot);
+
+    // v1.2: tokenize CLI args + 启发式 path-arg 校验
+    const argv = tokenizeArgs(input.args);
+    const normalized = normalizeFlags(entry.flags as Array<{ name?: string; flag?: string; type?: string }>);
+    try {
+      validatePathArgsFromTokens(argv, normalized, state.cwdRoot);
+    } catch (err) {
+      log.warn('msm', 'msm_exec path-arg validation failed', { msm: entry.name, err: String(err) });
+      throw err;
+    }
+
     log.info('msm', 'msm_exec spawning', { name: entry.name, argv, cwd: state.cwdRoot });
     const result = await runMsm(entry, argv);
     log.info('msm', 'msm_exec result', { name: entry.name, exitCode: result.exitCode, stdoutLen: result.stdout.length, stderrLen: result.stderr.length });

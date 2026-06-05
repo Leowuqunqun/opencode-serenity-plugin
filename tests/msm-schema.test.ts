@@ -1,155 +1,258 @@
 /**
- * msm-schema 单测（v0.1-2 + v1-1 增强）
+ * msm-schema 单测（v1.2 重写 + v0.1-2 + v1-1 增强）
  *
  * 覆盖：
- * - v0.1-2: getPathArgNames 识别约定 type / 越界 throw / 跳过非 path-arg
- * - v1-1: symlink 防御（realpath 解析 + symlink → MsmSymlinkError）
+ * - v1.2: normalizeFlag / normalizeFlags（兼容 v0 + v1 schema）
+ * - v1.2: tokenizeArgs（CLI tokenize，支持引号 + 转义）
+ * - v1.2: validatePathArgsFromTokens（启发式 path-arg 校验 + symlink 防御）
+ * - v1.2: v1 schema flag 字符串解析（--name / --name <hint> / --name=<hint>）
  */
 
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, symlinkSync, mkdirSync, rmSync } from 'node:fs';
+import {
+  mkdtempSync,
+  writeFileSync,
+  symlinkSync,
+  mkdirSync,
+  rmSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getPathArgNames, validatePathArgs } from '../src/msm-schema.js';
+import {
+  normalizeFlag,
+  normalizeFlags,
+  tokenizeArgs,
+  validatePathArgsFromTokens,
+} from '../src/msm-schema.js';
 import { MsmPathEscapeError, MsmSymlinkError } from '../src/errors.js';
 
-const fakeEntry = {
-  name: 'fake-msm',
-  path: 'scripts/fake.ts',
-  skill: 'home-serenity',
-  category: 'mech' as const,
-  description: 'fake',
-  usage: 'fake --file <p>',
-  flags: [
-    { name: 'file', type: 'path' },
-    { name: 'dir', type: 'directory' },
-    { name: 'name', type: 'string' },
-    { name: 'count', type: 'number' },
-  ],
-};
-
-const cwdRoot = '/home/yh/project';
-
-describe('msm-schema (v0.1-2)', () => {
-  it('getPathArgNames 识别约定 type 为 path / directory', () => {
-    const names = getPathArgNames(fakeEntry);
-    expect(names).toEqual(['file', 'dir']);
+describe('msm-schema (v1.2 normalizeFlag)', () => {
+  it('v0 schema：name + type → NormalizedFlag', () => {
+    const f = normalizeFlag({ name: 'file', type: 'path', description: 'x' });
+    expect(f).toEqual({
+      name: 'file',
+      hasValue: true,
+      valueHint: undefined,
+      isPath: true,
+      type: 'path',
+      required: false,
+    });
   });
 
-  it('validatePathArgs 通过当 path-arg 在 cwdRoot 内', () => {
-    expect(() =>
-      validatePathArgs({ file: '/home/yh/project/data.txt' }, fakeEntry, cwdRoot),
-    ).not.toThrow();
+  it('v0 schema：type=boolean → hasValue=false', () => {
+    const f = normalizeFlag({ name: 'verbose', type: 'boolean' });
+    expect(f?.hasValue).toBe(false);
+    expect(f?.isPath).toBe(false);
   });
 
-  it('validatePathArgs throw MsmPathEscapeError 当 path-arg 越界', () => {
-    expect(() =>
-      validatePathArgs({ file: '/etc/passwd' }, fakeEntry, cwdRoot),
-    ).toThrow(MsmPathEscapeError);
+  it('v1 schema：--root → name=root, hasValue=false, isPath=false', () => {
+    const f = normalizeFlag({ flag: '--root', description: 'x' });
+    expect(f).toEqual({
+      name: 'root',
+      hasValue: false,
+      valueHint: undefined,
+      isPath: false,
+      type: undefined,
+      required: false,
+    });
   });
 
-  it('validatePathArgs 跳过非 path-arg（string / number）', () => {
-    expect(() =>
-      validatePathArgs({ name: 'anything', count: 999 }, fakeEntry, cwdRoot),
-    ).not.toThrow();
+  it('v1 schema：--check <路径> → name=check, isPath=true (值含"路径")', () => {
+    const f = normalizeFlag({ flag: '--check <路径>', description: 'x' });
+    expect(f).toEqual({
+      name: 'check',
+      hasValue: true,
+      valueHint: '路径',
+      isPath: true,
+      type: undefined,
+      required: false,
+    });
+  });
+
+  it('v1 schema：--file <file> → isPath=true (值含 "file")', () => {
+    const f = normalizeFlag({ flag: '--file <file>' });
+    expect(f?.isPath).toBe(true);
+  });
+
+  it('v1 schema：--category=<mech|semi-mech> → hasValue=true, isPath=false (值不含路径关键词)', () => {
+    const f = normalizeFlag({ flag: '--category=<mech|semi-mech>' });
+    expect(f?.hasValue).toBe(true);
+    expect(f?.isPath).toBe(false);
+    expect(f?.valueHint).toBe('mech|semi-mech');
+  });
+
+  it('无效 flag 字段（既无 name 也无 flag）→ null', () => {
+    expect(normalizeFlag({})).toBeNull();
+    expect(normalizeFlag({ description: 'x' })).toBeNull();
+  });
+
+  it('normalizeFlags 批量 + 过滤 null', () => {
+    const flags = normalizeFlags([
+      { name: 'a', type: 'string' },
+      { flag: '--check <路径>' },
+      {},
+      { flag: '--root' },
+    ]);
+    expect(flags).toHaveLength(3);
+    expect(flags.map((f) => f.name)).toEqual(['a', 'check', 'root']);
+    expect(flags.map((f) => f.isPath)).toEqual([false, true, false]);
   });
 });
 
-describe('msm-schema (v1-1 symlink guard)', () => {
-  let tmpRoot: string;
-  let outsideRoot: string;
+describe('msm-schema (v1.2 tokenizeArgs)', () => {
+  it('简单空格分隔', () => {
+    expect(tokenizeArgs('--root')).toEqual(['--root']);
+    expect(tokenizeArgs('--host ubuntu --exec whoami')).toEqual([
+      '--host',
+      'ubuntu',
+      '--exec',
+      'whoami',
+    ]);
+  });
 
-  // 每个 test 独立临时目录
+  it('空字符串 → []', () => {
+    expect(tokenizeArgs('')).toEqual([]);
+    expect(tokenizeArgs('   ')).toEqual([]);
+  });
+
+  it('双引号保留空格', () => {
+    expect(tokenizeArgs('--name "hello world"')).toEqual(['--name', 'hello world']);
+  });
+
+  it('单引号保留空格', () => {
+    expect(tokenizeArgs("--name 'hello world'")).toEqual(['--name', 'hello world']);
+  });
+
+  it('反斜杠转义', () => {
+    expect(tokenizeArgs('--path .opencode/skills\\ home/x.ts')).toEqual([
+      '--path',
+      '.opencode/skills home/x.ts',
+    ]);
+  });
+
+  it('混合引号', () => {
+    expect(tokenizeArgs(`--name "John's phone"`)).toEqual(['--name', "John's phone"]);
+  });
+});
+
+describe('msm-schema (v1.2 path-arg guard via tokens)', () => {
+  // v1 schema: --check <路径> → path-arg
+  const v1Flags = [{ flag: '--check <路径>', description: 'check path' }];
+  const v1Normalized = normalizeFlags(v1Flags);
+
+  // v0 schema: --file path
+  const v0Flags = [{ name: 'file', type: 'path', description: 'file' }];
+  const v0Normalized = normalizeFlags(v0Flags);
+
   function setup() {
-    tmpRoot = mkdtempSync(join(tmpdir(), 'msm-schema-test-'));
-    outsideRoot = mkdtempSync(join(tmpdir(), 'msm-schema-outside-'));
-    return { cwdRoot: tmpRoot, outside: outsideRoot };
+    const tmp = mkdtempSync(join(tmpdir(), 'msm-schema-test-'));
+    return { cwdRoot: tmp };
   }
 
-  function cleanup() {
-    if (tmpRoot) rmSync(tmpRoot, { recursive: true, force: true });
-    if (outsideRoot) rmSync(outsideRoot, { recursive: true, force: true });
+  function cleanup(tmp: string) {
+    rmSync(tmp, { recursive: true, force: true });
   }
 
-  it('文件存在且不是 symlink → 通过', () => {
-    const { cwdRoot: c } = setup();
+  it('v1 schema：合法路径 → 通过', () => {
+    const { cwdRoot } = setup();
     try {
-      const realFile = join(c, 'data.txt');
-      writeFileSync(realFile, 'hello');
-      expect(() =>
-        validatePathArgs({ file: realFile }, fakeEntry, c),
-      ).not.toThrow();
+      const realFile = join(cwdRoot, 'data.txt');
+      writeFileSync(realFile, 'x');
+      const tokens = tokenizeArgs(`--check ${realFile}`);
+      expect(() => validatePathArgsFromTokens(tokens, v1Normalized, cwdRoot)).not.toThrow();
     } finally {
-      cleanup();
+      cleanup(cwdRoot);
     }
   });
 
-  it('文件存在但是 symlink 指向 cwdRoot 内 → throw MsmSymlinkError', () => {
-    const { cwdRoot: c } = setup();
+  it('v1 schema：路径越界 → throw MsmPathEscapeError', () => {
+    const { cwdRoot } = setup();
     try {
-      const realFile = join(c, 'real.txt');
-      const linkFile = join(c, 'link.txt');
-      writeFileSync(realFile, 'data');
-      symlinkSync(realFile, linkFile);
-      expect(() =>
-        validatePathArgs({ file: linkFile }, fakeEntry, c),
-      ).toThrow(MsmSymlinkError);
+      const tokens = tokenizeArgs('--check /etc/passwd');
+      expect(() => validatePathArgsFromTokens(tokens, v1Normalized, cwdRoot)).toThrow(
+        MsmPathEscapeError,
+      );
     } finally {
-      cleanup();
+      cleanup(cwdRoot);
     }
   });
 
-  it('文件存在但是 symlink 指向 cwdRoot 外 → throw MsmSymlinkError', () => {
-    const { cwdRoot: c, outside: o } = setup();
+  it('v1 schema：path 形式（含 --check）token 配对正确', () => {
+    const { cwdRoot } = setup();
     try {
-      const outsideFile = join(o, 'secret.txt');
-      const linkFile = join(c, 'link.txt');
-      writeFileSync(outsideFile, 'secret');
-      symlinkSync(outsideFile, linkFile);
-      expect(() =>
-        validatePathArgs({ file: linkFile }, fakeEntry, c),
-      ).toThrow(MsmSymlinkError);
+      const tokens = tokenizeArgs('--root --check ./relative.txt');
+      // --root 不是 path-arg，跳过；--check 是 path-arg，检查 relative.txt
+      expect(() => validatePathArgsFromTokens(tokens, v1Normalized, cwdRoot)).not.toThrow();
     } finally {
-      cleanup();
+      cleanup(cwdRoot);
     }
   });
 
-  it('文件不存在（输出场景）→ 通过', () => {
-    const { cwdRoot: c } = setup();
+  it('v1 schema：path 是 symlink → throw MsmSymlinkError', () => {
+    const { cwdRoot } = setup();
     try {
-      const outFile = join(c, 'output.json');
-      // 文件不存在，validatePathArgs 应不抛错（写文件是合理场景）
-      expect(() =>
-        validatePathArgs({ file: outFile }, fakeEntry, c),
-      ).not.toThrow();
+      const real = join(cwdRoot, 'real.txt');
+      const link = join(cwdRoot, 'link.txt');
+      writeFileSync(real, 'x');
+      symlinkSync(real, link);
+      const tokens = tokenizeArgs(`--check ${link}`);
+      expect(() => validatePathArgsFromTokens(tokens, v1Normalized, cwdRoot)).toThrow(
+        MsmSymlinkError,
+      );
     } finally {
-      cleanup();
+      cleanup(cwdRoot);
     }
   });
 
-  it('目录是 symlink 指向 cwdRoot 外 → throw MsmSymlinkError', () => {
-    const { cwdRoot: c, outside: o } = setup();
+  it('v0 schema：合法路径 → 通过', () => {
+    const { cwdRoot } = setup();
     try {
-      const linkDir = join(c, 'linkdir');
-      symlinkSync(o, linkDir);
-      expect(() =>
-        validatePathArgs({ dir: linkDir }, fakeEntry, c),
-      ).toThrow(MsmSymlinkError);
+      const realFile = join(cwdRoot, 'data.txt');
+      writeFileSync(realFile, 'x');
+      const tokens = tokenizeArgs(`--file ${realFile}`);
+      expect(() => validatePathArgsFromTokens(tokens, v0Normalized, cwdRoot)).not.toThrow();
     } finally {
-      cleanup();
+      cleanup(cwdRoot);
+    }
+  });
+
+  it('v0 schema：越界 → throw MsmPathEscapeError', () => {
+    const { cwdRoot } = setup();
+    try {
+      const tokens = tokenizeArgs('--file /etc/passwd');
+      expect(() => validatePathArgsFromTokens(tokens, v0Normalized, cwdRoot)).toThrow(
+        MsmPathEscapeError,
+      );
+    } finally {
+      cleanup(cwdRoot);
     }
   });
 
   it('目录是真实目录（不是 symlink）→ 通过', () => {
-    const { cwdRoot: c } = setup();
+    const { cwdRoot } = setup();
     try {
-      const realDir = join(c, 'realdir');
+      const realDir = join(cwdRoot, 'realdir');
       mkdirSync(realDir);
-      expect(() =>
-        validatePathArgs({ dir: realDir }, fakeEntry, c),
-      ).not.toThrow();
+      const tokens = tokenizeArgs(`--check ${realDir}`);
+      expect(() => validatePathArgsFromTokens(tokens, v1Normalized, cwdRoot)).not.toThrow();
     } finally {
-      cleanup();
+      cleanup(cwdRoot);
+    }
+  });
+
+  it('目录是 symlink 指向 cwdRoot 外 → throw MsmSymlinkError', () => {
+    const { cwdRoot } = setup();
+    const outside = mkdtempSync(join(tmpdir(), 'msm-schema-outside-'));
+    try {
+      const linkDir = join(cwdRoot, 'linkdir');
+      symlinkSync(outside, linkDir);
+      const tokens = tokenizeArgs(`--check ${linkDir}`);
+      expect(() => validatePathArgsFromTokens(tokens, v1Normalized, cwdRoot)).toThrow(
+        MsmSymlinkError,
+      );
+    } finally {
+      cleanup(cwdRoot);
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 });

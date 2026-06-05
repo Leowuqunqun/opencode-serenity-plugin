@@ -1,22 +1,31 @@
 /**
- * MSM path-arg 预解析 + 路径安全校验（v0.1-2 + v1-1 增强）
+ * MSM flag 规范解析 + path-arg 校验（v1.2 修复）
  *
- * 设计目标：修复 msm_exec path escape 隐患
- * - msm registry 中 flags[].type === 'path' 视为路径型参数
- * - msm_exec 阶段在调用 msm 前，对所有 path-arg 做路径安全校验
- * - 失败：throw（v0.1-2 MsmPathEscapeError / v1-1 新增 MsmSymlinkError）
+ * 设计目标：让 plugin 兼容 **两种 msm schema**：
  *
- * 约定（不修改 registry schema）：
- * - PATH_ARG_TYPES 中列出的字符串视为"路径型"
- * - 兼容 msm 写者的多种命名习惯（path / file / filePath / dir / directory）
+ * **v1 schema**（主仓实际使用）：
+ *   ```json
+ *   flags: [{ "flag": "--check <路径>", "description": "..." }]
+ *   ```
+ *   - 字段是 `flag`（含 `--` 整字符串）
+ *   - 路径型用 valueHint `<路径>` / `<path>` 标记
+ *   - 无 type 字段
  *
- * 校验流程（v1-1 增强）：
- * 1. 解析为绝对路径（相对路径 → cwdRoot 拼接）
- * 2. isPathInside(cwdRoot) 黑名单校验（v0.1-2）
- * 3. 如果文件存在 → fs.realpathSync 解析真实路径
- *    - 真实路径与解析路径不一致 = symlink → throw MsmSymlinkError
- *    - 真实路径不在 cwdRoot 内（symlink 指向外部）→ throw MsmSymlinkError
- * 4. 文件不存在（写文件场景）→ 通过
+ * **v0 schema**（plugin 仓设计）：
+ *   ```json
+ *   flags: [{ "name": "check", "type": "path", "description": "..." }]
+ *   ```
+ *
+ * 输出统一 NormalizedFlag[]：
+ *   - name: 'check'（不带 `--`）
+ *   - hasValue: boolean
+ *   - valueHint: '路径'（v1 schema 提取）
+ *   - isPath: boolean
+ *
+ * 校验流程：
+ * 1. CLI args 字符串 → tokenize（支持引号）
+ * 2. token pair `--flag value` → 查 normalizeFlags 找 isPath 标记
+ * 3. 路径型 → isPathInside 黑名单 + symlink 防御
  */
 
 import { resolve as resolvePath } from 'node:path';
@@ -24,7 +33,42 @@ import { realpathSync, existsSync } from 'node:fs';
 import { isPathInside } from './util/git.js';
 import { MsmPathEscapeError, MsmSymlinkError } from './errors.js';
 
-/** 约定：registry flags[].type 为以下值之一 = 路径型参数 */
+/** 原始 flag 字段（v1 schema 用 `flag`，v0 schema 用 `name`） */
+type RawFlag = {
+  flag?: string;
+  name?: string;
+  type?: string;
+  description?: string;
+  required?: boolean;
+  default?: unknown;
+};
+
+/** 规范化后的 flag（plugin 内部统一使用） */
+export type NormalizedFlag = {
+  name: string;
+  hasValue: boolean;
+  valueHint: string | undefined;
+  isPath: boolean;
+  type: string | undefined;
+  required: boolean;
+};
+
+/** v1 schema 的 valueHint 视为"路径型" */
+const PATH_VALUE_HINTS: ReadonlySet<string> = new Set([
+  '路径',
+  'path',
+  'file',
+  'filePath',
+  'filepath',
+  'dir',
+  'directory',
+  '文件',
+  '目录',
+  'url',
+  'uri',
+]);
+
+/** v0 schema 的 type 视为"路径型" */
 const PATH_ARG_TYPES: ReadonlySet<string> = new Set([
   'path',
   'file',
@@ -34,77 +78,158 @@ const PATH_ARG_TYPES: ReadonlySet<string> = new Set([
   'directory',
 ]);
 
-/** msm registry 单条 entry（从 msm.ts 提取共享类型） */
-type MechEntryFlag = {
-  name: string;
-  type: string;
-  description?: string;
-  required?: boolean;
-  default?: unknown;
-};
+/** v1 schema flag 字符串 → {name, hasValue, valueHint} */
+function parseV1Flag(flagStr: string): { name: string; hasValue: boolean; valueHint: string | undefined } {
+  const m = /^--([\w-]+)(?:[=\s]+(?:<(.+?)>))?$/.exec(flagStr.trim());
+  if (!m) {
+    return { name: flagStr, hasValue: false, valueHint: undefined };
+  }
+  return {
+    name: m[1]!,
+    hasValue: m[2] !== undefined,
+    valueHint: m[2],
+  };
+}
 
-type MechEntry = {
-  name: string;
-  path: string;
-  skill: string;
-  category: 'mech' | 'semi-mech';
-  description: string;
-  usage: string;
-  flags: MechEntryFlag[];
-};
+/** 规范化单个 flag（兼容 v0 / v1 schema） */
+export function normalizeFlag(raw: RawFlag): NormalizedFlag | null {
+  if (typeof raw.name === 'string') {
+    const type = raw.type;
+    return {
+      name: raw.name,
+      hasValue: type !== 'boolean',
+      valueHint: undefined,
+      isPath: type !== undefined && PATH_ARG_TYPES.has(type),
+      type,
+      required: raw.required ?? false,
+    };
+  }
+  if (typeof raw.flag === 'string') {
+    const parsed = parseV1Flag(raw.flag);
+    return {
+      name: parsed.name,
+      hasValue: parsed.hasValue,
+      valueHint: parsed.valueHint,
+      isPath: parsed.valueHint !== undefined && PATH_VALUE_HINTS.has(parsed.valueHint),
+      type: undefined,
+      required: false,
+    };
+  }
+  return null;
+}
 
-/** 从 entry 提取所有 path-arg 名字（按 registry 顺序） */
-export function getPathArgNames(entry: MechEntry): string[] {
-  return entry.flags
-    .filter((f) => PATH_ARG_TYPES.has(f.type))
-    .map((f) => f.name);
+/** 批量规范化 */
+export function normalizeFlags(rawFlags: RawFlag[]): NormalizedFlag[] {
+  const out: NormalizedFlag[] = [];
+  for (const raw of rawFlags) {
+    const norm = normalizeFlag(raw);
+    if (norm !== null) out.push(norm);
+  }
+  return out;
+}
+
+/** 从 normalized flags 提取所有 path-arg 名字 */
+export function getPathArgNames(normalized: NormalizedFlag[]): string[] {
+  return normalized.filter((f) => f.isPath).map((f) => f.name);
+}
+
+/* ===== CLI tokenize + path-arg 校验（v1.2 简化为启发式） ===== */
+
+/**
+ * 轻量 shell tokenize（支持单/双引号 + 转义）。
+ * 不支持 glob / 变量展开（msm 脚本不需要）。
+ * 示例：
+ *   '--check .opencode/x' → ['--check', '.opencode/x']
+ *   '--name "hello world"' → ['--name', 'hello world']
+ *   '--root' → ['--root']
+ */
+export function tokenizeArgs(args: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let inSingle = false;
+  let inDouble = false;
+  let hasToken = false;
+  for (let i = 0; i < args.length; i++) {
+    const c = args[i]!;
+    if (c === '\\' && i + 1 < args.length) {
+      cur += args[i + 1]!;
+      i++;
+      hasToken = true;
+      continue;
+    }
+    if (c === "'" && !inDouble) {
+      inSingle = !inSingle;
+      hasToken = true;
+      continue;
+    }
+    if (c === '"' && !inSingle) {
+      inDouble = !inDouble;
+      hasToken = true;
+      continue;
+    }
+    if (/\s/.test(c) && !inSingle && !inDouble) {
+      if (hasToken) {
+        out.push(cur);
+        cur = '';
+        hasToken = false;
+      }
+      continue;
+    }
+    cur += c;
+    hasToken = true;
+  }
+  if (hasToken) out.push(cur);
+  return out;
 }
 
 /**
- * 校验 args 中所有 path-arg 都在 cwdRoot 内。
- * 失败：throw MsmPathEscapeError 或 MsmSymlinkError
+ * 校验 tokenized CLI args 中的 path-arg。
+ * 启发式：解析 `--flag value` / `--flag=value` 形式，对 valueHint 标为 path 的 flag 做 isPathInside 检查。
  *
  * 行为细节：
- * - 非 path-arg 不校验（数字/布尔/普通字符串原样传给 msm）
- * - 缺失的 path-arg 不校验（由 msm 自己的 required 检查处理）
- * - 路径值如果是相对路径，resolve 到 cwdRoot
- * - 如果值是对象/数组，跳过（path-arg 约定是 string）
- * - 文件不存在时（如输出文件），不抛错（写文件是合理场景）
- * - v1-1：检测 symlink 攻击（realpath 解析后的路径与解析路径不一致）
+ * - 非 path-arg 不校验
+ * - token 顺序解析，--flag 后面跟的 token 是 value
+ * - = 形式 --flag=value 不校验（罕见）
+ * - 文件不存在（写文件场景）→ 通过
+ * - symlink 防御
  */
-export function validatePathArgs(
-  args: Record<string, unknown>,
-  entry: MechEntry,
+export function validatePathArgsFromTokens(
+  tokens: string[],
+  normalized: NormalizedFlag[],
   cwdRoot: string,
 ): void {
-  const pathArgNames = getPathArgNames(entry);
-  for (const name of pathArgNames) {
-    const value = args[name];
-    if (value === undefined || value === null) continue;
-    if (typeof value !== 'string') continue;
-    if (value.trim() === '') continue;
+  // path-arg names 集合
+  const pathArgNames = new Set(getPathArgNames(normalized));
+
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i]!;
+    // 匹配 --flag
+    const m = /^--([\w-]+)$/.exec(tok);
+    if (!m) continue;
+    const flagName = m[1]!;
+    if (!pathArgNames.has(flagName)) continue;
+    // 取下一个 token 作为 value
+    const value = tokens[i + 1];
+    if (value === undefined || value.startsWith('--')) continue;
+    if (typeof value !== 'string' || value.trim() === '') continue;
 
     const abs = resolvePath(cwdRoot, value);
     if (!isPathInside(cwdRoot, abs)) {
-      throw new MsmPathEscapeError(entry.name, name, value, abs);
+      throw new MsmPathEscapeError('msm_exec', flagName, value, abs);
     }
 
-    // v1-1: symlink 防御
-    // - 文件不存在（如输出文件）→ 跳过 symlink 检查
-    // - 文件存在 → 解析真实路径，对比 abs
     if (existsSync(abs)) {
       let real: string;
       try {
         real = realpathSync(abs);
       } catch {
-        // realpath 失败（权限/中断等）→ 保守拒绝
-        throw new MsmSymlinkError(entry.name, name, value, abs, 'realpath resolution failed');
+        throw new MsmSymlinkError('msm_exec', flagName, value, abs, 'realpath resolution failed');
       }
       if (real !== abs) {
-        throw new MsmSymlinkError(entry.name, name, value, abs, `symlink detected: ${abs} → ${real}`);
+        throw new MsmSymlinkError('msm_exec', flagName, value, abs, `symlink detected: ${abs} → ${real}`);
       }
       if (!isPathInside(cwdRoot, real)) {
-        throw new MsmSymlinkError(entry.name, name, value, abs, `symlink points outside cwdRoot: ${real}`);
+        throw new MsmSymlinkError('msm_exec', flagName, value, abs, `symlink points outside cwdRoot: ${real}`);
       }
     }
   }

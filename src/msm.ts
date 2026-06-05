@@ -19,6 +19,7 @@ import {
 import { getState, ensureReady } from './state.js';
 import { isPathInside } from './util/git.js';
 import { validatePathArgs } from './msm-schema.js';
+import { log } from './util/log.js';
 
 /** 30s 超时（v0 固定，v1 可配置） */
 const MSM_TIMEOUT_MS = 30_000;
@@ -129,19 +130,24 @@ function runMsm(entry: MechEntry, argv: string[]): Promise<{ stdout: string; std
 /* ===== msm_list tool ===== */
 export const msmListTool: ToolDefinition = tool({
   description:
-    'List all available MSM (Mech & Semi-Mech) tools in the current serenity instance. ' +
-    'Each MSM is a deterministic, audited operation that can replace arbitrary shell commands. ' +
-    '**You MUST use `msm_exec` to run an MSM** — direct `bash` is disabled by serenity policy (RR3). ' +
-    'Returns one MSM per line: `name | skill | category | description`.',
+    '[PRIMARY] List all available MSM (Mech & Semi-Mech) tools in the current serenity instance. ' +
+    '**This is the FIRST tool to call for any shell/exec operation** — bash, read (path arguments), ' +
+    'and most plugin tools are intentionally limited. ' +
+    'Each MSM is a deterministic, audited operation registered in `mech-registry.json`. ' +
+    'Returns one MSM per line: `name | skill | category | description`. ' +
+    'If you need an operation that has no MSM, ask the user to register a new one before running arbitrary commands.',
   args: {},
   execute: async () => {
-    // v0.1: 阻塞等待 Phase 2 完成（如果 plugin 不激活，throw 友好提示）
+    log.info('msm', 'msm_list called');
     try {
       await ensureReady();
     } catch (err) {
-      return `serenity plugin is not active: ${err instanceof Error ? err.message : String(err)}`;
+      const reason = err instanceof Error ? err.message : String(err);
+      log.warn('msm', 'msm_list: plugin not active', { reason });
+      return `serenity plugin is not active: ${reason}`;
     }
     const registry = loadMechRegistry();
+    log.info('msm', 'msm_list result', { count: registry.length, cwdRoot: getState().cwdRoot });
     if (registry.length === 0) {
       return '(no MSM registered)';
     }
@@ -152,24 +158,27 @@ export const msmListTool: ToolDefinition = tool({
 /* ===== msm_exec tool ===== */
 export const msmExecTool: ToolDefinition = tool({
   description:
-    'Execute a registered MSM tool. The MSM name must be in mech-registry.json. ' +
+    '[PRIMARY] Execute a registered MSM tool. ALWAYS call `msm_list` first to discover the name. ' +
     'Args is a JSON object of flag→value pairs (e.g. `{"--root": true, "host": "ubuntu"}`). ' +
-    '30s timeout. **Direct `bash` is disabled** by serenity policy (RR3).',
+    '30s timeout. **Direct `bash` is disabled by serenity policy (RR3)** — msm_exec is the only path for shell work.',
   args: {
-    msm_name: z.string().describe('MSM name as registered in mech-registry.json'),
+    msm_name: z.string().describe('MSM name as registered in mech-registry.json (call msm_list first)'),
     args: z
       .string()
       .default('{}')
       .describe('JSON object of flag→value pairs; default "{}" for MSMs that take no args'),
   },
   execute: async (input) => {
-    // v0.1: 阻塞等待 Phase 2 完成
+    log.info('msm', 'msm_exec called', { msm_name: input.msm_name, rawArgs: input.args });
     await ensureReady();
     const state = getState();
     const registry = loadMechRegistry();
     const entry = findMsm(input.msm_name, registry);
+    log.info('msm', 'msm found in registry', { name: entry.name, skill: entry.skill });
     const argv = parseArgs(input.args, entry, state.cwdRoot);
+    log.info('msm', 'msm_exec spawning', { name: entry.name, argv, cwd: state.cwdRoot });
     const result = await runMsm(entry, argv);
+    log.info('msm', 'msm_exec result', { name: entry.name, exitCode: result.exitCode, stdoutLen: result.stdout.length, stderrLen: result.stderr.length });
     if (result.exitCode !== 0) {
       throw new MsmExecutionError(entry.name, result.exitCode, result.stderr);
     }

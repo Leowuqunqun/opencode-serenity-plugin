@@ -29,15 +29,16 @@ import {
   hashlineEditTool,
   readAnnotatorHook,
 } from './hashline/edit-tool.js';
+import { log } from './util/log.js';
 
 const plugin: Plugin = async (input) => {
+  log.info('entry', 'plugin loading', { directory: input.directory, worktree: input.worktree });
+
   // Phase 1: 同步 RR6 验证（git repo）
   const syncResult = tryActivateSync(input);
 
   if (!syncResult.ok) {
-    // 不激活 = "就像没装一样" —— 不抛错（会中断 opencode 启动），返回空 Hooks
-    // eslint-disable-next-line no-console
-    console.warn(`[serenity-plugin] not activated: ${syncResult.reason}`);
+    log.warn('entry', 'plugin not activated', { reason: syncResult.reason });
     return {};
   }
 
@@ -60,10 +61,8 @@ const plugin: Plugin = async (input) => {
     'tool.execute.after': readAnnotatorHook,
   };
 
-  // eslint-disable-next-line no-console
-  console.log(
-    `[serenity-plugin] phase 1 ok: cwdRoot="${syncResult.cwdRoot}"; phase 2 loading in background`,
-  );
+  log.info('entry', 'phase 1 ok; phase 2 loading in background', { cwdRoot: syncResult.cwdRoot });
+  log.info('entry', 'registered tools', { tools: Object.keys(hooks.tool ?? {}) });
   return hooks;
 };
 

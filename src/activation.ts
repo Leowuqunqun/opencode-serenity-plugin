@@ -22,6 +22,7 @@ import { buildSkillPath, validateSkillExists } from './util/path.js';
 import type { SerenityState } from './types/index.js';
 import { setState, markReady, markDisabled, getReadyMachine } from './state.js';
 import type { PluginInput } from '@opencode-ai/plugin';
+import { log } from './util/log.js';
 
 export type SyncResult =
   | { ok: true; cwdRoot: string }
@@ -36,13 +37,16 @@ export type SyncResult =
  */
 export function tryActivateSync(input: PluginInput): SyncResult {
   const cwd = input.directory;
+  log.info('phase1', 'start sync activation', { cwd });
 
   // Phase 1 — RR6 同步检查
   let cwdRoot: string;
   try {
     cwdRoot = findGitRoot(cwd);
+    log.info('phase1', 'RR6 ok: cwd in git repo', { cwdRoot });
   } catch (err) {
     const reason = errMsg(err, 'RR6: cwd not in git repo');
+    log.warn('phase1', 'RR6 failed', { reason, cwd });
     markDisabled(reason);
     return { ok: false, reason };
   }
@@ -50,7 +54,9 @@ export function tryActivateSync(input: PluginInput): SyncResult {
   // Phase 2 — fire-and-forget（不 await）
   const machine = getReadyMachine();
   void machine.start(async () => {
-    await activateAsync(cwdRoot);
+    log.debug('phase2', 'starting async activation', { cwdRoot });
+    await activateAsync(cwdRoot);  // throws on RR1/RR2 failure → machine.markError()
+    log.info('phase2', 'activation complete', { cwdRoot });
   });
 
   return { ok: true, cwdRoot };

@@ -10,6 +10,7 @@ import { join, resolve } from 'node:path';
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import { z } from 'zod';
 import { spawn } from 'node:child_process';
+import { log } from './util/log.js';
 import {
   MsmArgsParseError,
   MsmExecutionError,
@@ -19,7 +20,6 @@ import {
 import { getState, ensureReady } from './state.js';
 import { isPathInside } from './util/git.js';
 import { validatePathArgs } from './msm-schema.js';
-import { log } from './util/log.js';
 
 /** 30s 超时（v0 固定，v1 可配置） */
 const MSM_TIMEOUT_MS = 30_000;
@@ -36,16 +36,34 @@ type MechEntry = {
 };
 
 /** 加载 mech-registry.json（v0 简化：实例内一份） */
+/** 支持两种 schema：
+ *  - v1 包装格式：{ version, description, entries: [...] }
+ *  - 数组格式：[...]
+ * 返回统一 MechEntry[]
+ */
+export function loadMechRegistryFrom(cwdRoot: string, instanceName: string): MechEntry[] {
+  const path = join(cwdRoot, '.opencode', 'skills', instanceName, 'references', 'mech-registry.json');
+  try {
+    const raw = readFileSync(path, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed as MechEntry[];
+    }
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.entries)) {
+      return parsed.entries as MechEntry[];
+    }
+    log.warn('msm', 'mech-registry.json 顶层既不是数组也无 entries 字段', { path });
+    return [];
+  } catch (err) {
+    log.warn('msm', 'mech-registry.json 读取/解析失败', { path, err: String(err) });
+    return [];
+  }
+}
+
 function loadMechRegistry(): MechEntry[] {
   const state = getState();
   if (!state.activated) return [];
-  const path = join(state.cwdRoot, '.opencode', 'skills', state.instanceName, 'references', 'mech-registry.json');
-  try {
-    const raw = readFileSync(path, 'utf8');
-    return JSON.parse(raw) as MechEntry[];
-  } catch {
-    return [];
-  }
+  return loadMechRegistryFrom(state.cwdRoot, state.instanceName);
 }
 
 /** 查找 MSM（严格相等 + 路径必须在 cwdRoot 内） */

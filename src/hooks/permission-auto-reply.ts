@@ -92,6 +92,13 @@ export function createPermissionAutoReplyHandler(
 
   return async (input) => {
     const event = input.event;
+
+    // v1.3 调试：先 dump 全部 event 拿到真实 payload（用 LOG_FILE 落盘 + DEBUG 看 stderr）
+    log.debug('event', 'RAW EVENT', {
+      type: event?.type,
+      properties: event?.properties,
+    });
+
     if (!event || event.type !== 'permission.updated') return;
 
     const state = getState();

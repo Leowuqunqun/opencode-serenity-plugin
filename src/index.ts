@@ -55,7 +55,7 @@ const plugin: Plugin = async (input) => {
     ...createCompactingHooks(),
     ...createShellEnv(),
     event: createPermissionAutoReplyHandler({
-      getClient: () => input.client,
+      getServerUrl: () => input.serverUrl,
     }),
   };
 

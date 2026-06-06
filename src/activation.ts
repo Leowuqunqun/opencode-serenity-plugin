@@ -25,10 +25,16 @@ import { setState, markReady, markDisabled, getReadyMachine } from './state.js';
 import type { PluginInput } from '@opencode-ai/plugin';
 import { log } from './util/log.js';
 import { checkSerenityConfig } from './util/init-check.js';
+import { patchMainRepoOpencodeJson } from './util/config-patch.js';
 
 export type SyncResult =
   | { ok: true; cwdRoot: string }
   | { ok: false; reason: string };
+
+/**
+ * getClient 工厂：可注入，便于测试 mock + 隔离 v1/v2 client 类型
+ */
+export type GetClient = () => unknown | null;
 
 /**
  * Phase 1：同步检查 RR6（git repo）。
@@ -37,7 +43,7 @@ export type SyncResult =
  *
  * 注：调用方不需 await Phase 2 任何 IO；后续 tools/hooks 会自己 ensureReady()
  */
-export function tryActivateSync(input: PluginInput): SyncResult {
+export function tryActivateSync(input: PluginInput, getClient?: GetClient): SyncResult {
   const cwd = input.directory;
   log.info('phase1', 'start sync activation', { cwd });
 
@@ -57,7 +63,7 @@ export function tryActivateSync(input: PluginInput): SyncResult {
   const machine = getReadyMachine();
   void machine.start(async () => {
     log.debug('phase2', 'starting async activation', { cwdRoot });
-    await activateAsync(cwdRoot);  // throws on RR1/RR2 failure → machine.markError()
+    await activateAsync(cwdRoot, getClient);  // throws on RR1/RR2 failure → machine.markError()
     log.info('phase2', 'activation complete', { cwdRoot });
   });
 
@@ -68,7 +74,7 @@ export function tryActivateSync(input: PluginInput): SyncResult {
  * Phase 2：异步激活。
  * 内部 try/catch 所有失败 → machine 自然 catch 并推 error 状态。
  */
-async function activateAsync(cwdRoot: string): Promise<void> {
+async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<void> {
   // RR1 — 读 /.serenity
   let instanceName: string;
   try {
@@ -111,8 +117,31 @@ async function activateAsync(cwdRoot: string): Promise<void> {
   markReady();
 
   // v1.5 init-check：plugin 启动时自检 opencode.json 关键配置
-  // 只 warn，不 patch（用户明确要求"不通过修改配置实现功能"）
+  // 只 warn，不 patch
   checkSerenityConfig(cwdRoot, instanceName);
+
+  // v1.7 config-patch：自动改主仓 opencode.json 让 cwdRoot 内 read/edit = allow
+  // 用户 m0649 决定"全自动"——plugin 启动即生效（用户需重启 opencode 应用改动）
+  if (getClient) {
+    try {
+      const result = await patchMainRepoOpencodeJson(cwdRoot, () => {
+        try {
+          return getClient() as Parameters<typeof patchMainRepoOpencodeJson>[1] extends () => infer R ? R : never;
+        } catch {
+          return null;
+        }
+      });
+      if (result.changed) {
+        log.info('phase2', 'main-repo opencode.json auto-patched', {
+          configPath: result.configPath,
+          diff: result.diff,
+        });
+      }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      log.warn('phase2', 'config-patch failed; plugin continues', { detail });
+    }
+  }
 }
 
 function errMsg(err: unknown, fallback: string): string {

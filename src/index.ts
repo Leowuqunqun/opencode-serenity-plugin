@@ -32,7 +32,7 @@ const plugin: Plugin = async (input) => {
   log.info('entry', 'plugin loading', { directory: input.directory, worktree: input.worktree });
 
   // Phase 1: 同步 RR6 验证（git repo）
-  const syncResult = tryActivateSync(input);
+  const syncResult = tryActivateSync(input, () => input.client);
 
   if (!syncResult.ok) {
     log.warn('entry', 'plugin not activated', { reason: syncResult.reason });

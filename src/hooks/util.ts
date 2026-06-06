@@ -35,12 +35,11 @@ export function safeHook<K extends HookName>(
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (impl as any)(input, output);
-    } catch (err) {
-      // v0.1 策略：所有 hook 抛错都 silent（不 rethrow）
+    } catch {
+      // v0.1 策略：所有 hook 抛错都 silent（不 rethrow，不 log）
       // 原因：单 hook 抛错会中断整条 Effect 链（L3 验证），
       //      plugin 应"就像没装一样"（不破坏 opencode 行为）
-      // eslint-disable-next-line no-console
-      console.warn(`[serenity-plugin] hook "${String(name)}" caught error:`, err);
+      // v0.0.1: 不再 console.warn（v0.0.1 release 应静默）
     }
   }) as NonNullable<Hooks[K]>;
 }

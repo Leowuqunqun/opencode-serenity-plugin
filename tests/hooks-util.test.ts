@@ -60,16 +60,15 @@ describe('safeHook', () => {
     expect(impl).toHaveBeenCalledOnce();
   });
 
-  it('catches errors silently (does not rethrow)', async () => {
+  it('catches errors silently (does not rethrow, no log)', async () => {
+    // v0.0.1: safeHook 既不 rethrow 也不 console.warn
+    // 调试时用 OPENCODE_SERENITY_DEBUG=1 + log.ts DEBUG 分支
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const impl = vi.fn().mockRejectedValue(new Error('boom'));
     const wrapped = safeHook('shell.env', impl);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await expect((wrapped as any)({ cwd: '/' }, { env: {} })).resolves.toBeUndefined();
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[serenity-plugin] hook "shell.env" caught error'),
-      expect.any(Error),
-    );
+    expect(consoleSpy).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
   });
 });

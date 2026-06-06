@@ -8,7 +8,20 @@
 
 ## 当前焦点
 
-**v1.7 + v1.8 全部完成** — 30 文件 / 14 commits / **123/123 tests pass** / typecheck + build green。
+**v0.0.1 — 首个可用版本发布** 🎉
+
+| 维度 | 状态 |
+|------|:----:|
+| 范围层 RR1-RR7 | ✅ |
+| 方案层 10 步 + 5 模块 | ✅ |
+| 接口层 6 契约 + 13 错误类 | ✅ |
+| 实现层 30 文件 / 125 tests pass | ✅ |
+| typecheck + build green | ✅ |
+| 主仓集成（opencode.json + tui.json）| ✅ |
+| 用户实测 toast 显示 | ✅ |
+| 远程推送 origin main | ✅ |
+
+**v0.0.1 commit 链（17 个）**：
 
 | 阶段 | 状态 | commit |
 |------|:----:|--------|
@@ -17,21 +30,23 @@
 | 接口层（6 契约 + 错误类）| ✅ | `f2b3845` |
 | v0 实现层（24 tests）| ✅ | `e91f8cc` |
 | v0.1 候选文档 | ✅ | `ac9b7ec` |
-| **v0.1-1** 两阶段 init（13 tests）| ✅ | `fc1f6a7` |
-| **v0.1-2** path-arg 守卫（4 tests）| ✅ | `1c4ce6b` |
-| **v0.1-3** hook 工厂分层（9 tests）| ✅ | `ca4360f` |
-| **v1-1** symlink 防御（6 tests）| ✅ | `20bf791` |
-| **v1-2** hashline edit（13 tests）| ✅ | `e39ed23` |
-| **v1-3-v2** 升 v2 SDK + auto-reply permission | ✅ | `809bf94` |
-| **v1.4** SKILL.md 全文注入 system prompt | ✅ | `cee8c2e` |
-| **v1.5** init-check（启动时校验 opencode.json）| ✅ | `00fcd19` |
-| **v1.6** RR5 hard block（edit/write + symlink 防御）| ✅ | `00fcd19` |
-| **v1.7** auto-patch 主仓 opencode.json | ✅ | `1c420a1` |
-| **v1.7b** marker key `//` → `$serenity_managed` | ✅ | `d9b774e` |
-| **v1.7c** marker 完全删除（纯净 patch）| ✅ | `bafa22c` |
-| **v1.8** TUI plugin entry（双 plugin 架构）| ✅ | `ebc2491` |
+| v0.1-1 两阶段 init（13 tests）| ✅ | `fc1f6a7` |
+| v0.1-2 path-arg 守卫（4 tests）| ✅ | `1c4ce6b` |
+| v0.1-3 hook 工厂分层（9 tests）| ✅ | `ca4360f` |
+| v1-1 symlink 防御（6 tests）| ✅ | `20bf791` |
+| v1-2 hashline edit（13 tests）| ✅ | `e39ed23` |
+| v1-3 升 v2 SDK + auto-reply permission | ✅ | `809bf94` |
+| v1.4 SKILL.md 全文注入 system prompt | ✅ | `cee8c2e` |
+| v1.5 init-check（启动时校验 opencode.json）| ✅ | `00fcd19` |
+| v1.6 RR5 hard block | ✅ | `00fcd19` |
+| v1.7 auto-patch 主仓 opencode.json | ✅ | `1c420a1` |
+| v1.7b/c marker 调整 | ✅ | `d9b774e` / `bafa22c` |
+| v1.8 TUI plugin entry（双 plugin 架构）| ✅ | `ebc2491` |
+| **v1.9** TUI entry shape + 切 tui.json（R-α/β/γ 修复）| ✅ | `3d34cba` |
+| **v1.9.1** 移除 JSX slot 防止 plugin 加载失败 | ✅ | `80f6b28` |
+| **v0.0.1** release 准备（bump + README + SESSION）| ✅ | 待 commit |
 
-> **下一步**：主仓实地验证（用户授权"开发完了一起搞验证"）。主仓 R4 部署 `0460bf1` 已就绪。
+> **下一步**：v0.0.2 — slot 状态指示器（`createElement` / `spread` 直调，不依赖 JSX runtime）
 
 ---
 
@@ -78,20 +93,21 @@
 
 | # | 问题 | 状态 |
 |---|------|------|
-| 1 | **主仓 opencode.json 集成** | v0 完成；主仓改动需单独 SESSION（修 default_agent throw bug + 禁 cheap-worker + 加 plugin 字段 + 修 permission）|
-| 2 | **msm_exec 完整签名（v1）** | 当前 v0 = `{msm_name, args}`；v1 可能加 `cwd` / `timeout` / `env` |
+| 1 | **主仓 opencode.json 集成** | ✅ v0.0.1 完成（主仓 `240dffe` + `0460bf1`）|
+| 2 | **msm_exec 完整签名（v1）** | 当前 v0 = `{msm_name, args}`；v1 可加 `cwd` / `timeout` / `env` |
 | 3 | **permission schema 真实集成（v1）** | 当前 v0 用 tool.execute.before hook 拦截；v1 可改用 permission.ask hook（若宿主触发）+ opencode.json |
 | 4 | **RR7 完整 slash command（v1）** | v0 用 system.transform 注入；v1 期望 SDK 暴露 registerCommand 或自实现 |
 | 5 | **plugin 仓的"开发期测试"** | 当前 vitest 测纯逻辑；v1 可加集成测试（在真实 serenity 主仓中跑）|
-| 6 | **v0.1 候选 — 两阶段 init**（skillful 模式）| ✅ v0.1-1 完成（commit `fc1f6a7`，13 tests）|
-| 7 | **v0.1 候选 — Pre-indexed resources 轻量** | ✅ v0.1-2 完成（commit `1c4ce6b`，4 tests）|
-| 8 | **v0.1 候选 — Hook 工厂分层**（oMo 模式）| ✅ v0.1-3 完成（commit `ca4360f`，9 tests）|
+| 6 | **v0.1 候选 — 两阶段 init** | ✅ v0.1-1 完成（commit `fc1f6a7`，13 tests）|
+| 7 | **v0.1 候选 — Pre-indexed resources** | ✅ v0.1-2 完成（commit `1c4ce6b`，4 tests）|
+| 8 | **v0.1 候选 — Hook 工厂分层** | ✅ v0.1-3 完成（commit `ca4360f`，9 tests）|
 | 9 | **v1 候选 — symlink 防御** | ✅ v1-1 完成（commit `20bf791`，6 tests）|
-| 10 | **v1 候选 — Hashline Edit** | ✅ v1-2 完成（commit `e39ed23`，13 tests；自实现算法，npm 无 hashline-core 包）|
-| 11 | **主仓实地验证**（v0 + v0.1 + v1 全集）| 🟡 进行中；plugin 仓 `d18f19f` 修 v1 schema；`286aedc` 加 msm_register；主仓 `d6e85f8` 改 edit:allow |
-| 12 | **TUI toast 实测**（v1.8 TuiPlugin）| 🟡 用户报告"没效果"（m0717）；plugin 加载 4 个 + tui.js 入口已加，但 toast 不显示 |
-| 13 | **v1.3-v5b 撤销**（如果 v1.7/v1.6 接管权限已足够）| 🟡 代码仍 active（无破坏），1.16+ UI 不响应 v2 API reply |
-| 14 | **PluginModule.tui?: never 限制** | ✅ v1.8 用 2 个独立 entry（server + tui）绕过 |
+| 10 | **v1 候选 — Hashline Edit** | ✅ v1-2 完成（commit `e39ed23`，13 tests；自实现 FNV-1a）|
+| 11 | **主仓实地验证** | ✅ v0.0.1 完成（用户 m1180 确认 toast 显示）|
+| 12 | **TUI toast 实测** | ✅ v0.0.1 完成（v1.9.1 修复 JSX runtime 根因，commit `80f6b28`）|
+| 13 | **v1.3-v5b 撤销** | 🟡 代码仍 active，1.16+ UI 不响应 v2 API reply（暂不影响功能）|
+| 14 | **PluginModule.tui?: never 限制** | ✅ v1.8 用 2 个独立 entry 绕过 |
+| 15 | **永久 slot 状态指示器** | ⏸ v0.0.2 plan；选项 A bun-plugin-solid / 选项 B createElement+spread 直调 |
 
 ---
 
@@ -177,18 +193,20 @@
 
 ## 最近变更
 
-- 2026-06-05 00:30 — v1-2 hashline edit：自实现 FNV-1a 算法（npm 无 hashline-core）；13 tests pass（commit `e39ed23`）
-- 2026-06-05 00:15 — v1-1 symlink 防御：fs.realpathSync + MsmSymlinkError；6 tests pass（commit `20bf791`）
-- 2026-06-05 00:05 — v0.1-3 hook 工厂分层（oMo 模式）：拆 createPermissionGuards / createCompactingHooks / createShellEnv；9 tests pass（commit `ca4360f`）
-- 2026-06-05 00:00 — v0.1-2 path-arg 守卫：识别 type:path 标记 + isPathInside 黑名单；4 tests pass（commit `1c4ce6b`）
-- 2026-06-05 00:00 — v0.1-1 两阶段 init：ReadyStateMachine + fire-and-forget；13 tests pass（commit `fc1f6a7`）
-- 2026-06-05 00:00 — oMo + skillful 代码级对照：写 `docs/v0.1-candidates.md` 沉淀 3 候选改进（commit `ac9b7ec`）
-- 2026-06-04 23:30 — v0 实现层完成：24 tests pass / typecheck green / build green（commit `e91f8cc`）
-- 2026-06-04 22:30 — 接口层 6 契约 + 10 错误类（commit `f2b3845`）
-- 2026-06-04 22:00 — 方案层 10 步协议（commit `b92eed6`）
-- 2026-06-04 21:30 — 范围层 RR1-RR7 文档化（commit `70db320`）
-- 2026-06-04 21:00 — SESSION 模式迁移（commit `09810ef`）
-- 2026-06-04 21:00 — 项目框架 12 文件（commit `99e95a3`）
+- 2026-06-06 — **v0.0.1 release**：bump version 0.0.0 → 0.0.1；README 重写为 release 状态；SESSION 收尾
+- 2026-06-06 — **v1.9.1** 修复 TUI toast 加载失败：移除 JSX slot（@opentui/solid JSX runtime 只支持 build-time transform），保留 toast；125/125 tests pass（commit `80f6b28`）
+- 2026-06-06 — **v1.9** 修复 TUI 加载机制（R-α/β/γ）：tui.json 拆分、default 形状改 `{ id, tui/server }`、显式 export id；用户实测 toast 显示（commit `3d34cba` + 主仓 `240dffe`）
+- 2026-06-06 — **S019** 调研完成：3 subagent 并行定位 tui-toast 根因；报告 `AGENT_SESSIONS/2026-06-06--S019--tui-toast-investigation/docs/tui-toast-root-cause.md`
+- 2026-06-05 — **v1.8** TUI plugin entry：双 plugin 架构 + toast 通知（commit `ebc2491`）
+- 2026-06-05 — **v1.7** auto-patch 主仓 opencode.json：含 marker key 演进（`bafa22c`）
+- 2026-06-05 — **v1.6/v1.5** RR5 hard block + init-check（commit `00fcd19`）
+- 2026-06-05 — **v1.4** SKILL.md 全文注入 system prompt（commit `cee8c2e`）
+- 2026-06-05 — **v1.3-v2** 升 v2 SDK + auto-reply permission（commit `809bf94`）
+- 2026-06-05 — **v1.2 / v1.1** hashline edit + symlink 防御（commit `e39ed23` / `20bf791`）
+- 2026-06-05 — **v0.1-3 / v0.1-2 / v0.1-1** hook 工厂分层 / path-arg 守卫 / 两阶段 init（commit `ca4360f` / `1c4ce6b` / `fc1f6a7`）
+- 2026-06-04 — **v0 实现层** 24 tests pass / typecheck / build green（commit `e91f8cc`）
+- 2026-06-04 — **接口层 / 方案层 / 范围层** 文档化（commit `f2b3845` / `b92eed6` / `70db320`）
+- 2026-06-04 — **项目框架 12 文件 + SESSION 模式迁移**（commit `99e95a3` / `09810ef`）
 
 ---
 

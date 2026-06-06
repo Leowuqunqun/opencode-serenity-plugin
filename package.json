@@ -1,8 +1,8 @@
 {
   "name": "opencode-serenity-plugin",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
-  "description": "OpenCode 平台本地插件，承载「宁静号」v0 5 条需求 (R1-R5)",
+  "description": "OpenCode 平台本地插件，承载「宁静号」5 条需求 (RR1-RR7)。v0.0.1 首个可用版本：server entry (RR1-RR7 hooks) + TUI entry (激活 toast)。",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -46,9 +46,5 @@
     "tsx": "^4.7.0",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
-  },
-  "opencode": {
-    "_comment": "WIP — D9 决策：插件入口在 package.json#opencode 字段",
-    "_status": "待需求核对后填入 hook 列表与 tool 描述"
   }
 }

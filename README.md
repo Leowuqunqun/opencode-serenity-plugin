@@ -1,124 +1,118 @@
 # opencode-serenity-plugin
 
-> **WIP** — 仓库骨架阶段；需求未完全确定（待用户核对决策对账表）
-> **作用**：opencode 平台本地插件，承载「宁静号」v0 5 条需求的实现
-> **关联调研**：`AGENT_SESSIONS/2026-06-04--opencode-plugin-investigation/`（home-serenity 主仓）
+> **v0.0.1** — 首个可用版本
+> OpenCode 平台本地插件，承载「宁静号」7 条范围约束（RR1-RR7）。覆盖"拦截 + 行为"（server entry）+ "通知用户"（TUI entry）两条独立加载路径。
 
 ---
 
-## 0. 状态
+## 安装
+
+主仓 `home-serenity` 已配好指向本仓本地路径的 plugin 引用：
+
+```jsonc
+// opencode.json (server entry)
+"plugin": [
+  "file:///.../AI_LAB/opencode-serenity-plugin/dist/index.js"
+]
+
+// tui.json (TUI entry)
+"plugin": [
+  "file:///.../AI_LAB/opencode-serenity-plugin/dist/tui.js"
+]
+```
+
+首次使用：先 `pnpm install && pnpm build` 构建 `dist/`，再启动 opencode。
+
+---
+
+## 范围层（RR1-RR7）
+
+| # | 规则 | 关键约束 |
+|---|------|---------|
+| **RR1** | cwd 内必须有 `/.serenity`，内容 = 实例名 | 文件是单一真相源 |
+| **RR2** | 激活后首次加载 `.opencode/skills/<实例名>/SKILL.md` | 每次新 session 启动时 |
+| **RR3** | 禁 bash；命令通过 MSM（已有/新写） | 同名 bash tool 抛错 + `permission.bash:deny` 双层 |
+| **RR4** | cwd 内全部权限 | 默认 allow |
+| **RR5** | cwd 外全部无权限 | deny/throw（含 symlink 防御）|
+| **RR6** | cwd 必须在 git repo 内 | 否则 plugin 不工作 |
+| **RR7** | plugin 应能"初始化 cwd 为 serenity" | 5 子点 |
+
+完整范围层见 `docs/requirements-v0-scope.md`。
+
+---
+
+## 架构层
+
+10 步启动协议 + 5 模块（activation / state / msm / hooks / config-patch）。
+
+完整方案层见 `docs/architecture-v0.md`。
+
+---
+
+## 接口层
+
+6 个 SDK 契约 + 13 个 SerenityError 子类。
+
+完整接口层见 `docs/contract-v0.md`。
+
+---
+
+## 状态
 
 | 项 | 状态 |
-|----|------|
-| 调研（L0-L6） | ✅ 已完成（home-serenity 主仓 SESSION）|
-| 需求 v0 锁定（5 条 R1-R5） | ✅ 已锁定（`docs/requirements-v0-summary.md`）|
-| 仓库骨架 | ✅ 本仓库（待核对元信息）|
-| `git init` | ⏸ **未执行**（等核对后再 init）|
-| 实现代码 | ⛔ **未开始**（用户明确：先核对再写）|
+|----|:----:|
+| 范围层 RR1-RR7 | ✅ |
+| 方案层 10 步 + 5 模块 | ✅ |
+| 接口层 6 契约 + 13 错误 | ✅ |
+| 实现层 30 文件 / 125 tests | ✅ |
+| typecheck + build green | ✅ |
+| 主仓 `opencode.json` 集成 | ✅ |
+| 主仓 `tui.json` 集成（v0.0.1 新增）| ✅ |
+| 用户实测 toast 显示（v0.0.1）| ✅ |
+| 永久 slot 状态指示器 | ⏸ v0.0.2（v1.10 plan）|
 
 ---
 
-## 1. 待核对决策对账表（重要）
+## 测试
 
-> 每个待决策项都给出**推荐 + 备选**。用户核对时只回复 "采用推荐" 或 "改 X" 即可。
-
-| # | 决策项 | 推荐 | 备选 | 影响 |
-|---|--------|------|------|------|
-| **D1** | 仓库名 | `opencode-serenity-plugin` | `home-serenity-plugin` / `serenity-opencode-plugin` | 远程 URL + README 标题 + npm 包名 |
-| **D2** | 父目录 | `AI_LAB/` | `INFRA/` | home-landscape 分类；CI 路径 |
-| **D3** | 命名空间 | `yh`（与其他 yh 仓一致） | `agents`（群组）| GitLab 远程 URL |
-| **D4** | 可见性 | **private**（v0 阶段）| public | 远程 clone 权限 |
-| **D5** | 默认分支 | `main` | `master`（与多数 yh 仓一致）| 首次 push |
-| **D6** | 包管理 | **pnpm**（与 home-serenity 一致）| npm | lockfile 类型 |
-| **D7** | Node 版本 | **>= 20** | >= 18 | tsconfig target |
-| **D8** | TypeScript | **5.x** | 4.x | language version |
-| **D9** | 是否含 `.opencode-plugin.json` 描述文件 | **否**（opencode 插件纯 npm 入口，描述在 `package.json` 的 `opencode` 字段）| 是（独立 manifest）| plugin 加载逻辑 |
-| **D10** | 测试框架 | **vitest**（与 @opencode-ai 生态一致）| jest | 配置文件 |
-| **D11** | 引用调研文档方式 | **软引用**（README 注明 SESSION 路径，不复制内容）| 复制 + 重写 | 文档同步成本 |
-| **D12** | 与 home-serenity 的耦合方式 | **通过相对路径** + `HOME_SERENITY_ROOT` env var | npm link / workspace | plugin 启动假设 |
-
-**用户核对方法**：直接回复 "D1-D12: 全采用推荐" 或 "D3 改 agents, D6 改 npm, 其余推荐"。
-
----
-
-## 2. 已知 v0 需求（5 条 R1-R5）
-
-> **完整版见** `docs/requirements-v0-summary.md`（含 20 条验收）
-> **源文档**：`AGENT_SESSIONS/2026-06-04--opencode-plugin-investigation/requirements-locked-v0.md`
-
-| 需求 | 摘要 | 关键设计 |
-|------|------|----------|
-| **R1** | bash 工具替换 | plugin 注册同名 bash tool 抛错 + `permission.bash:"deny"` 双层 |
-| **R2** | 1+1 msm 设计 | `msm_list` + `msm_exec` 两个 tool（替代 31 tool 化）|
-| **R3** | read 弹窗关闭 | `permission.read:"allow"` 静态白名单 |
-| **R4** | primary-agent 集成 | 修 L3 验证的 `default_agent` throw bug + 禁 cheap-worker |
-| **R5** | 作用域门控 | 只在 serenity 目录工作；非 serenity → degraded mode；`HOME_SERENITY_RESTRICT` env 控制（默认 true）|
-
-**v0 明确不可行（4 条）**：100% 无弹窗 / 0 维护 / 0 延迟 / 纯 prompt 替代 plugin。
-
----
-
-## 3. 目录结构（已搭好）
-
-```
-opencode-serenity-plugin/
-├── README.md                              # 本文件（决策对账 + 需求引用）
-├── SESSION.md                             # 项目即会话轻量追踪
-├── .gitignore                             # Node + TS + 编辑器
-├── package.json                           # 占位：声明依赖意图（待核对）
-├── src/                                   # ⛔ 空目录（实现代码待定）
-│   └── .gitkeep
-├── docs/                                  # ⛔ 当前仅 1 个引用文件
-│   └── requirements-v0-summary.md         # 引用调研的 5 条 R1-R5
-└── (待定) tsconfig.json                   # ⏸ 等 D6-D8 决定后写
+```bash
+pnpm test         # 125/125 pass
+pnpm typecheck    # green
+pnpm build        # 编译 dist/
 ```
 
 ---
 
-## 4. 与 home-serenity 主仓的关系
+## 调试日志
 
-```
-┌─────────────────────────────────────┐
-│  home-serenity/  (主仓)             │
-│  ├── opencode.json                  │  ← v0 实施时改这里（D4 修 default_agent + R1/R3 permission）
-│  ├── .opencode/skills/              │  ← v0 不动这里（plugin 不通过 skill 加载）
-│  └── AGENT_SESSIONS/2026-06-04--... │  ← 调研 SESSION（已归档/只读）
-└────────────────┬────────────────────┘
-                 │ npm install 加载 / 软链 / 相对路径
-                 ▼
-┌─────────────────────────────────────┐
-│  AI_LAB/opencode-serenity-plugin/   │  ← 本仓
-│  ├── src/plugin.ts                  │  ← 5 个 hook 实现（R1-R5）
-│  └── docs/                          │  ← 需求 + 验收 + 决策日志
-└─────────────────────────────────────┘
+`src/util/log.ts` 提供 `[serenity-plugin][tag]` 前缀的 stderr 输出（默认）。文件输出完全 opt-in：
+
+```bash
+OPENCODE_SERENITY_LOG_FILE=/tmp/serenity-plugin.log opencode
+OPENCODE_SERENITY_DEBUG=1 opencode  # 额外开 debug 级
 ```
 
-**关键解耦**：
-- 本仓**不**包含 `mech-registry.json` / `home-credentials.json`（属于主仓）
-- 运行时 plugin 通过 `HOME_SERENITY_ROOT` env 找到主仓路径
-- `mech-registry.json` 的 31 条 MSM 条目**不**复制到本仓（plugin 启动时 readFileSync 主仓的注册表）
+---
+
+## 远程
+
+- 仓：`git@home.gitlab:yh/opencode-serenity-plugin.git`（id=32, private）
+- Web：`http://home.gitlab/yh/opencode-serenity-plugin`
+- 默认分支：`main`
 
 ---
 
-## 5. 下一步（用户核对后执行）
+## 关联文档
 
-1. 用户回复 D1-D12 决策
-2. 按决策更新本仓（改包名、init git、写 tsconfig/package.json）
-3. **不写实现代码**，等下一轮需求细化
-4. 与 home-serenity 主仓的 `opencode.json` 集成（独立的"opencode.json 改造"会话）
-
----
-
-## 6. 关联文件
-
-- 调研 SESSION：`/home/yh/our-home/HOME-SERENITY/home-serenity/AGENT_SESSIONS/2026-06-04--opencode-plugin-investigation/SESSION.md`
-- v0 需求源：`AGENT_SESSIONS/2026-06-04--opencode-plugin-investigation/requirements-locked-v0.md`
-- L4 架构：`AGENT_SESSIONS/2026-06-04--opencode-plugin-investigation/docs/plugin-v0-architecture.md`
-- L5 可行性：`AGENT_SESSIONS/2026-06-04--opencode-plugin-investigation/docs/plugin-viability-analysis.md`
-- L6 路线：`AGENT_SESSIONS/2026-06-04--opencode-plugin-investigation/docs/plugin-implementation-roadmap.md`
+- 范围层：`docs/requirements-v0-scope.md`
+- 方案层：`docs/architecture-v0.md`
+- 接口层：`docs/contract-v0.md`
+- 旧需求（R1-R5）：`docs/requirements-v0-summary.md`
+- v0.1 候选分析：`docs/v0.1-candidates.md`
+- 调研 SESSION：`AGENT_SESSIONS/2026-06-04--S015--opencode-plugin-investigation/`（主仓）
+- TUI toast 调试报告：`AGENT_SESSIONS/2026-06-06--S019--tui-toast-investigation/docs/tui-toast-root-cause.md`
 
 ---
 
-> **当前日期**：2026-06-04
+> **版本**：v0.0.1（2026-06-06 — 首个可用版本）
 > **作者**：yh + 宁静号 Agent
-> **状态**：WIP — 决策对账表待用户核对

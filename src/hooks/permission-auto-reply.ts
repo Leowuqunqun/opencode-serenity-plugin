@@ -148,7 +148,6 @@ export function createPermissionAutoReplyHandler(
     let toolName: string;
     let patterns: string[];
     let requestId: string;
-    let sessionId: string;
     let alwaysList: string[] = [];
 
     if (isV2Event) {
@@ -194,20 +193,12 @@ export function createPermissionAutoReplyHandler(
     if (!client) return;
 
     try {
-      if (isV2Event) {
-        // v2 event → v2 reply (需 sessionID)
-        await client.session.permission.reply({
-          sessionID: sessionId,
-          requestID: requestId,
-          reply: 'always',
-        });
-      } else {
-        // v1 event → v2 reply (无 sessionID)
-        await client.permission.reply({
-          requestID: requestId,
-          reply: 'always',
-        });
-      }
+      // v2 SDK 实际 API：client.permission.reply({requestID, reply}) — 无需 sessionID
+      // （v2 Permission class 旧 `respond({sessionID, permissionID, response})` 已 deprecated）
+      await client.permission.reply({
+        requestID: requestId,
+        reply: 'always',
+      });
       log.info('perm-reply', 'auto-replied always', {
         eventType: event.type,
         tool: toolName,

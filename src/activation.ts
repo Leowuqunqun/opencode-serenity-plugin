@@ -24,6 +24,7 @@ import type { SerenityState } from './types/index.js';
 import { setState, markReady, markDisabled, getReadyMachine } from './state.js';
 import type { PluginInput } from '@opencode-ai/plugin';
 import { log } from './util/log.js';
+import { checkSerenityConfig } from './util/init-check.js';
 
 export type SyncResult =
   | { ok: true; cwdRoot: string }
@@ -108,6 +109,10 @@ async function activateAsync(cwdRoot: string): Promise<void> {
   });
   setState(state);
   markReady();
+
+  // v1.5 init-check：plugin 启动时自检 opencode.json 关键配置
+  // 只 warn，不 patch（用户明确要求"不通过修改配置实现功能"）
+  checkSerenityConfig(cwdRoot, instanceName);
 }
 
 function errMsg(err: unknown, fallback: string): string {

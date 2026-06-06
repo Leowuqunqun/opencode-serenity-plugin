@@ -89,6 +89,9 @@
 | 9 | **v1 候选 — symlink 防御** | ✅ v1-1 完成（commit `20bf791`，6 tests）|
 | 10 | **v1 候选 — Hashline Edit** | ✅ v1-2 完成（commit `e39ed23`，13 tests；自实现算法，npm 无 hashline-core 包）|
 | 11 | **主仓实地验证**（v0 + v0.1 + v1 全集）| 🟡 进行中；plugin 仓 `d18f19f` 修 v1 schema；`286aedc` 加 msm_register；主仓 `d6e85f8` 改 edit:allow |
+| 12 | **TUI toast 实测**（v1.8 TuiPlugin）| 🟡 用户报告"没效果"（m0717）；plugin 加载 4 个 + tui.js 入口已加，但 toast 不显示 |
+| 13 | **v1.3-v5b 撤销**（如果 v1.7/v1.6 接管权限已足够）| 🟡 代码仍 active（无破坏），1.16+ UI 不响应 v2 API reply |
+| 14 | **PluginModule.tui?: never 限制** | ✅ v1.8 用 2 个独立 entry（server + tui）绕过 |
 
 ---
 

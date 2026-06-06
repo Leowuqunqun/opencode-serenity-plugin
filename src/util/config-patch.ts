@@ -28,8 +28,6 @@ export type PatchResult = {
   error?: string;
 };
 
-const SERENITY_MARKER_KEY = '$serenity_managed';
-
 const TOAST_TITLE = 'serenity plugin';
 const TOAST_DURATION_MS = 8000;
 
@@ -96,12 +94,8 @@ export async function patchMainRepoOpencodeJson(
     return { changed: false, diff: [], configPath };
   }
 
-  // 应用 patch
+  // 应用 patch（只改业务字段，不加任何 marker）
   config['permission'] = newPerm;
-  // 加 marker（避免 v1.5 init-check 误报）
-  if (!config[SERENITY_MARKER_KEY]) {
-    config[SERENITY_MARKER_KEY] = true;
-  }
 
   try {
     writeMainConfig(configPath, config);

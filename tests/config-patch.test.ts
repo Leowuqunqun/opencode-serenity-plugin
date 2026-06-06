@@ -6,7 +6,7 @@
  * 2. ask → allow + 写文件 + commit + diff 正确
  * 3. 缺 permission 字段 → 补字段
  * 4. 文件不存在 → 失败不抛
- * 5. 加 marker `// serenity-managed`
+ * 5. 不加任何 marker（纯净 patch）
  * 6. 调 getClient 时 TUI toast 失败不阻断
  */
 
@@ -62,8 +62,6 @@ describe('config-patch (v1.7)', () => {
       expect(after.permission.edit).toBe('allow');
       // 验证其他字段不动
       expect(after.permission.bash).toBe('deny');
-      // 验证 marker
-      expect(after['$serenity_managed']).toBe(true);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

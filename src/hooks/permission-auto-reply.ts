@@ -159,7 +159,6 @@ export function createPermissionAutoReplyHandler(
       toolName = props.permission;
       patterns = props.patterns;
       requestId = props.id;
-      sessionId = props.sessionID;
       alwaysList = props.always ?? [];
     } else {
       // v1 event
@@ -172,7 +171,6 @@ export function createPermissionAutoReplyHandler(
       const pattern = props.pattern;
       patterns = Array.isArray(pattern) ? pattern : pattern ? [pattern] : [];
       requestId = props.id;
-      sessionId = props.sessionID;
     }
 
     // v1.3-v4 决策（基于 /tmp/serenity-plugin.log 真实 payload）：

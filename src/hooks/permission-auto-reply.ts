@@ -31,7 +31,6 @@
 
 import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import { log } from '../util/log.js';
-import { isPathInside } from '../util/git.js';
 import { getState } from '../state.js';
 
 /** v2 client 简化类型（仅本 hook 用到的部分） */
@@ -150,6 +149,7 @@ export function createPermissionAutoReplyHandler(
     let patterns: string[];
     let requestId: string;
     let sessionId: string;
+    let alwaysList: string[] = [];
 
     if (isV2Event) {
       const props = event.properties as V2PermissionProps | undefined;
@@ -161,6 +161,7 @@ export function createPermissionAutoReplyHandler(
       patterns = props.patterns;
       requestId = props.id;
       sessionId = props.sessionID;
+      alwaysList = props.always ?? [];
     } else {
       // v1 event
       const props = event.properties as V1PermissionProps | undefined;
@@ -175,18 +176,18 @@ export function createPermissionAutoReplyHandler(
       sessionId = props.sessionID;
     }
 
-    // 判定：所有 patterns 都在 cwdRoot 内
-    if (patterns.length > 0) {
-      const allInside = patterns.every((p) => isPathInside(state.cwdRoot, p));
-      if (!allInside) {
-        log.info('perm-reply', 'patterns outside cwdRoot; skipping auto-reply', {
-          tool: toolName,
-          patterns,
-          cwdRoot: state.cwdRoot,
-        });
-        return;
-      }
-    }
+    // v1.3-v4 决策（基于 /tmp/serenity-plugin.log 真实 payload）：
+    // opencode 1.16+ 推送 `always: ["*"]` 时 = opencode 自己已知道 "始终放行" 列表匹配
+    // → plugin 应**直接 reply "always"**，不需做 pattern check
+    // 这是用户"装好 agent 就能放开权限"的最简实现：opencode 自己的 always 列表是单一真相源
+    // 如果用户想要"cwdRoot 外不弹窗"——应该让 opencode 的 permission 配置接管（而不是 plugin 拦）
+    log.info('perm-reply', 'replying always (v1.3-v4: trust opencode always list)', {
+      eventType: event.type,
+      tool: toolName,
+      patterns,
+      always: alwaysList,
+      requestID: requestId,
+    });
 
     // 用 v2 client reply "always"
     const client = getV2Client();

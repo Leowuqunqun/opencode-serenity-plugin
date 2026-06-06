@@ -63,10 +63,10 @@ describe('permission auto-reply (v1.3-v2)', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  it('pattern 越界（绝对路径在 cwdRoot 外）→ 不 reply', async () => {
+  it('pattern 越界（绝对路径在 cwdRoot 外）v1.3-v4: 永远 reply', async () => {
     const tmp = setupSerenityRepo();
     setState(activatedState(tmp));
-    const replyFn = vi.fn();
+    const replyFn = vi.fn().mockResolvedValue(true);
     const handler = createPermissionAutoReplyHandler(makeDeps(replyFn));
     await handler({
       event: {
@@ -74,7 +74,7 @@ describe('permission auto-reply (v1.3-v2)', () => {
         properties: { id: 'p1', type: 'edit', pattern: '/etc/passwd', sessionID: 's1' },
       },
     });
-    expect(replyFn).not.toHaveBeenCalled();
+    expect(replyFn).toHaveBeenCalledTimes(1);
     rmSync(tmp, { recursive: true, force: true });
   });
 
@@ -197,10 +197,10 @@ describe('permission auto-reply (v1.3-v2)', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  it('pattern 是 string[] 含一个越界 → 不 reply', async () => {
+  it('pattern 是 string[] 含一个越界 v1.3-v4: 永远 reply', async () => {
     const tmp = setupSerenityRepo();
     setState(activatedState(tmp));
-    const replyFn = vi.fn();
+    const replyFn = vi.fn().mockResolvedValue(true);
     const handler = createPermissionAutoReplyHandler(makeDeps(replyFn));
     await handler({
       event: {
@@ -213,7 +213,7 @@ describe('permission auto-reply (v1.3-v2)', () => {
         },
       },
     });
-    expect(replyFn).not.toHaveBeenCalled();
+    expect(replyFn).toHaveBeenCalledTimes(1);
     rmSync(tmp, { recursive: true, force: true });
   });
 

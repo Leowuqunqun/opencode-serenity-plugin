@@ -133,8 +133,8 @@ export function createPermissionAutoReplyHandler(
   return async (input) => {
     const event = input.event;
 
-    // v1.3 调试：先 dump 全部 event 拿到真实 payload
-    log.debug('event', 'RAW EVENT', {
+    // v1.3 调试：先 dump 全部 event 拿到真实 payload（info 级确保 stderr + log 文件双写）
+    log.info('event', 'RAW EVENT', {
       type: event?.type,
       properties: event?.properties,
     });

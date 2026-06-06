@@ -5,26 +5,34 @@
  * 默认输出到 stderr（避免污染 opencode 的 stdout / tool output stream）
  *
  * 环境变量：
- *  - OPENCODE_SERENITY_DEBUG=1     启用 debug 级日志
- *  - OPENCODE_SERENITY_LOG_FILE=/path/to/file   镜像所有日志到文件
+ *  - OPENCODE_SERENITY_DEBUG=1     启用 debug 级日志（仅 stderr）
+ *  - OPENCODE_SERENITY_LOG_FILE=/path/to/file   覆盖默认 log 文件路径
+ *                                          （默认 = /tmp/serenity-plugin.log）
  *                                          （append + 立即 flush，方便事后 read）
+ *
+ * **file log 默认**写到 `/tmp/serenity-plugin.log`（无需 env var）——
+ * 这是为了诊断 plugin 行为（看到真实 event payload、reply 真实 reply 状态）
+ * 关闭方式：设 `OPENCODE_SERENITY_LOG_FILE=/dev/null`
  *
  * 用法：
  *   import { log } from './util/log.js';
  *   log.info('msm', 'calling msm_exec', { name: 'resolve-path' });
  *   log.warn('phase2', 'RR1 failed: ...');
  *   log.error('permission', 'blocked bash');
- *   log.debug('event', 'RAW EVENT', { type, props });
+ *   log.debug('event', 'debug-only-msg', { type, props });
  */
 
 import { appendFileSync, writeFileSync } from 'node:fs';
 
 type Level = 'info' | 'warn' | 'error' | 'debug';
 
-/** 解析 LOG_FILE 路径（可能在每次 emit 时变，便于运行时切换） */
+const DEFAULT_LOG_FILE = '/tmp/serenity-plugin.log';
+
+/** 解析 LOG_FILE 路径（env 覆盖默认） */
 function getLogFile(): string | null {
   const p = process.env['OPENCODE_SERENITY_LOG_FILE'];
-  return p && p.length > 0 ? p : null;
+  if (p === '/dev/null') return null;
+  return p && p.length > 0 ? p : DEFAULT_LOG_FILE;
 }
 
 /** 是否首次写文件（创建空文件 + 写入 header） */
@@ -36,7 +44,7 @@ function writeToFile(line: string): void {
   try {
     if (!headerWritten) {
       // 首次：创建/截断文件 + 写 header
-      writeFileSync(file, `# serenity-plugin log started ${new Date().toISOString()}\n`, 'utf8');
+      writeFileSync(file, `# serenity-plugin log started ${new Date().toISOString()}\n# log file path: ${file}\n`, 'utf8');
       headerWritten = true;
     }
     appendFileSync(file, line + '\n', 'utf8');
@@ -51,7 +59,7 @@ function emit(level: Level, tag: string, msg: string, data?: Record<string, unkn
   const tail = data && Object.keys(data).length > 0 ? ` ${JSON.stringify(data)}` : '';
   const line = `${ts} ${prefix} ${msg}${tail}`;
 
-  // 写文件（始终写，不受 debug 限制；LOG_FILE 是显式 opt-in）
+  // 写文件（默认开，不受 debug 限制 —— info/warn/error/debug 全写）
   writeToFile(line);
 
   // 全部走 stderr（避免干扰 tool output stream）

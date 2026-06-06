@@ -13,6 +13,9 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
 
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid",
+
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,

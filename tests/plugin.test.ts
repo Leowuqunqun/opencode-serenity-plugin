@@ -1,5 +1,8 @@
 /**
  * plugin 入口单测 — smoke test
+ *
+ * v1.9：default export 改为 { id, server } 对象形式
+ * （readV1Plugin 强制 server/tui 二选一，对象形状是 opencode SDK 契约）
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -40,20 +43,27 @@ describe('plugin entry', () => {
     resetState();
   });
 
-  it('plugin 是默认 export 的 async function', () => {
-    expect(typeof plugin).toBe('function');
+  it('plugin default export 是 { id, server } 对象', () => {
+    expect(typeof plugin).toBe('object');
+    expect(plugin).not.toBeNull();
+    expect(typeof (plugin as { server?: unknown }).server).toBe('function');
+    expect(typeof (plugin as { id?: unknown }).id).toBe('string');
   });
 
   it('不激活时返回空 Hooks', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'serenity-inactive-'));
-    const hooks = await plugin(fakeInput(tmp));
+    const hooks = await (plugin as { server: (input: PluginInput) => Promise<unknown> }).server(
+      fakeInput(tmp)
+    );
     expect(hooks).toEqual({});
     rmSync(tmp, { recursive: true });
   });
 
   it('激活时返回带 tool/hook 的 Hooks', async () => {
     const tmp = makeSerenityRepo('home-serenity');
-    const hooks = await plugin(fakeInput(tmp));
+    const hooks = (await (plugin as { server: (input: PluginInput) => Promise<any> }).server(
+      fakeInput(tmp)
+    )) as Record<string, any>;
     expect(hooks.tool).toBeDefined();
     if (hooks.tool) {
       expect(hooks.tool['bash']).toBeDefined();

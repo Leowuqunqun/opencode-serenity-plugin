@@ -1,5 +1,5 @@
 /**
- * opencode-serenity-plugin — v1 入口（v0.1 + v1-1 symlink + v1.1 msm_register + v1.3 auto-perm）
+ * opencode-serenity-plugin — v1.9 入口（v0.1 + v1-1 symlink + v1.1 msm_register + v1.3 auto-perm）
  *
  * 启动协议见 architecture-v0.md
  * 契约见 contract-v0.md
@@ -8,6 +8,7 @@
  * v1-1 变更：msm-schema symlink 防御（fs.realpathSync）
  * v1.1 变更：msm_register + msm_deregister 工具
  * v1.3 变更：permission auto-reply（监听 permission.asked event，cwdRoot 内 always）
+ * v1.9 变更：default export 改为 { id, server } 对象形式（R-β fix，与 tui.ts 对称）
  *
  * Hook 工厂分层（v0.1-3 + v1.3）：
  * - createPermissionGuards：tool.execute.before（RR3 bash 防御 + RR5 路径守卫）
@@ -64,7 +65,10 @@ const plugin: Plugin = async (input) => {
   return hooks;
 };
 
-export default plugin;
+export default {
+  id: 'opencode-serenity-plugin-server',
+  server: plugin,
+};
 
 // 保留旧 export 兼容（tests 用）
 export { isActive } from './state.js';

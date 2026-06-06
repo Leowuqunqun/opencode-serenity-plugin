@@ -262,5 +262,43 @@ const Tui: TuiPlugin = async (api) => {
 | Server tool | ⏸ 推迟 v1+ |
 | 失败 UX | ✅ toast variant=error，dialog 错误时保持 |
 | Rollback 策略 | ✅ 写文件后 git 失败 → 删文件 |
+| **v1.10.1 全局可见** | ✅ TUI plugin 自安装到 `~/.config/opencode/tui.json`，slash command 在**任何**目录可见（详见 §11）|
+
+---
+
+## 11 v1.10.1 — slash command 全局可见
+
+> 状态：✅ 实施（commit 待生成；与本文档同步更新）
+
+### 11.1 根因
+
+TUI plugin 只在 `tui.json` 文件里登记的路径下被 opencode 加载。plugin 路径只登记在项目 tui.json（`/home/yh/our-home/HOME-SERENITY/home-serenity/tui.json`），非 serenity 目录 walk-up 找不到 tui.json → plugin 不加载 → `Tui(api)` 永不调 → slash command 不出现。
+
+机制文件：
+- `packages/opencode/src/config/paths.ts:10-21`（`ConfigPaths.files` walk-up 找 tui.json）
+- `packages/opencode/src/cli/cmd/tui/config/tui.ts:194-231`（合并 config）
+- `packages/opencode/src/cli/cmd/tui/plugin/runtime.ts:1074-1129`（从 `config.plugin_origins` 加载 plugin）
+
+### 11.2 修复
+
+plugin `Tui(api)` 入口**自检并自安装**到 global TUI config（`$XDG_CONFIG_HOME/opencode/tui.json` 或 `~/.config/opencode/tui.json`）：
+
+- 幂等：plugin path 已在 list 中时 no-op
+- 保留其他字段（theme / keybinds / attention / prompt / …）
+- 写失败不抛：返回 `{ changed: false, error }`，仅 log.warn
+- 路径规范化：所有 path 走 realpathSync + pathToFileURL，与 opencode 的 `ConfigPlugin.resolvePluginSpec` 一致
+
+### 11.3 行为契约
+
+- **首次启动**（plugin 第一次被加载）：写入 global tui.json + 弹 toast "restart opencode to enable /serenity-init in non-serenity directories"（与 D5 一致）
+- **后续启动**（plugin 已 global 注册）：no-op，无额外 toast
+- **self-install 失败**（permission denied / 磁盘满 / …）：slash command 仍注册，仅 log.warn（plugin "dormant" 状态下也可用）
+- **D1-D10 不动**：本节是 v1.10 RR7 设计的"可见性补丁"，不动 UX / 命名 / 失败矩阵
+
+### 11.4 关联
+
+- 代码：`src/util/tui-install.ts`（新）+ `src/tui.ts`（B 段接入）
+- 测试：`tests/tui-install.test.ts`（23 unit tests）+ `tests/tui.test.ts`（+5 integration tests）
+- 调研 SESSION：`AGENT_SESSIONS/2026-06-06--S020--fix-serenity-init-visibility/`
 
 > 本文档是 RR7 实施的 source of truth。任何对触发流程 / 命名 / 失败矩阵的修订都应改本文档 + 在 SESSION.md 留 commit 历史。

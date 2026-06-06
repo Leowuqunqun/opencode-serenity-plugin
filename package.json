@@ -1,8 +1,8 @@
 {
   "name": "opencode-serenity-plugin",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
-  "description": "OpenCode 平台本地插件，承载「宁静号」5 条需求 (RR1-RR7)。v0.0.1 首个可用版本：server entry (RR1-RR7 hooks) + TUI entry (激活 toast)。",
+  "description": "OpenCode 平台本地插件，承载「宁静号」5 条需求 (RR1-RR7)。v0.0.2 修复 v1.10 slash command 在非 serenity 目录不可见：TUI plugin 自安装到 global tui.json。",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

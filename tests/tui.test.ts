@@ -7,6 +7,9 @@
  *
  * v1.10: 测试 /serenity-init slash command 注册 + DialogPrompt UX 流程
  *
+ * v1.10.1: mock tui-install（避免测试时写盘到 ~/.config/opencode/tui.json）
+ *   新增 "plugin dormant 时 slash command 仍注册" 测试覆盖
+ *
  * 测试点：
  * 1. 形状：default 是对象，含 id（string）和 tui（function）
  * 2. 行为：调用 tui(api) 应当不抛错，且调用了 toast
@@ -16,13 +19,32 @@
  * 6. onConfirm(invalid) → toast error, dialog 不 clear
  * 7. onCancel → dialog.clear + toast "Cancelled"
  * 8. dialog=undefined → toast error, no throw
+ * 9. v1.10.1：plugin "dormant"（mock 掉 self-install）→ slash command 仍注册
+ * 10. v1.10.1：self-install 返回 changed → toast 提示 "restart opencode"
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+// v1.10.1: mock tui-install 避免测试时写到 ~/.config/opencode/tui.json
+// 用 vi.hoisted 让 mock factory 在 import 之前初始化（vitest 规范）
+const { mockInstall, mockToPluginSpec } = vi.hoisted(() => ({
+  mockInstall: vi.fn<(pluginPath: string, options?: { configPath?: string }) => { changed: boolean; configPath: string; error?: string }>(),
+  mockToPluginSpec: vi.fn<(input: string) => string>((input: string) => {
+    if (input.startsWith('file://')) return input;
+    return `file://${input}`;
+  }),
+}));
+
+vi.mock('../src/util/tui-install.js', () => ({
+  ensureGlobalTuiPluginRegistration: mockInstall,
+  toPluginSpec: mockToPluginSpec,
+  getGlobalTuiConfigPath: () => '/tmp/mock-tui.json',
+}));
+
 import tui from '../src/tui.js';
 
 interface MockDialogStack {
@@ -205,5 +227,101 @@ describe('TUI plugin entry', () => {
       (c) => (c[0] as { variant?: string }).variant === 'error',
     );
     expect(errorToast).toBeTruthy();
+  });
+});
+
+// v1.10.1: global visibility 修复 — verify slash command 仍注册 即使 self-install 失败
+describe('v1.10.1 — global visibility (dormant plugin)', () => {
+  beforeEach(() => {
+    mockInstall.mockReset();
+  });
+
+  afterEach(() => {
+    mockInstall.mockReset();
+  });
+
+  it('self-install 失败 (返回 error) → slash command 仍注册', async () => {
+    // 模拟 "plugin dormant"：self-install 报告错误（permission denied / 磁盘满 / …）
+    mockInstall.mockReturnValue({
+      changed: false,
+      configPath: '/root/.config/opencode/tui.json',
+      error: 'EACCES: permission denied',
+    });
+
+    const api = makeMockApi('/tmp/non-serenity-project');
+    // 必须不抛
+    await expect(
+      (tui as { tui: (api: unknown) => Promise<void> }).tui(api),
+    ).resolves.toBeUndefined();
+
+    // slash command 仍注册
+    expect(api.command?.register).toHaveBeenCalled();
+    const cb = api.command!.register.mock.calls[0][0] as () => MockCommandRegisterArg[];
+    const cmds = cb();
+    expect(cmds[0].value).toBe('serenity-init');
+  });
+
+  it('self-install 抛 throw（防御性）→ slash command 仍注册', async () => {
+    // 即便 self-install 抛了（理论上不会，但 try/catch 包住了），slash command 仍注册
+    mockInstall.mockImplementation(() => {
+      throw new Error('mock install throw');
+    });
+
+    const api = makeMockApi('/tmp/non-serenity-project');
+    await expect(
+      (tui as { tui: (api: unknown) => Promise<void> }).tui(api),
+    ).resolves.toBeUndefined();
+
+    expect(api.command?.register).toHaveBeenCalled();
+    const cb = api.command!.register.mock.calls[0][0] as () => MockCommandRegisterArg[];
+    expect(cb()[0].value).toBe('serenity-init');
+  });
+
+  it('self-install changed: true → toast 提示 "restart opencode"', async () => {
+    mockInstall.mockReturnValue({
+      changed: true,
+      configPath: '/home/yh/.config/opencode/tui.json',
+    });
+
+    const api = makeMockApi('/tmp/non-serenity-project');
+    await (tui as { tui: (api: unknown) => Promise<void> }).tui(api);
+
+    // 找到那个 "restart opencode" 的 toast
+    const installToast = api.ui.toast.mock.calls.find(
+      (c) => (c[0] as { message?: string }).message?.includes('restart opencode'),
+    );
+    expect(installToast).toBeTruthy();
+    expect((installToast![0] as { variant?: string }).variant).toBe('info');
+  });
+
+  it('self-install no-op (changed: false, 无 error) → 无额外 toast', async () => {
+    // 第二次启动场景：plugin 已 global 注册，install no-op
+    mockInstall.mockReturnValue({
+      changed: false,
+      configPath: '/home/yh/.config/opencode/tui.json',
+    });
+
+    const api = makeMockApi('/tmp/anywhere');
+    await (tui as { tui: (api: unknown) => Promise<void> }).tui(api);
+
+    // 只应有"plugin activated" toast，无 "restart" toast
+    const restartToast = api.ui.toast.mock.calls.find(
+      (c) => (c[0] as { message?: string }).message?.includes('restart opencode'),
+    );
+    expect(restartToast).toBeUndefined();
+  });
+
+  it('non-serenity cwd（无 /.serenity）slash command 仍注册', async () => {
+    // 用户痛点场景：cwd 是非 serenity 目录，plugin 处于 "dormant" 状态
+    // （没有 RR1 激活，server plugin 的 hooks 不工作）
+    // 但 TUI plugin 的 slash command 仍应可用——这是 RR7 init 的核心
+    mockInstall.mockReturnValue({ changed: false, configPath: '/tmp/x' });
+
+    const api = makeMockApi('/tmp/some-random-non-serenity-dir');
+    await (tui as { tui: (api: unknown) => Promise<void> }).tui(api);
+
+    expect(api.command?.register).toHaveBeenCalled();
+    const cb = api.command!.register.mock.calls[0][0] as () => MockCommandRegisterArg[];
+    expect(cb()[0].value).toBe('serenity-init');
   });
 });

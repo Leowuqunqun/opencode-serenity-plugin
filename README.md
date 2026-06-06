@@ -1,7 +1,9 @@
 # opencode-serenity-plugin
 
-> **v0.0.1** — 首个可用版本
+> **v0.0.2** — 修复 v1.10 slash command 在非 serenity 目录不可见
 > OpenCode 平台本地插件，承载「宁静号」7 条范围约束（RR1-RR7）。覆盖"拦截 + 行为"（server entry）+ "通知用户"（TUI entry）两条独立加载路径。
+>
+> **v1.10.1 关键修复**：TUI plugin 自安装到 `~/.config/opencode/tui.json`，让 opencode 在**任何**目录启动都加载 plugin，`/serenity-init` slash command 全局可见。详见 `AGENT_SESSIONS/2026-06-06--S020--fix-serenity-init-visibility/`。
 
 ---
 

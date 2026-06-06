@@ -1,11 +1,13 @@
 /**
- * /.serenity 文件工具 — RR1 验证 + 实例名读取
+ * /.serenity 文件工具 — RR1 验证 + 实例名读写
  *
  * 文件格式：纯文本，单行，内容 = 实例名
  * 例：文件内容 "home-serenity" → 实例名 = "home-serenity"
+ *
+ * v1.10：新增 write/remove（RR7 init 用）
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { SerenityFileEmptyError, SerenityFileNotFoundError } from '../errors.js';
 
@@ -41,5 +43,28 @@ export function serenityFileExists(cwdRoot: string): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * 写 `/.serenity`（创建或覆盖）。
+ * 内容 = instanceName + '\n'（保持文件以换行结尾）。
+ * v1.10：RR7 init 主路径使用。
+ * @throws 如果 cwdRoot 不可写则透传 fs 错误
+ */
+export function writeSerenityFile(cwdRoot: string, instanceName: string): void {
+  const path = join(cwdRoot, SERENITY_FILENAME);
+  writeFileSync(path, instanceName + '\n', 'utf8');
+}
+
+/**
+ * 删 `/.serenity`（v1.10：RR7 init rollback 用）。
+ * 文件不存在（ENOENT）静默忽略；其他错误透传。
+ */
+export function removeSerenityFile(cwdRoot: string): void {
+  try {
+    unlinkSync(join(cwdRoot, SERENITY_FILENAME));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
 }

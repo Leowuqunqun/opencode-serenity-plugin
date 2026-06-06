@@ -6,7 +6,13 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readSerenityFile, serenityFileExists, SERENITY_FILENAME } from '../src/util/serenity-file.js';
+import {
+  readSerenityFile,
+  removeSerenityFile,
+  serenityFileExists,
+  writeSerenityFile,
+  SERENITY_FILENAME,
+} from '../src/util/serenity-file.js';
 import { SerenityFileEmptyError, SerenityFileNotFoundError } from '../src/errors.js';
 
 describe('util/serenity-file', () => {
@@ -42,5 +48,26 @@ describe('util/serenity-file', () => {
     expect(serenityFileExists(tmp)).toBe(false);
     writeFileSync(join(tmp, '.serenity'), 'x');
     expect(serenityFileExists(tmp)).toBe(true);
+  });
+
+  // v1.10 RR7: writeSerenityFile + removeSerenityFile
+  it('writeSerenityFile 落盘内容正确', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'serenity-write-'));
+    writeSerenityFile(tmp, 'xx-serenity');
+    expect(serenityFileExists(tmp)).toBe(true);
+    expect(readSerenityFile(tmp)).toBe('xx-serenity');
+  });
+
+  it('removeSerenityFile 存在时删除', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'serenity-rm-'));
+    writeSerenityFile(tmp, 'existing-serenity');
+    expect(serenityFileExists(tmp)).toBe(true);
+    removeSerenityFile(tmp);
+    expect(serenityFileExists(tmp)).toBe(false);
+  });
+
+  it('removeSerenityFile 不存在时不抛错（idempotent）', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'serenity-rm2-'));
+    expect(() => removeSerenityFile(tmp)).not.toThrow();
   });
 });

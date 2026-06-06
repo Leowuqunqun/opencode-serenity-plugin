@@ -3,8 +3,8 @@
 > **plugin**: opencode-serenity-plugin
 > **版本**: v0 scope
 > **日期**: 2026-06-04
-> **状态**: ✅ 范围层关闭（RR1-RR7 + RR7 5 子点全部已定）
-> **下一抽象层**: 方案/设计层（plugin 启动协议 + 整体架构）
+> **状态**: ✅ 范围层关闭（RR1-RR7 + RR7 5 子点全部已定；② 命名模型在 v1.10 精修为 prefix + `-serenity` 后缀）
+> **下一抽象层**: 方案/设计层（plugin 启动协议 + 整体架构；RR7 详细设计见 `docs/rr7-init-design.md`）
 
 ---
 
@@ -29,7 +29,7 @@ plugin 工作后：
 | **RR4** | cwd 内全部权限 | read/write/edit/delete/execute 默认 allow |
 | **RR5** | cwd 外全部无权限 | deny / throw / no-op（具体形式待方案层定）|
 | **RR6** | cwd 必须在 git repo 内 | 满足 `git rev-parse --is-inside-work-tree`；否则 plugin 不工作 |
-| **RR7** | plugin 应能"将 cwd 初始化为 serenity 目录" | 详见 §3（5 子点）|
+| **RR7** | plugin 应能"将 cwd 初始化为 serenity 目录" | 详见 §3（5 子点）+ `docs/rr7-init-design.md`（v1.10 实施设计）|
 
 **统一不工作规则**：`/.serenity` 不存在 **或** 不在 git repo **或** `.opencode/skills/<N>/SKILL.md` 找不到 → plugin **完全不工作**（就像没装一样，无任何副作用）。
 
@@ -40,15 +40,17 @@ plugin 工作后：
 | # | 决策 | 说明 |
 |---|------|------|
 | ① 触发方式 | slash command **`/serenity-init`** | 用户在 opencode TUI 中执行 |
-| ② 实例名默认 | 目录名（kebab-case）| 例：`my-cool-project`；可显式覆盖 |
+| ② 实例命名模型 | **prefix + `-serenity` 后缀** | 用户输入 prefix（kebab-case）；最终实例名 = `${prefix}-serenity`；例：`xx` → `xx-serenity`、`tg` → `tg-serenity`；默认 prefix = 目录名（kebab-case 转换；带 `-serenity` 后缀时自动剥除）|
 | ③ git 前置 | **不自动** init | 要求用户先自己 `git init`；plugin 失败时给出明确提示 |
 | ④ commit 行为 | 创建后**自动** `git add + commit` | commit message 模板：`chore: initialize serenity (instance: <N>)` |
 | ⑤ 初始化范围 | **仅**创建 `/.serenity` | 最小化原则；不创建 `.opencode/skills/<N>/`（用户自行准备）|
 
-**slash command 失败处理**（行为细节，待方案层定）：
-- 不在 git repo 内 → 提示"请先 `git init`"
-- `/.serenity` 已存在 → 提示"已是 serenity 目录"，可选 no-op 或更新
-- 实例名冲突（与已有 skill 不匹配）→ 提示用户处理
+**slash command 失败处理**（详见 `docs/rr7-init-design.md` §5 失败矩阵）：
+- 不在 git repo 内 → toast 提示"请先 `git init`"
+- prefix 不合法（非 kebab-case）→ toast 提示规则，**dialog 保持开启**让用户重试
+- `/.serenity` 已存在 → toast 提示"已是 serenity 目录 (instance: N)"，**no-op**（不主动更新实例名）
+- git add/commit 失败 → 回滚 `/.serenity`，toast 提示错误详情
+- 验证失败 vs 软失败：验证失败抛错（dialog 保持），软失败（已是）返回值（dialog 关闭）
 
 ---
 

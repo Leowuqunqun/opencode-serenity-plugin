@@ -119,6 +119,17 @@ export class InitGitCommitError extends SerenityError {
   }
 }
 
+/** v1.10 RR7：用户输入的 prefix 不是 kebab-case */
+export class InvalidInstanceNameError extends SerenityError {
+  constructor(name: string) {
+    super(
+      `Invalid serenity prefix "${name}"; must be kebab-case ` +
+      `(lowercase a-z, 0-9, dashes; no leading or trailing dash)`,
+    );
+    this.name = 'InvalidInstanceNameError';
+  }
+}
+
 /** msm_exec 失败：path-arg 解析为 cwdRoot 之外的路径（v0.1-2 path escape guard）*/
 export class MsmPathEscapeError extends SerenityError {
   constructor(msmName: string, argName: string, value: string, resolved: string) {

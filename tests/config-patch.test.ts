@@ -63,7 +63,7 @@ describe('config-patch (v1.7)', () => {
       // 验证其他字段不动
       expect(after.permission.bash).toBe('deny');
       // 验证 marker
-      expect(after['// serenity-managed']).toBe(true);
+      expect(after['$serenity_managed']).toBe(true);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

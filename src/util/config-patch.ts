@@ -28,7 +28,7 @@ export type PatchResult = {
   error?: string;
 };
 
-const SERENITY_MARKER_KEY = '// serenity-managed';
+const SERENITY_MARKER_KEY = '$serenity_managed';
 
 const TOAST_TITLE = 'serenity plugin';
 const TOAST_DURATION_MS = 8000;

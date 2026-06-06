@@ -8,7 +8,7 @@
 
 ## 当前焦点
 
-**v1 + v0.1 全部完成** — 28 文件 / 11 commits / **69/69 tests pass** / typecheck + build green。
+**v1.7 + v1.8 全部完成** — 30 文件 / 14 commits / **123/123 tests pass** / typecheck + build green。
 
 | 阶段 | 状态 | commit |
 |------|:----:|--------|
@@ -22,6 +22,14 @@
 | **v0.1-3** hook 工厂分层（9 tests）| ✅ | `ca4360f` |
 | **v1-1** symlink 防御（6 tests）| ✅ | `20bf791` |
 | **v1-2** hashline edit（13 tests）| ✅ | `e39ed23` |
+| **v1-3-v2** 升 v2 SDK + auto-reply permission | ✅ | `809bf94` |
+| **v1.4** SKILL.md 全文注入 system prompt | ✅ | `cee8c2e` |
+| **v1.5** init-check（启动时校验 opencode.json）| ✅ | `00fcd19` |
+| **v1.6** RR5 hard block（edit/write + symlink 防御）| ✅ | `00fcd19` |
+| **v1.7** auto-patch 主仓 opencode.json | ✅ | `1c420a1` |
+| **v1.7b** marker key `//` → `$serenity_managed` | ✅ | `d9b774e` |
+| **v1.7c** marker 完全删除（纯净 patch）| ✅ | `bafa22c` |
+| **v1.8** TUI plugin entry（双 plugin 架构）| ✅ | `ebc2491` |
 
 > **下一步**：主仓实地验证（用户授权"开发完了一起搞验证"）。主仓 R4 部署 `0460bf1` 已就绪。
 

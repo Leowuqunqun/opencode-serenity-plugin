@@ -2,21 +2,28 @@
  * Compacting / System Transform Hook 工厂
  *
  * 包含：
- * 1. experimental.chat.system.transform — 注入 RR3 / RR7 提示到 system prompt
+ * 1. experimental.chat.system.transform — 注入 SKILL.md 全文到 system prompt
  * 2. experimental.session.compacting — 压缩时注入"serenity 关键状态" context
  *
- * 设计：
- * - RR3 提示：提醒 LLM bash 已禁用，必须用 msm_list / msm_exec
- * - RR7 提示：/serenity-init 走 msm_exec 而非 bash
- * - compacting 注入：避免 serenity 关键状态（cwdRoot、instanceName、SKILL.md 路径）被压缩丢失
+ * 设计（v1.4 简化）：
+ * - system.transform 唯一职责：把 state.skillContent 全文 push 到 system prompt
+ * - RR3 / RR7 杂项提示**移除**（user m0498："只加载 xx-serenity 这个 skill"）
+ *   - RR3 安全靠"同名 bash tool 覆盖抛错"双层防护，不靠 prompt
+ *   - RR7 走 plugin 协议工具自描述（msm_register 等）
+ * - 同一 session 内 system.transform 可能被多次触发（每次重建 system prompt），
+ *   但 plugin 只在用户消息进来时 push 一次；用 Set<sessionID> dedup
+ * - compacting 保留：避免 serenity 关键状态被压缩丢失
  */
 
 import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady } from '../state.js';
 import { isHookEnabled, safeHook, type HookConfig } from './util.js';
 
+/** session 级 dedup：避免 system.transform 重复注入 */
+const _injectedSessions = new Set<string>();
+
 const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform']> = async (
-  _input,
+  input,
   output,
 ) => {
   try {
@@ -25,16 +32,15 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
     return;
   }
 
-  output.system.push(
-    `[serenity-plugin] \`bash\` tool is disabled (RR3). Use \`msm_list\` to discover MSMs and \`msm_exec\` to invoke. Tool scope is limited to cwd root (RR5).`,
-  );
+  const state = getState();
+  if (!state.skillContent) return;  // SKILL.md 读失败或缺失 → 跳过
 
-  output.system.push(
-    `[serenity-plugin] Available slash commands: \`/serenity-init\` (RR7). ` +
-      `When the user types \`/serenity-init\`, do NOT try to execute it via bash. ` +
-      `Instead, call \`msm_exec\` with msm_name="serenity-init" and appropriate args. ` +
-      `The init script will: create /.serenity in cwd root, then git add + commit it.`,
-  );
+  // dedup：每个 session 只注入一次
+  const sessionID = input.sessionID ?? '__no_session__';
+  if (_injectedSessions.has(sessionID)) return;
+  _injectedSessions.add(sessionID);
+
+  output.system.push(state.skillContent);
 };
 
 const sessionCompactingImpl: NonNullable<Hooks['experimental.session.compacting']> = async (
@@ -51,10 +57,12 @@ const sessionCompactingImpl: NonNullable<Hooks['experimental.session.compacting'
   output.context.push(
     `[serenity-state] cwdRoot=${state.cwdRoot}; instanceName=${state.instanceName}; skillPath=${state.skillPath}`,
   );
-  output.context.push(
-    `[serenity-state] RR3: bash disabled, use msm_list/msm_exec. RR5: scope is cwdRoot only. RR7: /serenity-init via msm_exec.`,
-  );
 };
+
+/** 测试用：清空 dedup Set */
+export function _resetInjectedSessions(): void {
+  _injectedSessions.clear();
+}
 
 /** 工厂：返回 compacting / system transform 相关的 hooks 集合 */
 export function createCompactingHooks(config?: HookConfig): Partial<Hooks> {

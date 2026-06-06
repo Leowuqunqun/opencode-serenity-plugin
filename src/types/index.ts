@@ -18,6 +18,8 @@ export type SerenityState = {
   instanceName: string;
   /** SKILL.md 绝对路径（.opencode/skills/<instanceName>/SKILL.md）*/
   skillPath: string;
+  /** SKILL.md 全文（phase2 读取，用于 system.transform 注入到 system prompt）*/
+  skillContent: string | null;
   /** 激活失败原因（仅在 activated=false 时有意义）*/
   failureReason?: string;
 };
@@ -28,6 +30,7 @@ export const INACTIVE_STATE: Readonly<SerenityState> = Object.freeze({
   cwdRoot: '',
   instanceName: '',
   skillPath: '',
+  skillContent: null,
   failureReason: 'plugin not activated',
 });
 

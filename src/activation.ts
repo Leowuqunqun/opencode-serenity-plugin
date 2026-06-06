@@ -19,6 +19,7 @@
 import { findGitRoot } from './util/git.js';
 import { readSerenityFile } from './util/serenity-file.js';
 import { buildSkillPath, validateSkillExists } from './util/path.js';
+import { readFileSync } from 'node:fs';
 import type { SerenityState } from './types/index.js';
 import { setState, markReady, markDisabled, getReadyMachine } from './state.js';
 import type { PluginInput } from '@opencode-ai/plugin';
@@ -86,12 +87,24 @@ async function activateAsync(cwdRoot: string): Promise<void> {
     throw new Error(`RR2: ${detail}`);
   }
 
+  // RR2.5 — 读 SKILL.md 全文（用于 system.transform 注入）
+  // 失败：降级为 null（plugin 仍工作，只是不注 SKILL.md）
+  let skillContent: string | null = null;
+  try {
+    skillContent = readFileSync(skillPath, 'utf8');
+    log.debug('phase2', 'SKILL.md loaded', { bytes: skillContent.length, skillPath });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    log.warn('phase2', 'SKILL.md read failed; will skip system.transform injection', { detail, skillPath });
+  }
+
   // 成功 — 写 state + mark ready
   const state: SerenityState = Object.freeze({
     activated: true,
     cwdRoot,
     instanceName,
     skillPath,
+    skillContent,
   });
   setState(state);
   markReady();

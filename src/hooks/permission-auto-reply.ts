@@ -1,7 +1,7 @@
 /**
- * Permission Auto-Reply Hook（v1.3-v2 升级）
+ * Permission Auto-Reply Hook（v1.3-v2 + v1.3-v3 根因修复）
  *
- * 监听 opencode `permission.updated` event，对**所有 patterns 都在 cwdRoot 内**的请求
+ * 监听 opencode permission 事件，对**所有 patterns 都在 cwdRoot 内**的请求
  * 自动 reply `"always"`（**永久放行**——本 session 后续相同 pattern 不再弹窗）。
  *
  * 与 RR5（路径守卫）的协同：
@@ -9,11 +9,18 @@
  * - 本 hook: cwdRoot 内一律放行（避免 opencode 弹窗打断 LLM 流程）
  * - cwdRoot 外：不自动 reply → opencode 走原始 ask 弹窗（user 显式决定）
  *
- * v1/v2 SDK 关系（实测 1.16.2）：
- * - plugin 的 Event 类型来自 v1 SDK（`@opencode-ai/sdk`）—— 仍只能监听 `permission.updated`
- * - v1 main client 没有 v2 风格的 `permission.reply` 新 API
- * - v2 subpath (`@opencode-ai/sdk/v2`) 才有 `createOpencodeClient({baseUrl})` + `client.permission.reply({requestID, reply})`
- * - 本 hook 创 v2 client + 缓存 + 用 v2 新 API（不调用 v1 deprecated `respond`）
+ * v1.3-v3 根因修复（实测发现 v1.3-v2 不工作）：
+ * - plugin 1.16.2 的 Event 类型来自 v1 SDK（`@opencode-ai/sdk`），事件名 = `permission.updated`
+ * - opencode 当前版本实际推送的事件名是 `permission.asked`（v2 事件）
+ * - v1.3-v2 旧代码只听 `permission.updated` → 收不到 → reply 不触发 → 弹窗
+ * - **修复**：同时监听 3 个事件名 + 解析 v1/v2 两种 props schema + 分别用对应 reply API
+ *
+ * 事件名与 props schema 矩阵：
+ * | 事件名                  | type 字段 | pattern 字段    | reply API                                                |
+ * |-------------------------|-----------|----------------|----------------------------------------------------------|
+ * | `permission.updated`    | `type`    | `pattern` (string|string[]) | v2 `client.permission.reply({requestID, reply})`         |
+ * | `permission.asked`      | `permission` | `patterns` (string[]) | v2 `client.session.permission.reply({sessionID, requestID, reply})` |
+ * | `permission.v2.asked`   | `permission` | `patterns` (string[]) | 同上（v2 事件 v1 props 兼容）|
  *
  * 行为细节：
  * - 仅在 plugin 激活时生效（state.activated）
@@ -37,6 +44,21 @@ type V2Client = {
       reply?: 'once' | 'always' | 'reject';
       message?: string;
     }) => Promise<unknown>;
+    respond: (params: {
+      requestID: string;
+      reply?: 'once' | 'always' | 'reject';
+      message?: string;
+    }) => Promise<unknown>;
+  };
+  session: {
+    permission: {
+      reply: (params: {
+        sessionID: string;
+        requestID: string;
+        reply?: 'once' | 'always' | 'reject';
+        message?: string;
+      }) => Promise<unknown>;
+    };
   };
 };
 
@@ -47,7 +69,7 @@ export interface PermissionAutoReplyDeps {
   createV2Client?: (config: { baseUrl: string }) => V2Client;
 }
 
-/** v1 Permission 事件 properties 简化版（只取用到的字段） */
+/** v1 Permission 事件 properties 简化版 */
 type V1PermissionProps = {
   id: string;
   type: string; // tool name (e.g. "edit", "read", "webfetch")
@@ -55,16 +77,34 @@ type V1PermissionProps = {
   sessionID: string;
 };
 
-/** v1 Event union 简化版（只 type narrowing 用到的） */
-type V1EventLike = { type: string; properties?: unknown };
+/** v2 PermissionRequest 事件 properties 简化版 */
+type V2PermissionProps = {
+  id: string;
+  sessionID: string;
+  permission: string; // tool name
+  patterns: string[];
+  metadata?: Record<string, unknown>;
+  always?: string[];
+  tool?: { messageID: string; callID: string };
+};
+
+/** Event union 简化版 */
+type EventLike = { type: string; properties?: unknown };
+
+/** 三种要监听的事件名 */
+const WATCHED_EVENT_TYPES = new Set([
+  'permission.updated', // v1 事件
+  'permission.asked', // v2 事件（v1 兼容）
+  'permission.v2.asked', // v2 事件（v2 风格）
+]);
 
 /**
  * event hook 处理器
- * 收到 opencode event，识别 permission.updated 并自动 reply
+ * 收到 opencode event，识别 permission 事件并自动 reply
  */
 export function createPermissionAutoReplyHandler(
   deps: PermissionAutoReplyDeps,
-): (input: { event: V1EventLike }) => Promise<void> {
+): (input: { event: EventLike }) => Promise<void> {
   // 缓存 v2 client（lazy 初始化 + 单例）
   let v2ClientCache: V2Client | null = null;
   let v2ClientInitFailed = false;
@@ -93,27 +133,47 @@ export function createPermissionAutoReplyHandler(
   return async (input) => {
     const event = input.event;
 
-    // v1.3 调试：先 dump 全部 event 拿到真实 payload（用 LOG_FILE 落盘 + DEBUG 看 stderr）
+    // v1.3 调试：先 dump 全部 event 拿到真实 payload
     log.debug('event', 'RAW EVENT', {
       type: event?.type,
       properties: event?.properties,
     });
 
-    if (!event || event.type !== 'permission.updated') return;
+    if (!event || !WATCHED_EVENT_TYPES.has(event.type)) return;
 
     const state = getState();
     if (!state.activated) return;
 
-    // 解析 v1 event payload
-    const props = event.properties as V1PermissionProps | undefined;
-    if (!props || !props.id) {
-      log.warn('perm-reply', 'permission.updated event missing id', { type: event.type });
-      return;
-    }
+    // 解析事件 props（v1 vs v2 两种 schema）
+    const isV2Event = event.type === 'permission.asked' || event.type === 'permission.v2.asked';
+    let toolName: string;
+    let patterns: string[];
+    let requestId: string;
+    let sessionId: string;
 
-    const toolName = props.type ?? 'unknown';
-    const pattern = props.pattern;
-    const patterns: string[] = Array.isArray(pattern) ? pattern : pattern ? [pattern] : [];
+    if (isV2Event) {
+      const props = event.properties as V2PermissionProps | undefined;
+      if (!props || !props.id || !props.sessionID) {
+        log.warn('perm-reply', 'v2 event missing id/sessionID', { type: event.type });
+        return;
+      }
+      toolName = props.permission;
+      patterns = props.patterns;
+      requestId = props.id;
+      sessionId = props.sessionID;
+    } else {
+      // v1 event
+      const props = event.properties as V1PermissionProps | undefined;
+      if (!props || !props.id) {
+        log.warn('perm-reply', 'v1 event missing id', { type: event.type });
+        return;
+      }
+      toolName = props.type;
+      const pattern = props.pattern;
+      patterns = Array.isArray(pattern) ? pattern : pattern ? [pattern] : [];
+      requestId = props.id;
+      sessionId = props.sessionID;
+    }
 
     // 判定：所有 patterns 都在 cwdRoot 内
     if (patterns.length > 0) {
@@ -133,18 +193,30 @@ export function createPermissionAutoReplyHandler(
     if (!client) return;
 
     try {
-      await client.permission.reply({
-        requestID: props.id,
-        reply: 'always',
-      });
-      log.info('perm-reply', 'auto-replied always (v2)', {
+      if (isV2Event) {
+        // v2 event → v2 reply (需 sessionID)
+        await client.session.permission.reply({
+          sessionID: sessionId,
+          requestID: requestId,
+          reply: 'always',
+        });
+      } else {
+        // v1 event → v2 reply (无 sessionID)
+        await client.permission.reply({
+          requestID: requestId,
+          reply: 'always',
+        });
+      }
+      log.info('perm-reply', 'auto-replied always', {
+        eventType: event.type,
         tool: toolName,
         patterns,
-        requestID: props.id,
+        requestID: requestId,
       });
     } catch (err) {
       log.warn('perm-reply', 'reply failed; falling back to opencode ask', {
-        requestID: props.id,
+        eventType: event.type,
+        requestID: requestId,
         err: String(err),
       });
     }

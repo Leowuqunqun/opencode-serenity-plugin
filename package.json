@@ -39,7 +39,6 @@
   "dependencies": {
     "@opencode-ai/plugin": "1.16.2",
     "@opencode-ai/sdk": "1.16.2",
-    "@opentui/solid": "0.3.2",
     "zod": "4.1.8"
   },
   "devDependencies": {

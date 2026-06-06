@@ -1,25 +1,29 @@
 /**
- * opencode-serenity-plugin TUI entry（v1.9）
+ * opencode-serenity-plugin TUI entry（v1.9 → v1.9.1）
  *
  * 独立 TUI plugin（与 server plugin 平级）。opencode 1.16+ 强制 PluginModule
  * 二选一（server | tui），所以走两条独立 entry：
  * - server entry: dist/index.js（走 Hooks 系统）
  * - tui entry:    dist/tui.js  （走 TuiPluginApi）
  *
- * v1.8 → v1.9 修复：
- * - R-α fix: TUI entry 不再放在 opencode.json；放到主仓 tui.json#plugin
+ * v1.9 修复：
+ * - R-α fix: TUI entry 不放 opencode.json；放到主仓 tui.json#plugin
  * - R-β fix: default export 改为 { id, tui } 对象形式（之前是裸函数）
- * - R-γ fix: 显式 export id（路径 plugin 必须）
- * - UX：双通知 = 一次性 toast（激活瞬间）+ 永久 slot（app 底部小字）
+ * - R-γ fix: 路径 plugin 显式 export id
+ *
+ * v1.9.1 调整（slot 暂未实现）：
+ * - 移除 JSX slot。@opentui/solid 的 JSX runtime 只支持 build-time transform
+ *   （bun-plugin / babel-preset-solid），运行时 import 必然 throw。
+ *   我们用 tsc 编译没有 bun-plugin，所以 slot 加载会炸掉整个 plugin。
+ * - 保留 toast（不依赖 JSX），用户至少看到 "plugin activated" 通知。
+ * - 永久 slot 状态指示器待 v1.10 — 需要切到 bun build + bun-plugin-solid
+ *   或者重写为 createElement/spread 直调。
  *
  * 与 server plugin 协同（v1.9 仍未做状态共享）：
  * - server plugin 负责"拦截 + 行为"（RR1-RR7 + permission auto-reply + config-patch）
  * - tui plugin 负责"通知用户"（让用户看到 plugin 实际激活了）
- * - 已知缺口：TUI 端不读 server 的 isActive()，所以即使 server 激活失败，slot 也会显示
- *   —— v2 再做状态共享（B 方案）
  */
 
-/** @jsxImportSource @opentui/solid */
 import type { TuiPlugin } from '@opencode-ai/plugin/tui';
 
 const Tui: TuiPlugin = async (api) => {
@@ -31,27 +35,8 @@ const Tui: TuiPlugin = async (api) => {
     duration: 5000,
   });
 
-  // C: 永久 slot 状态指示器（app 底部小字）
-  api.slots.register({
-    order: 999,
-    slots: {
-      app_bottom() {
-        const theme = api.theme.current;
-        return (
-          <box
-            flexDirection="row"
-            paddingLeft={2}
-            paddingRight={2}
-            paddingBottom={1}
-            flexShrink={0}
-          >
-            <text fg={theme.success}>[serenity]</text>
-            <text fg={theme.textMuted}>  plugin active (cwdRoot-scoped)</text>
-          </box>
-        );
-      },
-    },
-  });
+  // C: 永久 slot — TODO v1.10（见文件头注释）
+  // 暂时不注册 slot，避免 plugin 加载失败
 };
 
 export default {

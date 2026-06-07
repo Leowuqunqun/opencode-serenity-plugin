@@ -28,8 +28,8 @@
 |------|:----:|--------|
 | v1.10.1 | ✅ | `d0ab00a` |
 | **v1.11** bin install CLI (idempotent) | ✅ | `93348e3` |
-| **v1.14** msm_exec 协议层集成 (S022 RFC) | ✅ | 本次 commit (v0.0.4) |
-| **v1.12** isHookEnabled + safeCreateHook | ⏳ | 下一个 commit (v0.0.5) |
+| **v1.14** msm_exec 协议层集成 (S022 RFC) | ✅ | `725a9e7` (v0.0.4) |
+| **v1.12** isHookEnabled + safeCreateHook | ✅ | 本次 commit (v0.0.5) |
 | **v1.13** zod-first plugin config | ⏳ | 下一个 commit (v0.0.6) |
 
 **v0.0.1 commit 链（17 个）**：

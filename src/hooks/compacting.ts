@@ -17,7 +17,7 @@
 
 import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady } from '../state.js';
-import { isHookEnabled, safeHook, type HookConfig } from './util.js';
+import { safeCreateHook, type HookConfig } from './util.js';
 
 /** session 级 dedup：避免 system.transform 重复注入 */
 const _injectedSessions = new Set<string>();
@@ -64,19 +64,26 @@ export function _resetInjectedSessions(): void {
   _injectedSessions.clear();
 }
 
-/** 工厂：返回 compacting / system transform 相关的 hooks 集合 */
+/** 工厂：返回 compacting / system transform 相关的 hooks 集合
+ *
+ * v1.12: 改用 safeCreateHook（factory pattern）
+ * - safeHook（旧）：禁用时返回 undefined（hook 不注册）
+ * - safeCreateHook（新）：禁用时返回 no-op（hook 注册但不做事）— host 期望 hook 存在
+ */
 export function createCompactingHooks(config?: HookConfig): Partial<Hooks> {
   const hooks: Partial<Hooks> = {};
 
-  if (isHookEnabled('experimental.chat.system.transform', config)) {
-    const wrapped = safeHook('experimental.chat.system.transform', systemTransformImpl, config);
-    if (wrapped) hooks['experimental.chat.system.transform'] = wrapped;
-  }
+  hooks['experimental.chat.system.transform'] = safeCreateHook(
+    'experimental.chat.system.transform',
+    () => systemTransformImpl,
+    config,
+  );
 
-  if (isHookEnabled('experimental.session.compacting', config)) {
-    const wrapped = safeHook('experimental.session.compacting', sessionCompactingImpl, config);
-    if (wrapped) hooks['experimental.session.compacting'] = wrapped;
-  }
+  hooks['experimental.session.compacting'] = safeCreateHook(
+    'experimental.session.compacting',
+    () => sessionCompactingImpl,
+    config,
+  );
 
   return hooks;
 }

@@ -13,7 +13,7 @@
 
 import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady } from '../state.js';
-import { isHookEnabled, safeHook, type HookConfig } from './util.js';
+import { safeCreateHook, type HookConfig } from './util.js';
 
 const SHELL_ENV_TOOL_VERSION = '0.1.3';
 
@@ -30,12 +30,16 @@ const shellEnvImpl: NonNullable<Hooks['shell.env']> = async (_input, output) => 
   output.env.SERENITY_PLUGIN_VERSION = SHELL_ENV_TOOL_VERSION;
 };
 
-/** 工厂：返回 shell env 相关的 hooks 集合 */
+/** 工厂：返回 shell env 相关的 hooks 集合
+ *
+ * v1.12: 改用 safeCreateHook（factory pattern）
+ */
 export function createShellEnv(config?: HookConfig): Partial<Hooks> {
   const hooks: Partial<Hooks> = {};
-  if (isHookEnabled('shell.env', config)) {
-    const wrapped = safeHook('shell.env', shellEnvImpl, config);
-    if (wrapped) hooks['shell.env'] = wrapped;
-  }
+  hooks['shell.env'] = safeCreateHook(
+    'shell.env',
+    () => shellEnvImpl,
+    config,
+  );
   return hooks;
 }

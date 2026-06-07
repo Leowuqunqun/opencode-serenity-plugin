@@ -10,6 +10,9 @@
  * v1.10.1: mock tui-install（避免测试时写盘到 ~/.config/opencode/tui.json）
  *   新增 "plugin dormant 时 slash command 仍注册" 测试覆盖
  *
+ * v1.15: "loaded" toast（每次加载都显示版本号）+ 自安装 toast 包含版本
+ *   新增两个测试覆盖
+ *
  * 测试点：
  * 1. 形状：default 是对象，含 id（string）和 tui（function）
  * 2. 行为：调用 tui(api) 应当不抛错，且调用了 toast
@@ -21,6 +24,8 @@
  * 8. dialog=undefined → toast error, no throw
  * 9. v1.10.1：plugin "dormant"（mock 掉 self-install）→ slash command 仍注册
  * 10. v1.10.1：self-install 返回 changed → toast 提示 "restart opencode"
+ * 11. v1.15：loaded toast title 包含 "opencode-serenity-plugin v" + 版本号
+ * 12. v1.15：self-install changed toast 包含版本号
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -144,11 +149,19 @@ describe('TUI plugin entry', () => {
     await (tui as { tui: (api: unknown) => Promise<void> }).tui(api);
     expect(api.ui.toast).toHaveBeenCalled();
     const calls = api.ui.toast.mock.calls;
-    expect(calls.length).toBeGreaterThanOrEqual(1);
-    const first = calls[0][0] as { title?: string; variant?: string; duration?: number };
-    expect(first.title).toBe('serenity');
-    expect(first.variant).toBe('success');
-    expect(first.duration).toBe(5000);
+    // v1.15: 至少 2 个 toast — "loaded"（版本号） + "plugin activated"（RR7 行为）
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+
+    // 找 "plugin activated" toast（title='serenity' + message 包含 'plugin activated'）
+    // 不再断言 first——v1.15 新增的 loaded toast 现在排第一
+    const activated = calls.find(
+      (c) =>
+        (c[0] as { title?: string; message?: string }).title === 'serenity' &&
+        (c[0] as { message?: string }).message?.includes('plugin activated'),
+    ) as [{ title?: string; message?: string; variant?: string; duration?: number }] | undefined;
+    expect(activated).toBeTruthy();
+    expect(activated![0].variant).toBe('success');
+    expect(activated![0].duration).toBe(5000);
   });
 
   it('注册 /serenity-init slash command', async () => {
@@ -292,6 +305,49 @@ describe('v1.10.1 — global visibility (dormant plugin)', () => {
     );
     expect(installToast).toBeTruthy();
     expect((installToast![0] as { variant?: string }).variant).toBe('info');
+  });
+
+  it('v1.15: loaded toast title 包含版本号', async () => {
+    // 不 mock install — 测试只关心"loaded" toast 与版本号
+    mockInstall.mockReturnValue({ changed: false, configPath: '/tmp/x' });
+
+    const api = makeMockApi();
+    await (tui as { tui: (api: unknown) => Promise<void> }).tui(api);
+
+    // 找 title 以 "opencode-serenity-plugin v" 开头的 toast
+    const loaded = api.ui.toast.mock.calls.find(
+      (c) =>
+        (c[0] as { title?: string }).title?.startsWith('opencode-serenity-plugin v'),
+    ) as [{ title?: string; message?: string; variant?: string; duration?: number }] | undefined;
+    expect(loaded).toBeTruthy();
+    // message 是 'loaded'
+    expect(loaded![0].message).toBe('loaded');
+    expect(loaded![0].variant).toBe('success');
+    // duration 3s 自动消失（不阻塞后续 toast）
+    expect(loaded![0].duration).toBe(3000);
+    // title 里必须包含 semver 子串（任意 X.Y.Z）— 不硬编码具体值
+    const title = loaded![0].title!;
+    expect(title).toMatch(/^opencode-serenity-plugin v\d+\.\d+\.\d+/);
+  });
+
+  it('v1.15: self-install toast 包含版本号', async () => {
+    mockInstall.mockReturnValue({
+      changed: true,
+      configPath: '/home/yh/.config/opencode/tui.json',
+    });
+
+    const api = makeMockApi();
+    await (tui as { tui: (api: unknown) => Promise<void> }).tui(api);
+
+    // 找 install toast（message 同时包含 'installed' 和 'restart opencode'）
+    const installToast = api.ui.toast.mock.calls.find(
+      (c) =>
+        (c[0] as { message?: string }).message?.includes('installed') &&
+        (c[0] as { message?: string }).message?.includes('restart opencode'),
+    ) as [{ message?: string }] | undefined;
+    expect(installToast).toBeTruthy();
+    // message 必须包含 semver 版本号
+    expect(installToast![0].message).toMatch(/v\d+\.\d+\.\d+/);
   });
 
   it('self-install no-op (changed: false, 无 error) → 无额外 toast', async () => {

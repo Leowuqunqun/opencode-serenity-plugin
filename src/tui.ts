@@ -1,5 +1,5 @@
 /**
- * opencode-serenity-plugin TUI entry（v1.9 → v1.9.1 → v1.10 → v1.10.1）
+ * opencode-serenity-plugin TUI entry（v1.9 → ... → v1.15）
  *
  * 独立 TUI plugin（与 server plugin 平级）。opencode 1.16+ 强制 PluginModule
  * 二选一（server | tui），所以走两条独立 entry：
@@ -35,6 +35,14 @@
  *   （try/catch 包住，失败仅 log.warn）
  * - 一次性行为：self-install 幂等，no-op 当 plugin path 已存在
  *
+ * v1.15 版本号可见性:
+ * - 每次 plugin 加载在 toast 里显示 `opencode-serenity-plugin v${VERSION}`，
+ *   用户重启 opencode 时即可确认实际加载的版本（避免 dev 缓存/旧 dist）。
+ * - VERSION 动态从 package.json 读（`import pkg ... with { type: 'json' }`），
+ *   release 时改 package.json#version 即可，无需同步本文件。
+ * - "loaded" toast 放在 self-install 之前，无论 self-install 是否成功都
+ *   能看到版本号。
+ *
  * 与 server plugin 协同：
  * - server plugin 负责"拦截 + 行为"（RR1-RR7 + permission auto-reply + config-patch）
  * - tui plugin 负责"通知用户"（激活提示 + 自安装 + RR7 初始化入口）
@@ -55,8 +63,21 @@ import {
   InitGitCommitError,
 } from './errors.js';
 import { log } from './util/log.js';
+import pkg from '../package.json' with { type: 'json' };
+
+const VERSION: string = pkg.version;
 
 const Tui: TuiPlugin = async (api) => {
+  // v1.15 — 每次加载都显示版本号（用户调试 / 确认实际加载的版本）
+  //   duration 3000：3s 自动消失，不阻塞后续 toast
+  //   放在 self-install 之前：self-install 失败/跳过时也可见
+  api.ui.toast({
+    title: `opencode-serenity-plugin v${VERSION}`,
+    message: 'loaded',
+    variant: 'success',
+    duration: 3000,
+  });
+
   // A: 一次性 toast（激活瞬间提示，5s 后消失）
   api.ui.toast({
     title: 'serenity',
@@ -75,8 +96,8 @@ const Tui: TuiPlugin = async (api) => {
       api.ui.toast({
         title: 'serenity',
         message:
-          'TUI plugin registered globally; restart opencode to enable ' +
-          '/serenity-init in non-serenity directories',
+          `opencode-serenity-plugin v${VERSION} installed; restart opencode to ` +
+          `enable /serenity-init in non-serenity directories`,
         variant: 'info',
         duration: 8000,
       });

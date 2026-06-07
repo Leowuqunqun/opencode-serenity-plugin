@@ -36,3 +36,5 @@ temp/
 # 宁静号特定：避免污染主仓
 AGENT_SESSIONS/
 .opencode/
+
+opencode.json

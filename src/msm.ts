@@ -22,12 +22,8 @@ import {
 } from './errors.js';
 import { getState, ensureReady } from './state.js';
 import { isPathInside, gitAddAndCommit } from './util/git.js';
-import { tokenizeArgs, normalizeFlags, validatePathArgsFromTokens } from './msm-schema.js';
-import {
-  callMsmExec,
-  callMsmExecMeta,
-  parseProtocolFlags,
-} from './util/msm-call.js';
+import { normalizeFlags, validatePathArgsFromTokens } from './msm-schema.js';
+import { callMsmExec } from './util/msm-call.js';
 import {
   parseMechRegistryFile,
   type MechEntry,
@@ -142,99 +138,55 @@ export const msmListTool: ToolDefinition = tool({
   },
 });
 
-/* ===== msm_exec tool (协议 flag 拦截 + meta 路由) ===== */
+/* ===== msm_exec tool (纯执行，无协议元命令) ===== */
 export const msmExecTool: ToolDefinition = tool({
   description:
-    '[PRIMARY] Execute a registered MSM tool or invoke a protocol meta-command. ' +
+    '[PRIMARY] Execute a registered MSM tool. ' +
     'ALWAYS call `msm_list` first to discover the MSM name. ' +
-    '**args is a CLI args string** — protocol flags (S022 RFC §2.2) are intercepted at the prefix: ' +
-    '`--format=<text|json>`, `--log <path>`, `--help [name]`, `--version`, `--list`, `--schema [name]`. ' +
-    'Examples: `args="--format=json /tmp/x"` for real exec; `args="--list"` for MSM listing; ' +
-    '`args="--schema ssh-connect"` for a MSM schema. ' +
-    '**args in real-exec mode**: rest of the string after protocol flags = business args, passed verbatim to the MSM. ' +
+    '**args is a string array** — each element is passed as a separate argument to the MSM. ' +
+    'Spaces, newlines, and special characters in elements are preserved losslessly. ' +
+    'Example: `args=["exec", "ubuntu", "ls -la"]`. ' +
     '30s timeout. **Direct `bash` is disabled by serenity policy (RR3)** — msm_exec is the only path for shell work.',
   args: {
-    msm_name: z.string().describe('MSM name as registered in mech-registry.json (call msm_list first). Used for real-exec; also used as the target for --help/--schema.'),
+    msm_name: z.string().describe('MSM name as registered in mech-registry.json (call msm_list first).'),
     args: z
-      .string()
-      .default('')
-      .describe('CLI args string. Protocol flags (--format=json, --log, --help, --version, --list, --schema) at the prefix are intercepted; the rest is passed to the MSM as business args. e.g. "--format=json /tmp/x" or "--list".'),
+      .array(z.string())
+      .default([])
+      .describe('Business args as string array. Each element is a separate argument — spaces/newlines within elements are preserved.'),
   },
   execute: async (input) => {
     log.info('msm', 'msm_exec called', {
       msm_name: input.msm_name,
-      rawArgs: input.args,
+      args: input.args,
     });
     await ensureReady();
     const state = getState();
 
-    // 1. tokenize + parse protocol flags (§2.1 拦截)
-    const tokenized = (input.args ?? '').trim().length === 0 ? [] : tokenizeArgs(input.args ?? '');
-    const { flags, rest } = parseProtocolFlags(tokenized);
-
-    // 2. 协议元命令路由：--list / --version / --schema / --help
-    //    这些命令不需要 msm 在 registry 中，绕过 findMsm
-    if (flags.list) {
-      const result = await callMsmExecMeta({ kind: 'list' });
-      if (result.exitCode !== 0) {
-        throw new MsmExecutionError('msm-exec', result.exitCode, result.stdout, result.stderr);
-      }
-      return result.stdout || '(no output)';
-    }
-    if (flags.version) {
-      const result = await callMsmExecMeta({ kind: 'version' });
-      if (result.exitCode !== 0) {
-        throw new MsmExecutionError('msm-exec', result.exitCode, result.stdout, result.stderr);
-      }
-      return result.stdout || '(no output)';
-    }
-    if (flags.schema) {
-      // --schema 目标 msm：input.msm_name 优先，rest[0] 兜底
-      const target = input.msm_name || rest[0];
-      const result = await callMsmExecMeta({ kind: 'schema', msm_name: target });
-      if (result.exitCode !== 0) {
-        throw new MsmExecutionError(target ?? 'msm-exec', result.exitCode, result.stdout, result.stderr);
-      }
-      return result.stdout || '(no output)';
-    }
-    if (flags.help) {
-      // --help 目标 msm：input.msm_name 优先，rest[0] 兜底
-      const target = input.msm_name || rest[0];
-      const result = await callMsmExecMeta({ kind: 'help', msm_name: target });
-      if (result.exitCode !== 0) {
-        throw new MsmExecutionError(target ?? 'msm-exec', result.exitCode, result.stdout, result.stderr);
-      }
-      return result.stdout || '(no output)';
-    }
-
-    // 3. 真实 exec 路径：先 findMsm（v1.2 path-arg 校验）
+    // 1. find msm in registry
     const registry = loadMechRegistry();
     const entry = findMsm(input.msm_name, registry);
     log.info('msm', 'msm found in registry', { name: entry.name, skill: entry.skill });
     const normalized = normalizeFlags(entry.flags as Array<{ name?: string; flag?: string; type?: string }>);
     try {
-      // path-arg 校验在 rest 上跑（rest 是去除协议 flag 后的业务段）
-      validatePathArgsFromTokens(rest, normalized, state.cwdRoot);
+      // path-arg 校验直接对 input.args（string[]）跑
+      validatePathArgsFromTokens(input.args, normalized, state.cwdRoot);
     } catch (err) {
       log.warn('msm', 'msm_exec path-arg validation failed', { msm: entry.name, err: String(err) });
       throw err;
     }
 
-    // 4. 调 msm-exec.ts（协议层 runtime）
+    // 2. 调 msm-exec.ts（纯执行，无协议 flag）
     const result = await callMsmExec({
       msm_name: input.msm_name,
-      businessArgs: rest,
-      format: flags.format,
-      log: flags.log,
+      businessArgs: input.args,
     });
     log.info('msm', 'msm_exec result', {
       name: input.msm_name,
       exitCode: result.exitCode,
       stdoutLen: result.stdout.length,
       stderrLen: result.stderr.length,
-      format: flags.format,
     });
-    // v1.15.1 §9: 错误路径保留 stdout（含 JSON 模式下的 6 字段错误）
+    // v1.15.1 §9: 错误路径保留 stdout
     if (result.exitCode !== 0) {
       throw new MsmExecutionError(input.msm_name, result.exitCode, result.stdout, result.stderr);
     }

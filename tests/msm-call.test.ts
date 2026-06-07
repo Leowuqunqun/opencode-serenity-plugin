@@ -298,3 +298,140 @@ describe('v1.14 新工具注册', () => {
     // 直接验证 export 即可
   });
 });
+
+describe('v1.15.1 §9 fix: msmExecTool preserves stdout in MsmExecutionError', () => {
+  let tmp: string;
+  let realSerenityRoot: string | undefined;
+
+  beforeEach(async () => {
+    tmp = mkdtempSync(join(tmpdir(), 'msm-call-sec9-'));
+    realSerenityRoot = process.env['HOME_SERENITY_ROOT'];
+    process.env['HOME_SERENITY_ROOT'] = tmp;
+
+    const skillScriptDir = join(tmp, '.opencode', 'skills', 'home-serenity', 'scripts');
+    mkdirSync(skillScriptDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    rmSync(tmp, { recursive: true, force: true });
+    if (realSerenityRoot !== undefined) {
+      process.env['HOME_SERENITY_ROOT'] = realSerenityRoot;
+    } else {
+      delete process.env['HOME_SERENITY_ROOT'];
+    }
+    const { resetState } = await import('../src/state.js');
+    resetState();
+  });
+
+  async function setupToolEnv(opts: { stubSource: string; msmName: string }) {
+    const { stubSource, msmName } = opts;
+    const scriptPath = join(tmp, '.opencode', 'skills', 'home-serenity', 'scripts', 'msm-exec.ts');
+    writeFileSync(scriptPath, stubSource, 'utf8');
+
+    const registryPath = join(tmp, '.opencode', 'skills', 'home-serenity', 'references', 'mech-registry.json');
+    mkdirSync(join(registryPath, '..'), { recursive: true });
+    writeFileSync(
+      registryPath,
+      JSON.stringify({
+        version: 1,
+        description: 'test',
+        entries: [
+          {
+            name: msmName,
+            path: 'scripts/' + msmName + '.ts',
+            skill: 'home-serenity',
+            category: 'mech',
+            description: 'test msm',
+            usage: 'npx tsx scripts/' + msmName + '.ts',
+            flags: [],
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    const { resetState, setState, markReady } = await import('../src/state.js');
+    resetState();
+    setState({
+      activated: true,
+      cwdRoot: tmp,
+      instanceName: 'home-serenity',
+      skillPath: '',
+      skillContent: null,
+    });
+    markReady();
+
+    const { msmExecTool } = await import('../src/msm.js');
+    return { msmExecTool };
+  }
+
+  it('sec9.4 case 1: --format=json 模式 exit 1 + JSON 在 stdout → 错误信息包含 JSON', async () => {
+    const stubSource = [
+      '#!/usr/bin/env npx tsx',
+      'const json = JSON.stringify({ ok: false, exit: 2, error: { code: "FILE_NOT_FOUND", category: "system", message: "path not found" } });',
+      'process.stdout.write(json + String.fromCharCode(10));',
+      'process.exit(1);',
+      '',
+    ].join(String.fromCharCode(10));
+    const { msmExecTool } = await setupToolEnv({ stubSource, msmName: 'file-rm' });
+
+    await expect(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (msmExecTool.execute as any)({ msm_name: 'file-rm', args: '/nonexistent/path', format: 'json' }),
+    ).rejects.toThrow(/FILE_NOT_FOUND/);
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (msmExecTool.execute as any)({ msm_name: 'file-rm', args: '/nonexistent/path', format: 'json' });
+      throw new Error('should not reach');
+    } catch (err) {
+      const { MsmExecutionError } = await import('../src/errors.js');
+      expect(err).toBeInstanceOf(MsmExecutionError);
+      const e = err as InstanceType<typeof MsmExecutionError>;
+      expect(e.exitCode).toBe(1);
+      expect(e.stdout).toContain('FILE_NOT_FOUND');
+      expect(e.stdout).toContain('"ok":false');
+      expect(e.message).toContain('stdout:');
+      expect(e.message).toContain('FILE_NOT_FOUND');
+    }
+  });
+
+  it('sec9 fallback: exit 1 + 空 stdout + 非空 stderr → 错误信息包含 stderr', async () => {
+    const stubSource = [
+      '#!/usr/bin/env npx tsx',
+      'process.stderr.write("plain text error from stub" + String.fromCharCode(10));',
+      'process.exit(1);',
+      '',
+    ].join(String.fromCharCode(10));
+    const { msmExecTool } = await setupToolEnv({ stubSource, msmName: 'foo' });
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (msmExecTool.execute as any)({ msm_name: 'foo', args: '' });
+      throw new Error('should not reach');
+    } catch (err) {
+      const { MsmExecutionError } = await import('../src/errors.js');
+      expect(err).toBeInstanceOf(MsmExecutionError);
+      const e = err as InstanceType<typeof MsmExecutionError>;
+      expect(e.exitCode).toBe(1);
+      expect(e.stdout).toBe('');
+      expect(e.stderr).toContain('plain text error');
+      expect(e.message).toContain('stderr:');
+      expect(e.message).toContain('plain text error');
+      expect(e.message).not.toContain('stdout:');
+    }
+  });
+
+  it('existing behavior: exit 0 + 空 stdout → 返回 (no output)', async () => {
+    const stubSource = [
+      '#!/usr/bin/env npx tsx',
+      'process.exit(0);',
+      '',
+    ].join(String.fromCharCode(10));
+    const { msmExecTool } = await setupToolEnv({ stubSource, msmName: 'silent' });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (msmExecTool.execute as any)({ msm_name: 'silent', args: '' });
+    expect(result).toBe('(no output)');
+  });
+});

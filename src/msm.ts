@@ -215,7 +215,7 @@ export const msmExecTool: ToolDefinition = tool({
       format: input.format,
     });
     if (result.exitCode !== 0) {
-      throw new MsmExecutionError(input.msm_name, result.exitCode, result.stderr);
+      throw new MsmExecutionError(input.msm_name, result.exitCode, result.stdout, result.stderr);
     }
     return result.stdout || '(no output)';
   },
@@ -364,7 +364,7 @@ export const msmHelpTool: ToolDefinition = tool({
     }
     const result = await callMsmExecMeta({ help: input.msm_name ?? null });
     if (result.exitCode !== 0) {
-      throw new MsmExecutionError(input.msm_name ?? 'msm-exec', result.exitCode, result.stderr);
+      throw new MsmExecutionError(input.msm_name ?? "msm-exec", result.exitCode, "", result.stderr);
     }
     return result.stdout;
   },
@@ -386,7 +386,7 @@ export const msmVersionTool: ToolDefinition = tool({
     }
     const result = await callMsmExecMeta('version');
     if (result.exitCode !== 0) {
-      throw new MsmExecutionError('msm-exec', result.exitCode, result.stderr);
+      throw new MsmExecutionError('msm-exec', result.exitCode, '', result.stderr);
     }
     return result.stdout;
   },
@@ -411,7 +411,7 @@ export const msmSchemaTool: ToolDefinition = tool({
     }
     const result = await callMsmExecMeta({ schema: input.msm_name });
     if (result.exitCode !== 0) {
-      throw new MsmExecutionError(input.msm_name, result.exitCode, result.stderr);
+      throw new MsmExecutionError(input.msm_name, result.exitCode, result.stdout, result.stderr);
     }
     return result.stdout;
   },

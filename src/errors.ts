@@ -103,11 +103,27 @@ export class MsmNotInRegistryError extends SerenityError {
   }
 }
 
-/** msm_exec 失败：MSM 子进程 exit code != 0 */
+/** msm_exec 失败：MSM 子进程 exit code != 0
+ *
+ * v1.15.1：MsmExecutionError 显式持有 stdout/stderr/exitCode 三个字段
+ * - 修复 S022 RFC §9 缺陷（plugin 端 msm_exec 吞掉 stdout）
+ * - JSON 模式下业务 msm 把错误信息写在 stdout（per S022 §2.3），
+ *   错误对象必须能让 LLM 看到 stdout 原文以便重试/诊断
+ */
 export class MsmExecutionError extends SerenityError {
-  constructor(msmName: string, exitCode: number, stderr: string) {
-    super(`MSM "${msmName}" failed with exit code ${exitCode}: ${stderr.slice(0, 500)}`);
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly exitCode: number;
+  constructor(msmName: string, exitCode: number, stdout: string, stderr: string) {
+    const stdoutSnippet = stdout ? `
+stdout: ${stdout.slice(0, 1000)}` : '';
+    const stderrSnippet = stderr ? `
+stderr: ${stderr.slice(0, 500)}` : '';
+    super(`MSM "${msmName}" failed with exit code ${exitCode}${stdoutSnippet}${stderrSnippet}`);
     this.name = 'MsmExecutionError';
+    this.exitCode = exitCode;
+    this.stdout = stdout;
+    this.stderr = stderr;
   }
 }
 

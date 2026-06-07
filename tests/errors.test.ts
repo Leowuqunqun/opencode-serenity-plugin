@@ -29,7 +29,7 @@ describe('errors', () => {
       new MsmNotRegisteredError('foo'),
       new MsmArgsParseError('{}', 'bad'),
       new MsmTimeoutError('foo', 1000),
-      new MsmExecutionError('foo', 1, 'err'),
+      new MsmExecutionError('foo', 1, 'out', 'err'),
       new InitGitCommitError('reason'),
       new InvalidInstanceNameError('MyProject'),
     ];

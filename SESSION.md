@@ -66,29 +66,16 @@
 
 ## 当前焦点
 
-**v0.0.4 — msm_exec 协议层集成 (S022 RFC)** 🎉
+**post-v0.0.2 状态：已发布（2026-06-07）。下一波 (v0.0.3) 待定——见上文 v0.0.2 块末尾 Open follow-ups 段。**
 
 | 维度 | 状态 |
 |------|:----:|
-| 范围层 RR1-RR7 | ✅ |
-| 方案层 10 步 + 5 模块 | ✅ |
-| 接口层 6 契约 + 13 错误类 | ✅ |
-| 实现层 32 文件 / 236 tests pass (v0.0.3 → v0.0.4: +9 tests) | ✅ |
-| typecheck + build green | ✅ |
-| 主仓集成（opencode.json + tui.json）| ✅ |
-| 用户实测 toast 显示 | ✅ |
-| 远程推送 origin main | ✅ |
-| **v1.14 msm_exec 协议层 (6 必含 flag)** | ✅ 2026-06-07 |
+| v0.0.2 release（RR7 init + bin install CLI + msm_exec 协议层 + hook 保护 + zod-first）| ✅ 2026-06-07 |
+| 320/320 tests pass | ✅ |
+| Remote 迁 GitHub（`github.com/tellmewhattodo/opencode-serenity-plugin`）| ✅ 2026-06-07 |
+| v0.0.2 详细记录（12 commits / 5 lock-in 决策 / open follow-ups）| 见上文 v0.0.2 — 2026-06-07 (release) 块 |
 
-**v0.0.x commit 链（最新 5 个）**：
-
-| 阶段 | 状态 | commit |
-|------|:----:|--------|
-| v1.10.1 | ✅ | `d0ab00a` |
-| **v1.11** bin install CLI (idempotent) | ✅ | `93348e3` |
-| **v1.14** msm_exec 协议层集成 (S022 RFC) | ✅ | `725a9e7` (v0.0.4) |
-| **v1.12** isHookEnabled + safeCreateHook | ✅ | `7ad23ee` (v0.0.5) |
-| **v1.13** zod-first plugin config | ✅ | 本次 commit (v0.0.6) |
+**v0.0.x 版本说明**：v0.0.x 系列目前仅 **v0.0.1 + v0.0.2** 两个 release。在 v0.0.2 之前，仓内 commit 链曾短暂以 v0.0.4/5/6 作内部版本标记（0.0.2 reset 前），现已废弃——不要在文档/issue 中引用 v0.0.3-0.0.6。
 
 **v0.0.1 commit 链（17 个）**：
 
@@ -116,7 +103,7 @@
 | **v1.10** RR7 init — /serenity-init slash command + DialogPrompt UX | ✅ | `d026b05` |
 | **v1.10.1** /serenity-init 修复：self-install 到 global tui.json（非 serenity 目录可见）| ✅ | 本次 commit |
 
-> **下一步**：v1.11 — slot 状态指示器（`createElement` / `spread` 直调，不依赖 JSX runtime）
+> **下一步**：v0.0.3 候选（5 项 open follow-ups）——见上文 v0.0.2 — 2026-06-07 (release) 块末尾 Open follow-ups 段。
 
 ---
 
@@ -255,14 +242,16 @@
 
 ### 远程仓
 
-- `git@home.gitlab:yh/opencode-serenity-plugin.git` — private, default_branch=main
-- Web: `http://home.gitlab/yh/opencode-serenity-plugin`
-- commits（11）：`99e95a3` → `09810ef` → `70db320` → `b92eed6` → `f2b3845` → `e91f8cc` → `ac9b7ec` → `fc1f6a7` → `1c4ce6b` → `ca4360f` → `20bf791` → `e39ed23`
+- `git@github.com:tellmewhattodo/opencode-serenity-plugin.git` — private, default_branch=main
+- Web: `https://github.com/tellmewhattodo/opencode-serenity-plugin`
+- 迁移历史：2026-06-07 从 `git@home.gitlab:yh/opencode-serenity-plugin.git` → `git@github.com:tellmewhattodo/opencode-serenity-plugin.git`（详见上文 v0.0.2 — 2026-06-07 (release) 块的 Remote migration 段）
+- commits（v0.0.2 = 12 新增，已列于上文 v0.0.2 块的 Commits (12 new since v0.0.1) 段）
 
 ---
 
 ## 最近变更
 
+- 2026-06-07 — **v0.0.2 release**：RR7 init + bin install CLI + msm_exec 协议层 + hook 保护 + zod-first；320/320 tests pass；远程从 GitLab 迁 GitHub（commit `d0ff4e2`；详见上方 v0.0.2 — 2026-06-07 (release) 块）
 - 2026-06-06 — **v1.10.1** 修复 `/serenity-init` 在非 serenity 目录不可见：TUI plugin 自安装到 `~/.config/opencode/tui.json`，让 plugin 在**任何**目录被 opencode 加载；184/184 tests pass（commit 待生成；详见 `AGENT_SESSIONS/2026-06-06--S020--fix-serenity-init-visibility`）
 - 2026-06-06 — **v1.10** RR7 init — `/serenity-init` slash command + DialogPrompt UX（commit `d026b05`，156 tests pass）
 - 2026-06-06 — **v0.0.1 release**：bump version 0.0.0 → 0.0.1；README 重写为 release 状态；SESSION 收尾

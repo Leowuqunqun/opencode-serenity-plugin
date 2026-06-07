@@ -87,6 +87,8 @@
 | 方案层（10 步协议 + 模块）| ✅ | `b92eed6` |
 | 接口层（6 契约 + 错误类）| ✅ | `f2b3845` |
 | v0 实现层（24 tests）| ✅ | `e91f8cc` |
+| v0.0.1 完全静默（release 应无 stderr 噪音）| ✅ | `521f8d1` |
+| v0.0.1 首个可用版本 release | ✅ | `df80a8c` |
 | v0.1 候选文档 | ✅ | `ac9b7ec` |
 | v0.1-1 两阶段 init（13 tests）| ✅ | `fc1f6a7` |
 | v0.1-2 path-arg 守卫（4 tests）| ✅ | `1c4ce6b` |
@@ -103,7 +105,7 @@
 | **v1.9** TUI entry shape + 切 tui.json（R-α/β/γ 修复）| ✅ | `3d34cba` |
 | **v1.9.1** 移除 JSX slot 防止 plugin 加载失败 | ✅ | `80f6b28` |
 | **v1.10** RR7 init — /serenity-init slash command + DialogPrompt UX | ✅ | `d026b05` |
-| **v1.10.1** /serenity-init 修复：self-install 到 global tui.json（非 serenity 目录可见）| ✅ | 本次 commit |
+| **v1.10.1** /serenity-init 修复：self-install 到 global tui.json（非 serenity 目录可见）| ✅ | `d0ab00a` |
 
 > **下一步**：v0.0.3 候选（5 项 open follow-ups）——见上文 v0.0.2 — 2026-06-07 (release) 块末尾 Open follow-ups 段。
 
@@ -138,7 +140,7 @@
 | 19 | **Q5（msm_exec 完整签名）+ Q6（permission schema）推迟 v1** | m0100 后自主推进；v0 已最小可行；扩展留 v1 |
 | 20 | **Q7（主仓定位）取消** — cwd 就是主仓 | m0085：plugin 不维护 instance→main_repo 映射；不需要 HOME_SERENITY_ROOT env |
 | 21 | **Q8（plugin 仓身份）删除** | plugin 仓就是 plugin 仓，绝不可能是 serenity 实例 |
-| 22 | **plugin 仓工程实践**（git/test/文档）独立于 RR6 | m0088 区分"plugin 自身的工程需求" vs "serenity 实例的 git 要求" |
+| 22 | **plugin 仓工程实践**（git/test/文档）独立于 RR6 | m0088 区分"plugin 自身的工程需求" vs "serenity 实例的 git 要求"（plugin 仓用 git 是为了开发/发布/版本控制；不是 RR6 "plugin 运行时宿主必须在 git repo" 的一部分 — RR6 作用于 plugin 加载时 cwd，而非 plugin 工程自身）|
 
 ### 撤回记录
 
@@ -290,9 +292,9 @@
 ## 最近变更
 
 - 2026-06-07 — **v0.0.2 release**：RR7 init + bin install CLI + msm_exec 协议层 + hook 保护 + zod-first；320/320 tests pass；远程从 GitLab 迁 GitHub（commit `d0ff4e2`；详见上方 v0.0.2 — 2026-06-07 (release) 块）
-- 2026-06-06 — **v1.10.1** 修复 `/serenity-init` 在非 serenity 目录不可见：TUI plugin 自安装到 `~/.config/opencode/tui.json`，让 plugin 在**任何**目录被 opencode 加载；184/184 tests pass（commit 待生成；详见 `AGENT_SESSIONS/2026-06-06--S020--fix-serenity-init-visibility`）
+- 2026-06-06 — **v1.10.1** 修复 `/serenity-init` 在非 serenity 目录不可见：TUI plugin 自安装到 `~/.config/opencode/tui.json`，让 plugin 在**任何**目录被 opencode 加载；184/184 tests pass（commit `d0ab00a`；详见 `AGENT_SESSIONS/2026-06-06--S020--fix-serenity-init-visibility`）
 - 2026-06-06 — **v1.10** RR7 init — `/serenity-init` slash command + DialogPrompt UX（commit `d026b05`，156 tests pass）
-- 2026-06-06 — **v0.0.1 release**：bump version 0.0.0 → 0.0.1；README 重写为 release 状态；SESSION 收尾
+- 2026-06-06 — **v0.0.1 release**：bump version 0.0.0 → 0.0.1（commit `df80a8c` release + `521f8d1` silent 收口）；README 重写为 release 状态；SESSION 收尾
 - 2026-06-06 — **v1.9.1** 修复 TUI toast 加载失败：移除 JSX slot（@opentui/solid JSX runtime 只支持 build-time transform），保留 toast；125/125 tests pass（commit `80f6b28`）
 - 2026-06-06 — **v1.9** 修复 TUI 加载机制（R-α/β/γ）：tui.json 拆分、default 形状改 `{ id, tui/server }`、显式 export id；用户实测 toast 显示（commit `3d34cba` + 主仓 `240dffe`）
 - 2026-06-06 — **S019** 调研完成：3 subagent 并行定位 tui-toast 根因；报告 `AGENT_SESSIONS/2026-06-06--S019--tui-toast-investigation/docs/tui-toast-root-cause.md`

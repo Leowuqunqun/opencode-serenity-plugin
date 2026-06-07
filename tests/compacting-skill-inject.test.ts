@@ -11,7 +11,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { setState, resetState, markReady } from '../src/state.js';
-import { _resetInjectedSessions, createCompactingHooks } from '../src/hooks/compacting.js';
+import { createCompactingHooks } from '../src/hooks/compacting.js';
 import { INACTIVE_STATE, type SerenityState } from '../src/types/index.js';
 
 function makeState(overrides: Partial<SerenityState> = {}): SerenityState {
@@ -28,7 +28,6 @@ function makeState(overrides: Partial<SerenityState> = {}): SerenityState {
 describe('v1.4 system.transform SKILL.md injection', () => {
   beforeEach(() => {
     resetState();
-    _resetInjectedSessions();
   });
 
   it('plugin 激活 + skillContent 有值 → 注入', async () => {
@@ -80,18 +79,22 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     expect(output.system).toHaveLength(1);
   });
 
-  it('不同 session → 各自独立注入', async () => {
+  it('不同 session → 各自独立注入（各自 fresh output）', async () => {
     setState(makeState());
     markReady();
     const hooks = createCompactingHooks();
     const hook = hooks['experimental.chat.system.transform']!;
 
-    const output = { system: [] as string[] };
-    await hook({ sessionID: 'sess-A' } as any, output);
-    await hook({ sessionID: 'sess-B' } as any, output);
-    expect(output.system).toHaveLength(2);
-    expect(output.system[0]).toContain('Mock SKILL.md');
-    expect(output.system[1]).toContain('Mock SKILL.md');
+    // 真实场景：每个 session 的 system.transform 拿到独立 output
+    // 新契约：dedup 在 output.system 上做（不是 sessionID）
+    const outputA = { system: [] as string[] };
+    const outputB = { system: [] as string[] };
+    await hook({ sessionID: 'sess-A' } as any, outputA);
+    await hook({ sessionID: 'sess-B' } as any, outputB);
+    expect(outputA.system).toHaveLength(1);
+    expect(outputB.system).toHaveLength(1);
+    expect(outputA.system[0]).toContain('Mock SKILL.md');
+    expect(outputB.system[0]).toContain('Mock SKILL.md');
   });
 
   it('session.compacting 仍注入状态（RR7 兼容保留）', async () => {

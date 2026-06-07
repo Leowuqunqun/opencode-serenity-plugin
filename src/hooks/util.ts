@@ -1,26 +1,30 @@
 /**
  * Hook 工厂公共工具（oMo 模式 v1.12 增强）
  *
- * v1.12 新增 3 项能力（D25 决策 — 仿 omo safeHook 模式 + session-level 防御）：
+ * v1.12 新增 3 项能力（D25 决策 — 仿 omo safeHook 模式 + 失败自动 disable）：
  * 1. `isHookEnabled(name, config?)` — 集中开关
  *    - 显式 config[name] === false → 禁用
  *    - 环境变量 `SERENITY_HOOK_DISABLED_<NAME>=1` → 禁用
- *    - session-level disable（module-level Set）→ 禁用
+ *    - module-level disable（plugin process lifetime）→ 禁用
  * 2. `disableHook(name, reason?)` / `isHookDisabled(name)` — 手动 / 自动禁用
  * 3. `safeCreateHook(name, factory, config?)` — 工厂包装（v1.12 推荐 API）
  *    - isHookEnabled === false → 返回 no-op 函数（hook 签名匹配）
  *    - factory 抛错 → 标记 disabled + 返回 no-op（**避免 retry storm**）
  *    - 注册后 hook 抛错 → 标记 disabled + 不 rethrow（**不传播 = 整 plugin 不挂**）
- *    - 错误信息用 log.debug 记录 + 模块级 _sessionErrors Map 保留
+ *    - 错误信息用 log.debug 记录 + module-level _sessionErrors Map 保留
+ *
+ * state lifetime: plugin process lifetime（不是 chat session）
+ * - 一个 opencode 进程 = 一个 plugin 进程 = 一组 disable 状态
+ * - 测试用 `_resetSessionHookGuard()` 显式清空（vitest beforeEach 已挂上）
  *
  * 向后兼容（v0.0.1 → v1.12）：
  * - 旧 `safeHook(name, impl, config?)` 仍工作；内部已升级走新 isHookEnabled
- * - 旧 `isHookEnabled(name, config?)` 签名不变，行为增强（环境变量 + session disable）
+ * - 旧 `isHookEnabled(name, config?)` 签名不变，行为增强（环境变量 + module-level disable）
  *
  * 与 omo 的差异（v1.12 比 omo 更细）：
  * - 粒度更细：每个 hook 独立 disable
- * - 多层 disable：env var / session / config 三道闸
- * - session-level 自动 disable（hook 抛错一次后本次 session 不再试）
+ * - 多层 disable：env var / process / config 三道闸
+ * - module-level 自动 disable（hook 抛错一次后本次 plugin process 不再试）
  *
  * v1.12 决策：v0.1-3 决策依然有效（"plugin 应静默"），所以 hook 抛错**不 rethrow**
  * 但**不静默丢弃** — 错误信息存到 _sessionErrors Map，调试时可查
@@ -34,7 +38,7 @@ export type HookName = keyof Hooks;
 /** hook 集中开关配置（默认全开） */
 export type HookConfig = { [K in HookName]?: boolean };
 
-/** session-level disable + 错误追踪状态（仅本模块使用） */
+/** module-level disable + 错误追踪状态（plugin process lifetime；测试用 reset API） */
 const _sessionDisabled = new Set<HookName>();
 const _sessionErrors = new Map<HookName, { error: unknown; ts: Date }>();
 

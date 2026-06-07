@@ -27,6 +27,18 @@ export function findGitRoot(cwd: string): string {
 }
 
 /**
+ * 同 findGitRoot，但不在 git repo 时返回 null 而非抛错
+ * 给 bin/opencode-serenity-plugin.js 用（不抛错便于分支处理）
+ */
+export function tryFindGitRoot(cwd: string): string | null {
+  try {
+    return findGitRoot(cwd);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 判断 childPath 是否在 parentPath 内（路径前缀比较）
  * - 规范化路径（resolve）
  * - 用 path.relative 算相对路径

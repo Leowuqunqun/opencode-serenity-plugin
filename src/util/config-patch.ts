@@ -78,10 +78,8 @@ export async function patchMainRepoOpencodeJson(
 
   // 计算 diff
   const diff: PatchResult['diff'] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const perm = (config['permission'] ?? {}) as Record<string, unknown>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const newPerm: Record<string, unknown> = { ...(perm as any) };
+  const newPerm: Record<string, unknown> = { ...perm };
 
   for (const f of fields) {
     if (perm[f] === 'allow') continue;

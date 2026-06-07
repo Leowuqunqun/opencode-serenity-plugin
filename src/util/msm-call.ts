@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getState } from '../state.js';
-import { MsmNotRegisteredError, SerenityError } from '../errors.js';
+import { MsmNotRegisteredError, MsmTimeoutError, SerenityError } from '../errors.js';
 import { tokenizeArgs } from '../msm-schema.js';
 
 const MSM_TIMEOUT_MS = 30_000;
@@ -250,7 +250,7 @@ export async function callMsmExec(opts: MsmCallOptions): Promise<MsmCallResult> 
 
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
-      rejectRun(new Error(`msm-call timeout after ${MSM_TIMEOUT_MS}ms`));
+      rejectRun(new MsmTimeoutError(opts.msm_name, MSM_TIMEOUT_MS));
     }, MSM_TIMEOUT_MS);
 
     child.on('close', (code) => {
@@ -310,7 +310,10 @@ export async function callMsmExecMeta(meta: MsmMetaCall): Promise<MsmCallResult>
 
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
-      rejectRun(new Error(`msm-call meta timeout after ${MSM_TIMEOUT_MS}ms`));
+      const msmName = meta.kind === 'help' || meta.kind === 'schema'
+        ? meta.msm_name ?? 'msm-exec'
+        : 'msm-exec';
+      rejectRun(new MsmTimeoutError(msmName, MSM_TIMEOUT_MS));
     }, MSM_TIMEOUT_MS);
 
     child.on('close', (code) => {

@@ -1,27 +1,11 @@
 /**
- * msm.ts (v1.17 — msm_admin 合并)
+ * msm.ts
  *
- * 工具集（4 个，最终）：
- * - bash (override)            : 同名覆盖 (RR3)
- * - msm_list                   : PRIMARY — 列出所有 MSM
- * - msm_exec                   : PRIMARY — 执行 MSM / 协议元命令
- * - msm_admin                  : 注册 / 注销 MSM（v1.17 合并原 msm_register/deregister）
- *
- * v1.17 变更：
- * - 删除 msm_register / msm_deregister 独立工具
- * - 新增 msm_admin 工具，action enum: 'register' | 'deregister'
- * - 内部分别调 registerMsmInner / deregisterMsmInner（v1.17 抽出共享实现）
- *
- * v1.16 变更（Option C）：
- * - 删除 msm_help / msm_version / msm_schema 三个独立工具
- *   → 由 msm_exec 内部用协议 flag 拦截（--help / --version / --list / --schema）统一调度
- * - msmExecTool 砍掉 format/log 独立字段
- *   → 协议 flag 通过 args 字符串前缀传入（S022 §2.1）
- * - msmExecTool 走 parseProtocolFlags 拦截协议 flag，路由 callMsmExec / callMsmExecMeta
- * - §9 stdout 保留：MsmExecutionError stdout 字段已在 v1.15.1 落地
- *
- * v1.14 变更：msm_exec 协议层经 callMsmExec → msm-exec.ts
- * v1.13 变更：MechEntry 改由 zod schema 派生 (src/config-schema.ts)
+ * 工具集（4 个）：
+ * - bash (override)   : 同名覆盖 (RR3)
+ * - msm_list          : PRIMARY — 列出所有 MSM
+ * - msm_exec          : PRIMARY — 执行 MSM / 协议元命令
+ * - msm_admin         : 注册 / 注销 MSM（合并 register/deregister）
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -50,15 +34,6 @@ import {
   type RegistryFile,
 } from './config-schema.js';
 
-/** v1.14: 30s 超时常量已移至 src/util/msm-call.ts
- *  旧 MSM_TIMEOUT_MS 删除 — msmExecTool 不再直接 spawn 业务 msm
- */
-
-/** v1.13: MechEntry 改由 zod schema 派生 (src/config-schema.ts)
- *  向后兼容: 这里 re-export 一次, msm.ts 内部代码继续引用本地 type
- *  注: 不导出 MechEntry (外部不依赖此类型名)
- */
-
 /** 加载 mech-registry.json（v0 简化：实例内一份） */
 /** 支持两种 schema：
  *  - v1 包装格式：{ version, description, entries: [...] }
@@ -69,16 +44,11 @@ export function loadMechRegistryFrom(cwdRoot: string, instanceName: string): Mec
   return loadRegistryFile(cwdRoot, instanceName).entries;
 }
 
-/** 完整 registry 文件结构（保留原 schema 用于回写）*/
-// v1.13: 改由 zod schema 派生 (src/config-schema.ts)
-/** 保留本地 type alias 用于 msm.ts 内部使用 */
-type LocalRegistryFile = RegistryFile;
-
 function registryFilePath(cwdRoot: string, instanceName: string): string {
   return join(cwdRoot, '.opencode', 'skills', instanceName, 'references', 'mech-registry.json');
 }
 
-export function loadRegistryFile(cwdRoot: string, instanceName: string): LocalRegistryFile {
+export function loadRegistryFile(cwdRoot: string, instanceName: string): RegistryFile {
   const path = registryFilePath(cwdRoot, instanceName);
   try {
     const raw = readFileSync(path, 'utf8');
@@ -172,21 +142,7 @@ export const msmListTool: ToolDefinition = tool({
   },
 });
 
-/* ===== msm_exec tool (v1.16: 协议 flag 拦截 + meta 路由) =====
- *
- * v1.16 变更（Option C）：
- * - schema: { msm_name, args }（砍掉 v1.14 独立 format/log 字段）
- * - args 字符串前缀可含 6 协议 flag（§2.2）：
- *   --format=<text|json> --log <path> --help --version --list --schema
- * - 协议 flag 由 parseProtocolFlags 拦截：
- *   - --list / --version / --schema / --help → callMsmExecMeta
- *   - 其他 → callMsmExec (real exec)
- * - msm_name 在协议 flag 场景下：
- *   - --help / --schema 用 msm_name 作为目标 MSM
- *   - --list / --version 忽略 msm_name
- * - 业务段（含 MSM name + 业务 args）走原 callMsmExec 路径
- * - §9 修复：MsmExecutionError stdout 字段保留（v1.15.1 落地）
- */
+/* ===== msm_exec tool (协议 flag 拦截 + meta 路由) ===== */
 export const msmExecTool: ToolDefinition = tool({
   description:
     '[PRIMARY] Execute a registered MSM tool or invoke a protocol meta-command. ' +
@@ -457,12 +413,4 @@ export const msmAdminTool: ToolDefinition = tool({
   },
 });
 
-/* ===== v1.17 删除 msm_register / msm_deregister 独立工具 =====
- *
- * v1.1 拆分：msm_register + msm_deregister 两个独立 tool
- * v1.17 合并：msm_admin 单 tool + action enum（节省 1 个 tool slot）
- *
- * v1.16 删除 msm_help / msm_version / msm_schema 三个独立工具
- * v1.17 删除 msm_register / msm_deregister 两个独立工具
- * 最终 4 tool slot：bash (override) + msm_list + msm_exec + msm_admin
- */
+/* 最终 4 tool slot：bash (override) + msm_list + msm_exec + msm_admin */

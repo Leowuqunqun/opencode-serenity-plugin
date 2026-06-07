@@ -37,6 +37,7 @@ import {
   readJsonConfig,
   writePluginEntry,
 } from '../dist/install.js';
+import { tryFindGitRoot } from '../dist/util/git.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -119,18 +120,6 @@ Exit codes:
 
 // ── 工具 ──
 
-/** walk up 找最近的 .git/ 目录 */
-function findGitRoot(cwd) {
-  let dir = resolve(cwd);
-  for (let i = 0; i < 100; i++) {
-    if (existsSync(join(dir, '.git'))) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-  return null;
-}
-
 /** 检测 plugin id 是否已在 _plugin_origins 里以不同路径注册 */
 function detectConflictId(entries, config) {
   const origins = config['_plugin_origins'];
@@ -170,7 +159,7 @@ function installCommand(flags) {
   // 3. 决定目标
   const targets = [];
   if (!flags.global) {
-    const gitRoot = findGitRoot(process.cwd());
+    const gitRoot = tryFindGitRoot(process.cwd());
     if (gitRoot) {
       targets.push({
         configPath: join(gitRoot, 'opencode.json'),

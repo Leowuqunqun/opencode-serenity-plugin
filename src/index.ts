@@ -74,6 +74,3 @@ export default {
   id: 'opencode-serenity-plugin-server',
   server: plugin,
 };
-
-// 保留旧 export 兼容（tests 用）
-export { isActive } from './state.js';

@@ -63,14 +63,6 @@ export class MsmNotRegisteredError extends SerenityError {
   }
 }
 
-/** msm_exec 失败：args 解析错误 */
-export class MsmArgsParseError extends SerenityError {
-  constructor(rawArgs: string, reason: string) {
-    super(`failed to parse msm_exec args "${rawArgs}" as JSON: ${reason}`);
-    this.name = 'MsmArgsParseError';
-  }
-}
-
 /** msm_exec 失败：MSM 子进程超时 */
 export class MsmTimeoutError extends SerenityError {
   constructor(msmName: string, timeoutMs: number) {

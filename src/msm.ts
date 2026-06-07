@@ -1,11 +1,16 @@
 /**
- * msm.ts (v1.16 — Option C 简化)
+ * msm.ts (v1.17 — msm_admin 合并)
  *
  * 工具集（4 个，最终）：
  * - bash (override)            : 同名覆盖 (RR3)
  * - msm_list                   : PRIMARY — 列出所有 MSM
  * - msm_exec                   : PRIMARY — 执行 MSM / 协议元命令
- * - msm_register / deregister  : (v1.17 将合并为 msm_admin，本文件保留 v1.16 拆分)
+ * - msm_admin                  : 注册 / 注销 MSM（v1.17 合并原 msm_register/deregister）
+ *
+ * v1.17 变更：
+ * - 删除 msm_register / msm_deregister 独立工具
+ * - 新增 msm_admin 工具，action enum: 'register' | 'deregister'
+ * - 内部分别调 registerMsmInner / deregisterMsmInner（v1.17 抽出共享实现）
  *
  * v1.16 变更（Option C）：
  * - 删除 msm_help / msm_version / msm_schema 三个独立工具
@@ -281,19 +286,138 @@ export const msmExecTool: ToolDefinition = tool({
   },
 });
 
-/* ===== msm_register tool（v1.1 增补：填补"LLM 写了 MSM 无法注册"的空白）===== */
-export const msmRegisterTool: ToolDefinition = tool({
+/* ===== v1.17 msm_admin tool（合并 msm_register + msm_deregister）=====
+ *
+ * 设计: 单 tool + action enum 替代两个对称 tool
+ * - 减少 LLM 决策树宽度（4 tool slot → 1）
+ * - action='register' | 'deregister' 强制二选一
+ * - 共享核心实现：registerMsmInner / deregisterMsmInner
+ *   （v1.17 从原 msmRegisterTool/msmDeregisterTool 抽出）
+ *
+ * 历史：
+ * - v1.1 增补：msm_register + msm_deregister 两个独立 tool
+ * - v1.17 合并：msm_admin 单 tool（减少 slot 占用）
+ */
+type RegisterInput = {
+  name: string;
+  path: string;
+  description: string;
+  category: 'mech' | 'semi-mech';
+  flags: Array<{ name: string; type: string; description?: string; required?: boolean; default?: unknown }>;
+  usage: string | undefined;
+};
+
+/** 内部 register 实现（v1.17 从 msmRegisterTool 抽出） */
+async function registerMsmInner(input: RegisterInput): Promise<string> {
+  log.info('msm', 'msm_admin register called', { name: input.name, path: input.path });
+  const state = getState();
+
+  // 1. 读 registry（含 schema 信息）
+  const file = loadRegistryFile(state.cwdRoot, state.instanceName);
+
+  // 2. 查重
+  if (file.entries.some((e) => e.name === input.name)) {
+    throw new MsmAlreadyRegisteredError(input.name);
+  }
+
+  // 3. 路径必须在 cwdRoot 内
+  const absPath = resolve(state.cwdRoot, input.path);
+  if (!isPathInside(state.cwdRoot, absPath)) {
+    throw new Error(`msm_admin: path "${input.path}" resolves to "${absPath}" which is outside cwdRoot; serenity plugin blocks path traversal`);
+  }
+
+  // 4. 脚本文件必须存在
+  if (!existsSync(absPath)) {
+    throw new MsmScriptNotFoundError(input.name, absPath);
+  }
+
+  // 5. 构造 entry
+  const usage = input.usage ?? `npx tsx ${input.path}`;
+  const newEntry: MechEntry = {
+    name: input.name,
+    path: input.path,
+    skill: state.instanceName,
+    category: input.category,
+    description: input.description,
+    usage,
+    flags: input.flags.map((f) => ({
+      name: f.name,
+      type: f.type,
+      ...(f.description !== undefined ? { description: f.description } : {}),
+      ...(f.required !== undefined ? { required: f.required } : {}),
+      ...(f.default !== undefined ? { default: f.default } : {}),
+    })),
+  };
+
+  // 6. 写回（保留 schema）
+  file.entries.push(newEntry);
+  writeRegistryFile(state.cwdRoot, state.instanceName, file);
+  log.info('msm', 'msm_admin register wrote registry', { name: input.name, absPath });
+
+  // 7. 自动 commit
+  const relRegistry = `.opencode/skills/${state.instanceName}/references/mech-registry.json`;
+  try {
+    gitAddAndCommit(state.cwdRoot, relRegistry, `chore(msm): register ${input.name}`);
+  } catch (err) {
+    log.warn('msm', 'git commit failed (continuing)', { err: String(err) });
+  }
+
+  return `registered "${input.name}" at ${absPath} (commit created)`;
+}
+
+type DeregisterInput = { name: string };
+
+/** 内部 deregister 实现（v1.17 从 msmDeregisterTool 抽出） */
+async function deregisterMsmInner(input: DeregisterInput): Promise<string> {
+  log.info('msm', 'msm_admin deregister called', { name: input.name });
+  const state = getState();
+
+  const file = loadRegistryFile(state.cwdRoot, state.instanceName);
+  const idx = file.entries.findIndex((e) => e.name === input.name);
+  if (idx === -1) {
+    throw new MsmNotInRegistryError(input.name);
+  }
+
+  const removed = file.entries.splice(idx, 1)[0]!;
+  writeRegistryFile(state.cwdRoot, state.instanceName, file);
+  log.info('msm', 'msm_admin deregister wrote registry', { name: input.name, path: removed.path });
+
+  const relRegistry = `.opencode/skills/${state.instanceName}/references/mech-registry.json`;
+  try {
+    gitAddAndCommit(state.cwdRoot, relRegistry, `chore(msm): deregister ${input.name}`);
+  } catch (err) {
+    log.warn('msm', 'git commit failed (continuing)', { err: String(err) });
+  }
+
+  return `deregistered "${input.name}" (was at ${removed.path}; script file NOT deleted — clean up manually if needed)`;
+}
+
+export const msmAdminTool: ToolDefinition = tool({
   description:
-    'Register a new MSM (Mech/Semi-Mech) into mech-registry.json. ' +
-    'Use this after writing a new MSM script — without registration, msm_exec cannot find it. ' +
-    'Path must be relative to the serenity cwd root and the script file must already exist. ' +
-    'Auto-commits the registry change as "chore(msm): register <name>". ' +
-    '**v1.17**: this tool will be merged with msm_deregister into msm_admin.',
+    'Register or deregister an MSM (Mech/Semi-Mech) in mech-registry.json. ' +
+    '**v1.17**: replaces the old msm_register + msm_deregister tools with a single tool + action enum. ' +
+    'Auto-commits the registry change as "chore(msm): register <name>" or "chore(msm): deregister <name>".',
   args: {
-    name: z.string().min(1).describe('unique MSM name (kebab-case recommended)'),
-    path: z.string().min(1).describe('script path, relative to cwd root (e.g. ".opencode/skills/home-serenity/scripts/foo.ts")'),
-    description: z.string().min(1).describe('one-line description of what the MSM does'),
-    category: z.enum(['mech', 'semi-mech']).default('mech').describe('mech = pure TS, no LLM; semi-mech = TS + LLM decision points'),
+    action: z
+      .enum(['register', 'deregister'])
+      .describe('operation to perform: register (add MSM to registry) or deregister (remove from registry)'),
+    name: z
+      .string()
+      .min(1)
+      .describe('unique MSM name (kebab-case recommended); for both register and deregister'),
+    // register-specific (required when action=register, ignored otherwise)
+    path: z
+      .string()
+      .optional()
+      .describe('[register] script path, relative to cwd root (e.g. ".opencode/skills/home-serenity/scripts/foo.ts"). Required for register.'),
+    description: z
+      .string()
+      .optional()
+      .describe('[register] one-line description of what the MSM does. Required for register.'),
+    category: z
+      .enum(['mech', 'semi-mech'])
+      .optional()
+      .describe('[register] mech = pure TS, no LLM; semi-mech = TS + LLM decision points. Required for register.'),
     flags: z
       .array(
         z.object({
@@ -304,113 +428,41 @@ export const msmRegisterTool: ToolDefinition = tool({
           default: z.unknown().optional(),
         }),
       )
-      .default([])
-      .describe('flag schema; type:"path" enables v0.1-2 path-escape guard'),
-    usage: z.string().optional().describe('one-line usage hint; default = "npx tsx <path> --<flags>"'),
+      .optional()
+      .describe('[register] flag schema; type:"path" enables v0.1-2 path-escape guard. Defaults to [] when omitted.'),
+    usage: z
+      .string()
+      .optional()
+      .describe('[register] one-line usage hint; default = "npx tsx <path>"'),
   },
   execute: async (input) => {
-    log.info('msm', 'msm_register called', { name: input.name, path: input.path });
     await ensureReady();
-    const state = getState();
-
-    // 1. 读 registry（含 schema 信息）
-    const file = loadRegistryFile(state.cwdRoot, state.instanceName);
-
-    // 2. 查重
-    if (file.entries.some((e) => e.name === input.name)) {
-      throw new MsmAlreadyRegisteredError(input.name);
+    if (input.action === 'register') {
+      if (!input.path || !input.description || !input.category) {
+        throw new Error(
+          'msm_admin: action=register requires path, description, category. ' +
+          'deregister only needs name.',
+        );
+      }
+      return await registerMsmInner({
+        name: input.name,
+        path: input.path,
+        description: input.description,
+        category: input.category,
+        flags: input.flags ?? [],
+        usage: input.usage,
+      });
     }
-
-    // 3. 路径必须在 cwdRoot 内
-    const absPath = resolve(state.cwdRoot, input.path);
-    if (!isPathInside(state.cwdRoot, absPath)) {
-      throw new Error(`msm_register: path "${input.path}" resolves to "${absPath}" which is outside cwdRoot; serenity plugin blocks path traversal`);
-    }
-
-    // 4. 脚本文件必须存在
-    if (!existsSync(absPath)) {
-      throw new MsmScriptNotFoundError(input.name, absPath);
-    }
-
-    // 5. 构造 entry
-    const usage = input.usage ?? `npx tsx ${input.path}`;
-    const newEntry: MechEntry = {
-      name: input.name,
-      path: input.path,
-      skill: state.instanceName,
-      category: input.category,
-      description: input.description,
-      usage,
-      flags: input.flags.map((f) => ({
-        name: f.name,
-        type: f.type,
-        ...(f.description !== undefined ? { description: f.description } : {}),
-        ...(f.required !== undefined ? { required: f.required } : {}),
-        ...(f.default !== undefined ? { default: f.default } : {}),
-      })),
-    };
-
-    // 6. 写回（保留 schema）
-    file.entries.push(newEntry);
-    writeRegistryFile(state.cwdRoot, state.instanceName, file);
-    log.info('msm', 'msm_register wrote registry', { name: input.name, absPath });
-
-    // 7. 自动 commit
-    const relRegistry = `.opencode/skills/${state.instanceName}/references/mech-registry.json`;
-    try {
-      gitAddAndCommit(state.cwdRoot, relRegistry, `chore(msm): register ${input.name}`);
-    } catch (err) {
-      log.warn('msm', 'git commit failed (continuing)', { err: String(err) });
-    }
-
-    return `registered "${input.name}" at ${absPath} (commit created)`;
+    return await deregisterMsmInner({ name: input.name });
   },
 });
 
-/* ===== msm_deregister tool（v1.1 增补）===== */
-export const msmDeregisterTool: ToolDefinition = tool({
-  description:
-    'Remove an MSM from mech-registry.json. Does NOT delete the script file (you handle that separately). ' +
-    'Auto-commits as "chore(msm): deregister <name>". ' +
-    '**v1.17**: this tool will be merged with msm_register into msm_admin.',
-  args: {
-    name: z.string().min(1).describe('MSM name to remove (must already be registered)'),
-  },
-  execute: async (input) => {
-    log.info('msm', 'msm_deregister called', { name: input.name });
-    await ensureReady();
-    const state = getState();
-
-    const file = loadRegistryFile(state.cwdRoot, state.instanceName);
-    const idx = file.entries.findIndex((e) => e.name === input.name);
-    if (idx === -1) {
-      throw new MsmNotInRegistryError(input.name);
-    }
-
-    const removed = file.entries.splice(idx, 1)[0]!;
-    writeRegistryFile(state.cwdRoot, state.instanceName, file);
-    log.info('msm', 'msm_deregister wrote registry', { name: input.name, path: removed.path });
-
-    const relRegistry = `.opencode/skills/${state.instanceName}/references/mech-registry.json`;
-    try {
-      gitAddAndCommit(state.cwdRoot, relRegistry, `chore(msm): deregister ${input.name}`);
-    } catch (err) {
-      log.warn('msm', 'git commit failed (continuing)', { err: String(err) });
-    }
-
-    return `deregistered "${input.name}" (was at ${removed.path}; script file NOT deleted — clean up manually if needed)`;
-  },
-});
-
-/* ===== v1.16 删除 msm_help / msm_version / msm_schema 三个独立工具 =====
+/* ===== v1.17 删除 msm_register / msm_deregister 独立工具 =====
  *
- * Option C 简化：原 v1.14 三个 meta 工具折叠进 msm_exec 协议 flag 拦截
- * - --list      → msm_exec({ msm_name: "<ignored>", args: "--list" })
- * - --version   → msm_exec({ msm_name: "<ignored>", args: "--version" })
- * - --schema X  → msm_exec({ msm_name: "X", args: "--schema" })
- * - --help [X]  → msm_exec({ msm_name: "X", args: "--help" })
+ * v1.1 拆分：msm_register + msm_deregister 两个独立 tool
+ * v1.17 合并：msm_admin 单 tool + action enum（节省 1 个 tool slot）
  *
- * 历史：v1.14 RFC 落地时，meta 工具拆为 3 个独立 tool（msmHelpTool/msmVersionTool/msmSchemaTool），
- * 由 callMsmExecMeta 调度。v1.16 改回"协议 flag 拦截 + msm_exec 单入口"模型，
- * 节省 3 个 tool slot，减少 LLM 决策树宽度。
+ * v1.16 删除 msm_help / msm_version / msm_schema 三个独立工具
+ * v1.17 删除 msm_register / msm_deregister 两个独立工具
+ * 最终 4 tool slot：bash (override) + msm_list + msm_exec + msm_admin
  */

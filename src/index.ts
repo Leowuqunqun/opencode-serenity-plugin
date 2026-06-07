@@ -24,8 +24,8 @@ import { tryActivateSync } from './activation.js';
 import {
   msmListTool,
   msmExecTool,
-  msmRegisterTool,
-  msmDeregisterTool,
+  msmAdminTool,
+
 } from './msm.js';
 import { bashOverrideTool } from './bash-override.js';
 import { createPermissionGuards } from './hooks/permission-guards.js';
@@ -54,8 +54,8 @@ const plugin: Plugin = async (input) => {
       bash: bashOverrideTool, // 同名覆盖（RR3 第三层）
       msm_list: msmListTool,
       msm_exec: msmExecTool,
-      msm_register: msmRegisterTool, // v1.1: 填补"写了 MSM 无法注册"空白
-      msm_deregister: msmDeregisterTool, // v1.1: 对称删除
+      msm_admin: msmAdminTool, // v1.17: 合并 register/deregister 为单 tool
+
     },
     ...createPermissionGuards(),
     ...createCompactingHooks(),

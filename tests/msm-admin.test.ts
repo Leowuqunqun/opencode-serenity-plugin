@@ -1,15 +1,20 @@
 /**
- * msm_register / msm_deregister 单测（v1.1 增补）
+ * msm_admin 单测 (v1.17)
  *
- * 覆盖：
- * 1. msm_register 成功（v1 schema → 写回仍 v1）
- * 2. msm_register 成功（array schema → 写回仍 array）
- * 3. msm_register 失败：name 重复
- * 4. msm_register 失败：脚本文件不存在
- * 5. msm_register 失败：path 越界
- * 6. msm_deregister 成功
- * 7. msm_deregister 失败：name 不存在
- * 8. round-trip: register → deregister → 状态回到初始
+ * 覆盖:
+ * 1. action='register' 成功（v1 schema → 写回仍 v1）
+ * 2. action='register' 成功（array schema → 写回仍 array）
+ * 3. action='register' 失败：name 重复 → MsmAlreadyRegisteredError
+ * 4. action='register' 失败：脚本文件不存在 → MsmScriptNotFoundError
+ * 5. action='register' 失败：path 越界
+ * 6. action='register' 失败：缺 path/description/category → throw
+ * 7. action='deregister' 成功
+ * 8. action='deregister' 失败：name 不存在 → MsmNotInRegistryError
+ * 9. round-trip: register → deregister → 状态回到初始
+ *
+ * v1.17 变更：合并原 msm_register + msm_deregister → msm_admin
+ * - action enum 区分两个分支
+ * - register 失败时缺 path/description/category 抛 plain Error（不是 SerenityError）
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -17,7 +22,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { msmRegisterTool, msmDeregisterTool } from '../src/msm.js';
+import { msmAdminTool } from '../src/msm.js';
 import { resetState, setState } from '../src/state.js';
 import {
   MsmAlreadyRegisteredError,
@@ -27,7 +32,7 @@ import {
 import type { ToolContext } from '@opencode-ai/plugin';
 
 function setupRepo(name = 'home-serenity'): { cwd: string } {
-  const cwd = mkdtempSync(join(tmpdir(), 'msm-reg-test-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'msm-admin-test-'));
   execFileSync('git', ['init', '-b', 'main'], { cwd, stdio: 'ignore' });
   execFileSync('git', ['config', 'user.email', 'test@test'], { cwd, stdio: 'ignore' });
   execFileSync('git', ['config', 'user.name', 'Test'], { cwd, stdio: 'ignore' });
@@ -70,7 +75,7 @@ function readRegistry(cwd: string, name: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-describe('msm_register (v1.1)', () => {
+describe('msm_admin action=register (v1.17 — 合并自 v1.1 msm_register)', () => {
   beforeEach(() => {
     resetState();
   });
@@ -78,12 +83,19 @@ describe('msm_register (v1.1)', () => {
   it('v1 包装 schema → 写回仍 v1', async () => {
     const { cwd } = setupRepo();
     try {
-      const scriptPath = makeScript(cwd, '.opencode/skills/home-serenity/scripts/test-msm.ts');
+      makeScript(cwd, '.opencode/skills/home-serenity/scripts/test-msm.ts');
       writeRegistry(cwd, 'home-serenity', { version: 1, description: 'test', entries: [] });
       setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
 
-      const result = await msmRegisterTool.execute(
-        { name: 'test-msm', path: '.opencode/skills/home-serenity/scripts/test-msm.ts', description: 'd', flags: [], category: 'mech' } as any,
+      const result = await msmAdminTool.execute(
+        {
+          action: 'register',
+          name: 'test-msm',
+          path: '.opencode/skills/home-serenity/scripts/test-msm.ts',
+          description: 'd',
+          flags: [],
+          category: 'mech',
+        } as any,
         fakeCtx(cwd),
       );
       expect(result).toContain('registered');
@@ -91,7 +103,6 @@ describe('msm_register (v1.1)', () => {
       expect(reg.version).toBe(1);
       expect(reg.entries).toHaveLength(1);
       expect(reg.entries[0]?.name).toBe('test-msm');
-      // git auto-commit
       const log = execFileSync('git', ['log', '--oneline'], { cwd, encoding: 'utf8' });
       expect(log).toContain('chore(msm): register test-msm');
     } finally {
@@ -106,8 +117,15 @@ describe('msm_register (v1.1)', () => {
       writeRegistry(cwd, 'home-serenity', []);
       setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
 
-      await msmRegisterTool.execute(
-        { name: 'foo', path: 'scripts/foo.ts', description: 'd', flags: [], category: 'mech' } as any,
+      await msmAdminTool.execute(
+        {
+          action: 'register',
+          name: 'foo',
+          path: 'scripts/foo.ts',
+          description: 'd',
+          flags: [],
+          category: 'mech',
+        } as any,
         fakeCtx(cwd),
       );
 
@@ -124,12 +142,21 @@ describe('msm_register (v1.1)', () => {
     const { cwd } = setupRepo();
     try {
       makeScript(cwd, 'scripts/dup.ts');
-      writeRegistry(cwd, 'home-serenity', [{ name: 'dup', path: 'scripts/dup.ts', skill: 'home-serenity', category: 'mech', description: 'd', usage: 'u', flags: [] }]);
+      writeRegistry(cwd, 'home-serenity', [
+        { name: 'dup', path: 'scripts/dup.ts', skill: 'home-serenity', category: 'mech', description: 'd', usage: 'u', flags: [] },
+      ]);
       setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
 
       await expect(
-        msmRegisterTool.execute(
-          { name: 'dup', path: 'scripts/dup.ts', description: 'd', flags: [], category: 'mech' } as any,
+        msmAdminTool.execute(
+          {
+            action: 'register',
+            name: 'dup',
+            path: 'scripts/dup.ts',
+            description: 'd',
+            flags: [],
+            category: 'mech',
+          } as any,
           fakeCtx(cwd),
         ),
       ).rejects.toThrow(MsmAlreadyRegisteredError);
@@ -145,8 +172,15 @@ describe('msm_register (v1.1)', () => {
       setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
 
       await expect(
-        msmRegisterTool.execute(
-          { name: 'ghost', path: 'scripts/ghost.ts', description: 'd', flags: [], category: 'mech' } as any,
+        msmAdminTool.execute(
+          {
+            action: 'register',
+            name: 'ghost',
+            path: 'scripts/ghost.ts',
+            description: 'd',
+            flags: [],
+            category: 'mech',
+          } as any,
           fakeCtx(cwd),
         ),
       ).rejects.toThrow(MsmScriptNotFoundError);
@@ -154,9 +188,58 @@ describe('msm_register (v1.1)', () => {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
+
+  it('throw plain Error 当缺 path / description / category (v1.17 negative test)', async () => {
+    const { cwd } = setupRepo();
+    try {
+      writeRegistry(cwd, 'home-serenity', []);
+      setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
+
+      // 缺 path
+      await expect(
+        msmAdminTool.execute(
+          {
+            action: 'register',
+            name: 'incomplete',
+            description: 'd',
+            category: 'mech',
+          } as any,
+          fakeCtx(cwd),
+        ),
+      ).rejects.toThrow(/requires path, description, category/);
+
+      // 缺 description
+      await expect(
+        msmAdminTool.execute(
+          {
+            action: 'register',
+            name: 'incomplete',
+            path: 'scripts/x.ts',
+            category: 'mech',
+          } as any,
+          fakeCtx(cwd),
+        ),
+      ).rejects.toThrow(/requires path, description, category/);
+
+      // 缺 category
+      await expect(
+        msmAdminTool.execute(
+          {
+            action: 'register',
+            name: 'incomplete',
+            path: 'scripts/x.ts',
+            description: 'd',
+          } as any,
+          fakeCtx(cwd),
+        ),
+      ).rejects.toThrow(/requires path, description, category/);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
 });
 
-describe('msm_deregister (v1.1)', () => {
+describe('msm_admin action=deregister (v1.17 — 合并自 v1.1 msm_deregister)', () => {
   beforeEach(() => {
     resetState();
   });
@@ -170,7 +253,10 @@ describe('msm_deregister (v1.1)', () => {
       ]);
       setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
 
-      const result = await msmDeregisterTool.execute({ name: 'x' } as any, fakeCtx(cwd));
+      const result = await msmAdminTool.execute(
+        { action: 'deregister', name: 'x' } as any,
+        fakeCtx(cwd),
+      );
       expect(result).toContain('deregistered');
       const reg = readRegistry(cwd, 'home-serenity') as Array<{ name: string }>;
       expect(reg).toHaveLength(0);
@@ -188,8 +274,53 @@ describe('msm_deregister (v1.1)', () => {
       setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
 
       await expect(
-        msmDeregisterTool.execute({ name: 'phantom' } as any, fakeCtx(cwd)),
+        msmAdminTool.execute(
+          { action: 'deregister', name: 'phantom' } as any,
+          fakeCtx(cwd),
+        ),
       ).rejects.toThrow(MsmNotInRegistryError);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('msm_admin round-trip (v1.17)', () => {
+  beforeEach(() => {
+    resetState();
+  });
+
+  it('register → deregister → 状态回到初始', async () => {
+    const { cwd } = setupRepo();
+    try {
+      makeScript(cwd, 'scripts/rt.ts');
+      writeRegistry(cwd, 'home-serenity', []);
+      setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
+
+      // 1. register
+      const r1 = await msmAdminTool.execute(
+        {
+          action: 'register',
+          name: 'rt',
+          path: 'scripts/rt.ts',
+          description: 'd',
+          flags: [],
+          category: 'mech',
+        } as any,
+        fakeCtx(cwd),
+      );
+      expect(r1).toContain('registered');
+
+      // 2. deregister
+      const r2 = await msmAdminTool.execute(
+        { action: 'deregister', name: 'rt' } as any,
+        fakeCtx(cwd),
+      );
+      expect(r2).toContain('deregistered');
+
+      // 3. 状态回到空
+      const reg = readRegistry(cwd, 'home-serenity') as Array<{ name: string }>;
+      expect(reg).toHaveLength(0);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

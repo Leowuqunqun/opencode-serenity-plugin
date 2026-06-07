@@ -1,8 +1,10 @@
-# v0 需求摘要（5 条 R1-R5）
+# v0 需求摘要（5 条 R1-R5）⚠️ 已过时
 
 > **源文档**：`AGENT_SESSIONS/2026-06-04--opencode-plugin-investigation/requirements-locked-v0.md`
 > **本文件作用**：在 plugin 仓内快速引用，避免每次回主仓查。
 > **同步约定**：调研 SESSION 文档若改动，本文件手动更新（**不**自动同步——需求一旦锁定即冻结）。
+>
+> ⚠️ **已过时**（v0.0.2 — 2026-06-07）：R1-R5 已被 RR1-RR7 完全取代，本文件仅保留演进历史。**新需求请阅 [`docs/requirements-v0-scope.md`](./requirements-v0-scope.md)**。
 
 ---
 

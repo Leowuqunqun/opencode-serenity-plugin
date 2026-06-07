@@ -166,7 +166,7 @@
 | 12 | **TUI toast 实测** | ✅ v0.0.1 完成（v1.9.1 修复 JSX runtime 根因，commit `80f6b28`）|
 | 13 | **v1.3-v5b 撤销** | 🟡 代码仍 active，1.16+ UI 不响应 v2 API reply（暂不影响功能）|
 | 14 | **PluginModule.tui?: never 限制** | ✅ v1.8 用 2 个独立 entry 绕过 |
-| 15 | **永久 slot 状态指示器** | ⏸ v0.0.2 plan；选项 A bun-plugin-solid / 选项 B createElement+spread 直调 |
+| 15 | ~~**永久 slot 状态指示器**~~ | ❌ v0.0.2 决定不做——JSX runtime 与 tsc 编译不兼容，bun-plugin-solid 重构成本与价值不匹配。当前 toast 通知已足够。 |
 
 ---
 
@@ -191,56 +191,92 @@
 | 06-05 00:15 | v1-1 symlink 防御 | `20bf791` |
 | 06-05 00:30 | v1-2 hashline edit | `e39ed23` |
 
-### 28 文件清单（v1 完成后）
+### v0.0.2 文件清单（实际）
+
+> 旧 "28 文件清单" 段（v1 完成后）已废弃——v0.0.2 实际是 **40+ 文件**：v1-2 hashline 已撤回、新增 install.ts / tui.ts / msm-schema.ts / config-schema.ts / 5 hook 工厂 / 10 util、tests 扩到 23 / 320 cases、docs 7 篇。
+
+**顶层 (7):**
 
 | 路径 | 用途 |
 |------|------|
-| **顶层** | |
-| `README.md` | 决策对账表 D1-D12 + 5 条 R1-R5 引用（旧版入口）|
-| `SESSION.md` | 本文件 |
-| `.gitignore` / `.npmrc` / `.nvmrc` | Node/TS/pnpm 友好配置 |
-| `package.json` | scripts + deps（`@opencode-ai/plugin@1.15.13` + `zod@4.1.8`）|
+| `README.md` | 用户入口（v0.0.3 重写计划） |
+| `SESSION.md` | 本文件（项目即会话） |
+| `package.json` | version 0.0.2, deps: `@opencode-ai/plugin@1.16.2` + `zod@4.1.8` |
 | `tsconfig.json` / `tsconfig.test.json` | TS 5.x strict + Node 20+ |
-| `vitest.config.ts` | vitest + node 环境 |
-| **src/ 核心** | |
-| `src/index.ts` | plugin 入口（10 步启动 + 注册所有 hooks/tools）|
-| `src/activation.ts` | tryActivateSync（RR6 同步）+ activateAsync（RR1+RR2 fire-and-forget）|
+| `vitest.config.ts` | vitest + node 环境, testTimeout 20s |
+| `.gitignore` / `.npmrc` / `.nvmrc` | Node/TS/pnpm 友好配置 |
+| `bun.lock` / `pnpm-lock.yaml` | 依赖锁 |
+
+**bin/ (1):**
+
+| 路径 | 用途 |
+|------|------|
+| `bin/opencode-serenity-plugin.js` | CLI: `install` / `uninstall` (v1.11) |
+
+**src/ 顶层 (12 .ts):**
+
+| 路径 | 用途 |
+|------|------|
+| `src/index.ts` | **server entry** — 4 tool + 4 hook (v1.9 R-β 改 default export `{id, server}`) |
+| `src/tui.ts` | **TUI entry** — toast + /serenity-init + global tui.json 自安装 (v1.10 + v1.10.1) |
+| `src/activation.ts` | 两阶段 init (Phase 1 sync RR6 + Phase 2 async RR1+RR2+config-patch) |
 | `src/state.ts` | 全局激活状态 singleton + ReadyStateMachine 接入 |
-| `src/types/index.ts` | 内部类型（SerenityState 等）|
-| `src/errors.ts` | 13 个 SerenityError 子类（v0.1-2 + v1-1 各加 1）|
-| `src/util/git.ts` | findGitRoot + isPathInside + git 操作 |
-| `src/util/serenity-file.ts` | 读 `/.serenity` 文件 |
+| `src/msm.ts` | msmListTool + msmExecTool + msmAdminTool (4 tool) |
+| `src/msm-schema.ts` | flag normalize (v0/v1) + tokenizeArgs + path-arg 校验 (v0.1-2 + v1-1) |
+| `src/config-schema.ts` | zod-first 4 schemas (v1.13 D26) + HookName/HOOK_NAMES export |
+| `src/install.ts` | bin install lib (project + global, XDG + APPDATA) (v1.11) |
+| `src/bash-override.ts` | 同名 bash tool 覆盖 (RR3 第三层) |
+| `src/errors.ts` | 13 个 SerenityError 子类 + 1 基类 (v0.1-2 + v1-1 各加 1) |
+| `src/types/index.ts` | 内部类型: SerenityState + INACTIVE_STATE + SerenityPluginInput |
+
+**src/hooks/ (5 工厂):**
+
+| 路径 | 用途 |
+|------|------|
+| `src/hooks/util.ts` | isHookEnabled + safeHook + safeCreateHook (oMo 模式 v1.12) |
+| `src/hooks/permission-guards.ts` | createPermissionGuards — tool.execute.before, **RR5 hard block, 故意不 catch** |
+| `src/hooks/compacting.ts` | createCompactingHooks — system.transform (SKILL.md 注入) + session.compacting |
+| `src/hooks/shell-env.ts` | createShellEnv — 注入 HOME_SERENITY_ROOT + SERENITY_INSTANCE + SERENITY_PLUGIN_VERSION (v1.18 动态版) |
+| `src/hooks/permission-auto-reply.ts` | createPermissionAutoReplyHandler — event hook, v1.3-v4 "无条件 reply always" |
+
+**src/util/ (10 helper):**
+
+| 路径 | 用途 |
+|------|------|
+| `src/util/git.ts` | findGitRoot (throws) + tryFindGitRoot (returns null) + isPathInside + git ops (v1.18 bin 复用) |
 | `src/util/path.ts` | buildSkillPath + validateSkillExists + isValidInstanceName |
-| `src/util/ready-state.ts` | **v0.1-1** ReadyStateMachine（idle/loading/ready/error/disabled）|
-| `src/msm.ts` | msmListTool + msmExecTool（含 symlink 守卫）|
-| `src/msm-schema.ts` | getPathArgNames + validatePathArgs（**v0.1-2** + **v1-1** 增强）|
-| `src/bash-override.ts` | bashOverrideTool（同名 bash 抛 BashDisabledError）|
-| `src/hashline/util.ts` | **v1-2** hashLine / annotateLines / parsePos / verifyPos |
-| `src/hashline/edit-tool.ts` | **v1-2** hashlineEdit tool + read annotator + edit interceptor |
-| **src/hooks/ 工厂（v0.1-3）** | |
-| `src/hooks/util.ts` | isHookEnabled + safeHook（try/catch 包装）|
-| `src/hooks/permission-guards.ts` | createPermissionGuards（path guard + bash 防御 + **v1-2** edit 拦截）|
-| `src/hooks/compacting.ts` | createCompactingHooks（system.transform + session.compacting）|
-| `src/hooks/shell-env.ts` | createShellEnv（shell.env 注入 HOME_SERENITY_ROOT + SERENITY_INSTANCE）|
-| **tests/ 10 文件 / 69 tests** | |
-| `tests/activation.test.ts` | 5 tests（v0.1-1 改用 tryActivateSync API）|
-| `tests/ready-state.test.ts` | **v0.1-1** 13 tests |
-| `tests/hooks-util.test.ts` | **v0.1-3** 9 tests |
-| `tests/msm-schema.test.ts` | v0.1-2 4 tests + **v1-1** 6 tests |
-| `tests/hashline-util.test.ts` | **v1-2** 13 tests |
-| `tests/util-*.test.ts` | 11 tests（git/path/serenity-file）|
-| `tests/errors.test.ts` | 1 test |
-| `tests/plugin.test.ts` | 3 tests（full plugin entry）|
-| **docs/** | |
-| `docs/requirements-v0-scope.md` | RR1-RR7 正式范围层（102 行）|
-| `docs/architecture-v0.md` | 方案层（10 步 + 5 模块，219 行）|
-| `docs/contract-v0.md` | 接口层（6 契约 + 13 错误，~440 行）|
-| `docs/requirements-v0-summary.md` | 旧 R1-R5 引用（保留演进历史）|
-| `docs/v0.1-candidates.md` | v0.1 候选（oMo + skillful 对照分析，**3 候选全部已实施**）|
-| `docs/architecture-v0.md` | 方案层（10 步 + 5 模块，219 行）|
-| `docs/contract-v0.md` | 接口层（6 契约 + 10 错误，431 行）|
-| `docs/requirements-v0-summary.md` | 旧 R1-R5 引用（保留演进历史）|
-| `docs/v0.1-candidates.md` | v0.1 候选（oMo + skillful 对照分析，待用户拍板）|
+| `src/util/serenity-file.ts` | readSerenityFile (RR1) |
+| `src/util/ready-state.ts` | ReadyStateMachine (idle/loading/ready/error/disabled) (v0.1-1) |
+| `src/util/init.ts` | initSerenity (RR7) — 写 /.serenity + git add+commit |
+| `src/util/init-check.ts` | checkSerenityConfig (v1.5, warn-only) |
+| `src/util/config-patch.ts` | patchMainRepoOpencodeJson (v1.7, auto-grant read/edit=allow) |
+| `src/util/msm-call.ts` | callMsmExec + callMsmExecMeta + parseProtocolFlags (S022 RFC, 共享 spawnMsmProcess helper v1.18) |
+| `src/util/tui-install.ts` | global tui.json 自安装 (v1.10.1, v1.18 薄包装 install.ts) |
+| `src/util/log.ts` | 统一 log wrapper (no-op, 65 sites) |
+
+**tests/ (23 文件 / 320 cases):**
+
+| 类别 | 文件 |
+|------|------|
+| 启动 | `activation.test.ts` (Phase 1+2) / `ready-state.test.ts` (machine) |
+| msm 协议层 | `msm-{call,schema,registry,admin}.test.ts` |
+| config | `config-{schema,patch}.test.ts` |
+| hook | `hooks-{util,guard}.test.ts` / `permission-{auto-reply,guards-v16}.test.ts` / `compacting-skill-inject.test.ts` |
+| init/install | `init-check.test.ts` / `install.test.ts` / `tui{-install,}.test.ts` |
+| util | `util-{git,init,path,serenity-file}.test.ts` |
+| 顶层 | `errors.test.ts` (13 错误类) / `plugin.test.ts` (full entry) |
+
+**docs/ (7 篇):**
+
+| 路径 | 用途 |
+|------|------|
+| `docs/requirements-v0-scope.md` | RR1-RR7 范围层 (v0 终版) |
+| `docs/architecture-v0.md` | 方案层（本文件 SESSION.md 引用） |
+| `docs/contract-v0.md` | 接口层（6 契约 + 13 错误） |
+| `docs/requirements-v0-summary.md` | ⚠️ 已过时（旧 R1-R5 演进史） |
+| `docs/v0.1-candidates.md` | ✅ ALL DONE (3 候选已实施) |
+| `docs/rr7-init-design.md` | v1.10 + v1.10.1 RR7 init 实施记录 |
+| `docs/refactor-direction-v1.11.md` | ✅ Done 2026-06-07 (v1.11-v1.17 演进) |
 
 ### 远程仓
 

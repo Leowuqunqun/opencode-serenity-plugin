@@ -1,4 +1,4 @@
-## Plugin Refactor Direction — 2026-06-07 对齐结论
+## Plugin Refactor Direction — v1.11 to v1.13 (✅ Done 2026-06-07)
 
 > 起源:用户对 v1.10 / v1.10.1 后 plugin 体验满意,提了两个问题:
 > 1. 安装需要装两个 plugin (server + TUI),能否简化?
@@ -30,17 +30,18 @@ omo 的两个层面:
 | **架构层** (单 entry) | `string[]` 形式,1 个 server entry,config mutation 注入所有 UI/MCP/agent | ❌ 不抄。合并 entry 会破坏 V2:plugin 必须全局加载 → 必须每个 hook 加 `isSerenity` 守卫 → "激活判断"从宿主层下沉到 plugin 内部 → 失去硬隔离 |
 | **代码层** (hook 保护、zod-first、bin install) | `isHookEnabled` + `safeCreateHook`、zod schema、`bin install` CLI | ✅ 该抄。这些是代码质量改进,跟 V1/V2 无关 |
 
-### 锁定的实施方向
+### 锁定的实施方向 ✅ 全部完成
 
 **保留两 entry 架构**。改进 3 件事:
 
-| 版本 | 任务 | 价值 | 工作量 | 风险 |
-|------|------|------|--------|------|
-| **v1.11** | `bin install` CLI:一次写两 entry (project opencode.json + global tui.json) | V1 安装体验 | 6-8h | 低 (仅添加,不改架构) |
-| **v1.12** | `isHookEnabled` + `safeCreateHook` 工具 (仿 omo safeHook 模式) | V2 健壮性 | 2-3h | 低 |
-| **v1.13** | plugin config 改 zod-first schema | 代码质量 | 3h | 低 |
+| 版本 | 任务 | 价值 | 工作量 | 风险 | 实施 commit |
+|------|------|------|--------|------|--------|
+| **v1.11** | `bin install` CLI:一次写两 entry (project opencode.json + global tui.json) | V1 安装体验 | 6-8h | 低 | `93348e3` |
+| **v1.12** | `isHookEnabled` + `safeCreateHook` 工具 (仿 omo safeHook 模式) | V2 健壮性 | 2-3h | 低 | `7ad23ee` |
+| **v1.13** | plugin config 改 zod-first schema | 代码质量 | 3h | 低 | `bca0e63` |
 
-总计 11-14h,分 3-5 个 commit 落地。
+**实际工作量**：分 3 个 commit 落地；总测试数 184 → 320 pass（v0.0.1 → v0.0.2）。
+**延展**：v1.14-v1.17 在此基础上叠加 msm_exec 协议层、tool 合并、stdout 保留等 4 个 commit（见 SESSION.md v0.0.2 块的 Commits 段）。
 
 ### v1.11 `bin install` 设计草案
 

@@ -2,7 +2,7 @@
   "name": "opencode-serenity-plugin",
   "version": "0.0.2",
   "private": true,
-  "description": "OpenCode 平台本地插件,承载「宁静号」7 条范围约束(RR1-RR7)。覆盖“拦截 + 行为”(server entry) + “通知用户”(TUI entry)两条独立加载路径。v0.0.6 zod-first config schema;v0.0.5 isHookEnabled + safeCreateHook;v0.0.4 msm_exec 协议层;v0.0.3 bin install CLI。",
+  "description": "OpenCode 平台本地插件,承载「宁静号」7 条范围约束(RR1-RR7)。覆盖“拦截 + 行为”(server entry) + “通知用户”(TUI entry)两条独立加载路径,提供 msm_list/msm_exec/msm_admin 三个 PRIMARY 工具替代裸 bash,以及 /serenity-init 一键初始化。",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

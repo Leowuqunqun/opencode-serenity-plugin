@@ -169,7 +169,7 @@ export const msmExecTool: ToolDefinition = tool({
     const state = getState();
 
     // 1. tokenize + parse protocol flags (§2.1 拦截)
-    const tokenized = input.args.trim().length === 0 ? [] : tokenizeArgs(input.args);
+    const tokenized = (input.args ?? '').trim().length === 0 ? [] : tokenizeArgs(input.args ?? '');
     const { flags, rest } = parseProtocolFlags(tokenized);
 
     // 2. 协议元命令路由：--list / --version / --schema / --help

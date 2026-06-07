@@ -36,7 +36,7 @@ import { getState } from '../state.js';
 import { MsmNotRegisteredError, MsmTimeoutError, SerenityError } from '../errors.js';
 import { tokenizeArgs } from '../msm-schema.js';
 
-const MSM_TIMEOUT_MS = 30_000;
+const MSM_TIMEOUT_MS = 600_000;
 
 export type MsmCallOptions = {
   msm_name: string;

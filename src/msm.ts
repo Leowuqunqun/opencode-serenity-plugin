@@ -21,21 +21,20 @@ import { getState, ensureReady } from './state.js';
 import { isPathInside, gitAddAndCommit } from './util/git.js';
 import { tokenizeArgs, normalizeFlags, validatePathArgsFromTokens } from './msm-schema.js';
 import { callMsmExec, callMsmExecMeta } from './util/msm-call.js';
+import {
+  parseMechRegistryFile,
+  type MechEntry,
+  type RegistryFile,
+} from './config-schema.js';
 
 /** v1.14: 30s 超时常量已移至 src/util/msm-call.ts
  *  旧 MSM_TIMEOUT_MS 删除 — msmExecTool 不再直接 spawn 业务 msm
  */
 
-/** mech-registry.json 单条结构 */
-type MechEntry = {
-  name: string;
-  path: string;
-  skill: string;
-  category: 'mech' | 'semi-mech';
-  description: string;
-  usage: string;
-  flags: Array<{ name: string; type: string; description?: string; required?: boolean; default?: unknown }>;
-};
+/** v1.13: MechEntry 改由 zod schema 派生 (src/config-schema.ts)
+ *  向后兼容: 这里 re-export 一次, msm.ts 内部代码继续引用本地 type
+ *  注: 不导出 MechEntry (外部不依赖此类型名)
+ */
 
 /** 加载 mech-registry.json（v0 简化：实例内一份） */
 /** 支持两种 schema：
@@ -48,22 +47,34 @@ export function loadMechRegistryFrom(cwdRoot: string, instanceName: string): Mec
 }
 
 /** 完整 registry 文件结构（保留原 schema 用于回写）*/
-export type RegistryFile = {
-  entries: MechEntry[];
-  isV1Wrapped: boolean;
-  version?: number;
-  description?: string;
-};
+// v1.13: 改由 zod schema 派生 (src/config-schema.ts)
+/** 保留本地 type alias 用于 msm.ts 内部使用 */
+type LocalRegistryFile = RegistryFile;
 
 function registryFilePath(cwdRoot: string, instanceName: string): string {
   return join(cwdRoot, '.opencode', 'skills', instanceName, 'references', 'mech-registry.json');
 }
 
-export function loadRegistryFile(cwdRoot: string, instanceName: string): RegistryFile {
+export function loadRegistryFile(cwdRoot: string, instanceName: string): LocalRegistryFile {
   const path = registryFilePath(cwdRoot, instanceName);
   try {
     const raw = readFileSync(path, 'utf8');
     const parsed = JSON.parse(raw);
+    // v1.13: 先用 zod 校验顶层结构,失败则降级为旧宽松解析
+    const validated = parseMechRegistryFile(parsed);
+    if (validated.success) {
+      const data = validated.data;
+      if (Array.isArray(data)) {
+        return { entries: data, isV1Wrapped: false };
+      }
+      return {
+        entries: data.entries,
+        isV1Wrapped: true,
+        version: data.version,
+        description: data.description,
+      };
+    }
+    // zod 失败 — 降级为旧逻辑 (向后兼容, 部分 v0/v1 schema 字段可能不严格)
     if (Array.isArray(parsed)) {
       return { entries: parsed as MechEntry[], isV1Wrapped: false };
     }

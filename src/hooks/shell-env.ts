@@ -14,8 +14,7 @@
 import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
-
-const SHELL_ENV_TOOL_VERSION = '0.1.3';
+import pkg from '../../package.json' with { type: 'json' };
 
 const shellEnvImpl: NonNullable<Hooks['shell.env']> = async (_input, output) => {
   try {
@@ -27,7 +26,8 @@ const shellEnvImpl: NonNullable<Hooks['shell.env']> = async (_input, output) => 
   const state = getState();
   output.env.HOME_SERENITY_ROOT = state.cwdRoot;
   output.env.SERENITY_INSTANCE = state.instanceName;
-  output.env.SERENITY_PLUGIN_VERSION = SHELL_ENV_TOOL_VERSION;
+  // v1.18 统一：与 tui.ts 同源 (package.json#version)，release 时改一处
+  output.env.SERENITY_PLUGIN_VERSION = pkg.version;
 };
 
 /** 工厂：返回 shell env 相关的 hooks 集合

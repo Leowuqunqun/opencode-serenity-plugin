@@ -1,32 +1,44 @@
 /**
- * Permission Auto-Reply Hook（v1.3-v2 + v1.3-v3 根因修复）
+ * Permission Auto-Reply Hook（v1.3-v2 → v1.3-v3 → v1.3-v4 演进）
  *
- * 监听 opencode permission 事件，对**所有 patterns 都在 cwdRoot 内**的请求
- * 自动 reply `"always"`（**永久放行**——本 session 后续相同 pattern 不再弹窗）。
+ * 监听 opencode permission 事件，**无条件 reply `"always"`**（trust opencode
+ * own `always` list 作为单一真相源）。
  *
- * 与 RR5（路径守卫）的协同：
- * - RR5: tool.execute.before 防御 cwdRoot 外 throw（plugin 层 hard stop）
- * - 本 hook: cwdRoot 内一律放行（避免 opencode 弹窗打断 LLM 流程）
- * - cwdRoot 外：不自动 reply → opencode 走原始 ask 弹窗（user 显式决定）
+ * v1.3-v4 决策（基于真实 payload 观测）：
+ * - opencode 1.16+ 在推送 `permission.asked` 事件时，**`always` 字段已包含
+ *   opencode 自己判定 "始终放行" 的 pattern 列表**（per user opencode.json 配置）
+ * - plugin 应**直接 reply "always"**，不需做自己的 pattern/cwdRoot check
+ * - 这就是用户 "装好 agent 就能放开权限" 的最简实现：opencode 自己的
+ *   always 列表 = 单一真相源；plugin 不应重复做权限判定
+ * - 如果用户想要 "cwdRoot 外不弹窗" — 应该改 opencode.json#permission，
+ *   不应由 plugin 拦
  *
- * v1.3-v3 根因修复（实测发现 v1.3-v2 不工作）：
- * - plugin 1.16.2 的 Event 类型来自 v1 SDK（`@opencode-ai/sdk`），事件名 = `permission.updated`
- * - opencode 当前版本实际推送的事件名是 `permission.asked`（v2 事件）
- * - v1.3-v2 旧代码只听 `permission.updated` → 收不到 → reply 不触发 → 弹窗
- * - **修复**：同时监听 3 个事件名 + 解析 v1/v2 两种 props schema + 分别用对应 reply API
+ * 演进历史：
+ * - v1.3-v2：只听 `permission.updated` 事件，事件名错（plugin 收到 0 事件）→ 不工作
+ * - v1.3-v3：根因修复 — 加听 `permission.asked` / `permission.v2.asked` + 解析
+ *   v1/v2 两种 props schema + 改用 v2 client permission reply API
+ * - v1.3-v4：简化 — 删 "patterns 都在 cwdRoot 内" 的硬约束，改 trust
+ *   opencode `always` 列表（v1.3-v3 已收到事件 + 已能 reply，只是多做了
+ *   无意义的 pattern check）
  *
  * 事件名与 props schema 矩阵：
- * | 事件名                  | type 字段 | pattern 字段    | reply API                                                |
- * |-------------------------|-----------|----------------|----------------------------------------------------------|
- * | `permission.updated`    | `type`    | `pattern` (string|string[]) | v2 `client.permission.reply({requestID, reply})`         |
- * | `permission.asked`      | `permission` | `patterns` (string[]) | v2 `client.session.permission.reply({sessionID, requestID, reply})` |
- * | `permission.v2.asked`   | `permission` | `patterns` (string[]) | 同上（v2 事件 v1 props 兼容）|
+ * | 事件名                  | type 字段       | pattern 字段            | reply API                                          |
+ * |-------------------------|-----------------|-------------------------|----------------------------------------------------|
+ * | `permission.updated`    | `type`          | `pattern` (string\|[])  | v2 `client.permission.reply({requestID, reply})`   |
+ * | `permission.asked`      | `permission`    | `patterns` (string[])   | 同上（v2 事件 v1 props 兼容）                      |
+ * | `permission.v2.asked`   | `permission`    | `patterns` (string[])   | 同上（v2 事件 v2 props）                            |
  *
  * 行为细节：
  * - 仅在 plugin 激活时生效（state.activated）
- * - v2 client 创失败 / 缺失 → 静默让 opencode 走原始 ask（不阻断）
+ * - v2 client 初始化失败 / 缺失 → 静默让 opencode 走原始 ask（不阻断）
  * - reply 失败 → 静默让 opencode 走原始 ask
- * - reply 成功 → 本 session 内 pattern 永久放行
+ * - reply 成功 → opencode 自身把 pattern 加到 "always" 列表（单 session 永久放行）
+ *
+ * 与 RR5（路径守卫）的协同：
+ * - RR5: tool.execute.before 防御 cwdRoot 外 throw（plugin 层 hard stop）
+ * - 本 hook: 对 opencode 弹窗一律 reply "always"（trust opencode 配置）
+ * - 两者无冲突：RR5 拦的是"已经到达 plugin 的危险调用"，本 hook 处理
+ *   "opencode 想弹窗询问 user 之前"的阶段
  */
 
 import { createOpencodeClient } from '@opencode-ai/sdk/v2';

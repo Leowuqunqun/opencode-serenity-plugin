@@ -153,7 +153,14 @@ export function resolveInstallPathFromBin(binFilePath: string): string {
 
 /**
  * 读 JSON config。文件不存在或为空 → 返回 {}。
- * 非 object 根节点 (array / null / 标量) → 返回 {} (不抛,交给 writePluginEntry 处理)。
+ *
+ * 严格模式 (v1.18 收口 — 旧 tui-install.ts 行为):
+ * - 文件不存在或空 → 返回 {} (允许新装)
+ * - JSON.parse 失败 → 抛 Error (writePluginEntry 捕获并返回 error, 不覆盖用户数据)
+ * - 根节点非 object (array / null / 标量) → 抛 Error
+ *
+ * 不抛的"宽松"行为会静默覆盖用户已损坏的 config, 风险高。
+ * 严格模式让 writePluginEntry 显式告诉用户 "config 损坏, 请人工修复"。
  */
 export function readJsonConfig(path: string): ReadConfig {
   if (!existsSync(path)) {
@@ -166,11 +173,15 @@ export function readJsonConfig(path: string): ReadConfig {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
-  } catch {
-    return {};
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`parse error: ${reason}`);
   }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return {};
+  if (parsed === null) {
+    throw new Error(`config root is null, expected object`);
+  }
+  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`config root is not an object (got ${Array.isArray(parsed) ? 'array' : typeof parsed})`);
   }
   return parsed as ReadConfig;
 }

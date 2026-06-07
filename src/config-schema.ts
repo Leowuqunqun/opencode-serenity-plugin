@@ -23,6 +23,25 @@
  */
 
 import { z, type ZodError } from 'zod';
+import type { Hooks } from '@opencode-ai/plugin';
+
+/**
+ * Plugin 当前注入到 opencode 的 hook 名清单 (v1.18 单一真相源)
+ *
+ * 与 Hooks (来自 @opencode-ai/plugin) 的子集保持一致 — `satisfies` 保证
+ * 此处列出的每一项都是 opencode 真实存在的 hook。
+ *
+ * 维护规则：新增 hook 时先在此处加常量，再在 createXxxHooks 工厂里用。
+ */
+export const HOOK_NAMES = [
+  'shell.env',
+  'tool.execute.before',
+  'experimental.chat.system.transform',
+  'experimental.session.compacting',
+] as const satisfies readonly (keyof Hooks)[];
+
+/** hook 名类型（HOOK_NAMES 元素的 union） */
+export type HookName = (typeof HOOK_NAMES)[number];
 
 // ── MechEntry (msm.ts 内迁移) ──
 
@@ -115,12 +134,20 @@ export type RegistryFile = z.infer<typeof registryFileSchema>;
 /**
  * HookConfig = 部分 hook 启用/禁用 map
  *
- * 关键：key 必须是 HookName (keyof Hooks from @opencode-ai/plugin)
+ * 关键：key 必须是 HOOK_NAMES 之一 (单一真相源, v1.18 统一)
  * value 是 boolean (false = 禁用, 缺省/true = 启用)
+ *
+ * 实现：z.object 显式列出每个 HOOK_NAME 为 optional boolean。
+ * - 严格 key 校验（zod 4 的 z.record(K, V) 行为不稳定, 此方案最稳）
+ * - 旧用法（如 `{'shell.env': false}`）仍兼容
+ * - 严格模式会拒绝拼错 hook 名
  */
 export const hookConfigSchema = z
-  .object({})
-  .catchall(z.boolean())
+  .object(
+    Object.fromEntries(
+      HOOK_NAMES.map((name) => [name, z.boolean().optional()]),
+    ) as { [K in HookName]?: z.ZodOptional<z.ZodBoolean> },
+  )
   .describe('per-hook enable/disable map; key = HookName, value = false = disabled');
 
 /** 派生 TS 类型 */

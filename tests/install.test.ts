@@ -209,22 +209,22 @@ describe('readJsonConfig', () => {
     expect(readJsonConfig(p)).toEqual({});
   });
 
-  it('畸形 JSON → {}', () => {
+  it('畸形 JSON → 抛 parse error', () => {
     const p = join(tmpDir, 'malformed.json');
     writeFileSync(p, '{ plugin: [', 'utf8');
-    expect(readJsonConfig(p)).toEqual({});
+    expect(() => readJsonConfig(p)).toThrow(/parse error/);
   });
 
-  it('根节点是 array → {}', () => {
+  it('根节点是 array → 抛 not object error', () => {
     const p = join(tmpDir, 'array.json');
     writeFileSync(p, '[1, 2, 3]', 'utf8');
-    expect(readJsonConfig(p)).toEqual({});
+    expect(() => readJsonConfig(p)).toThrow(/not an object/);
   });
 
-  it('根节点是 null → {}', () => {
+  it('根节点是 null → 抛 null error', () => {
     const p = join(tmpDir, 'null.json');
     writeFileSync(p, 'null', 'utf8');
-    expect(readJsonConfig(p)).toEqual({});
+    expect(() => readJsonConfig(p)).toThrow(/null/);
   });
 
   it('合法 JSON object → 解析返回', () => {

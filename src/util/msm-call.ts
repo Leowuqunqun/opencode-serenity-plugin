@@ -208,6 +208,58 @@ export function parseProtocolFlags(
 }
 
 /**
+ * 共享 msm-exec spawn 包装（v1.18 抽 helper）
+ *
+ * 设计: callMsmExec / callMsmExecMeta 之前各自手写 Promise+spawn。
+ * 现统一走本 helper, 保证:
+ * - stdout/stderr 累积方式一致
+ * - 超时处理一致（30s 硬上限, 抛 MsmTimeoutError）
+ * - 错误传播一致（spawn 错误透传）
+ *
+ * @param scriptPath  msm-exec.ts 绝对路径
+ * @param args        完整 CLI args（含协议 flag + 业务 args）
+ * @param msmName     超时错误信息中的 msm 名（诊断友好）
+ * @param cwd         spawn 工作目录
+ */
+function spawnMsmProcess(
+  scriptPath: string,
+  args: string[],
+  msmName: string,
+  cwd: string,
+): Promise<MsmCallResult> {
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn('npx', ['tsx', scriptPath, ...args], {
+      cwd,
+      timeout: MSM_TIMEOUT_MS,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d: Buffer) => {
+      stdout += d.toString();
+    });
+    child.stderr.on('data', (d: Buffer) => {
+      stderr += d.toString();
+    });
+
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      rejectRun(new MsmTimeoutError(msmName, MSM_TIMEOUT_MS));
+    }, MSM_TIMEOUT_MS);
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolveRun({ stdout, stderr, exitCode: code ?? 0 });
+    });
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      rejectRun(err);
+    });
+  });
+}
+
+/**
  * 调 msm-exec.ts 执行业务 msm（v1.16 主路径）。
  *
  * 行为:
@@ -228,40 +280,12 @@ export async function callMsmExec(opts: MsmCallOptions): Promise<MsmCallResult> 
     protocolFlags.push('--log', opts.log);
   }
 
-  return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(
-      'npx',
-      ['tsx', scriptPath, ...protocolFlags, opts.msm_name, ...opts.businessArgs],
-      {
-        cwd: state.cwdRoot,
-        timeout: MSM_TIMEOUT_MS,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d: Buffer) => {
-      stdout += d.toString();
-    });
-    child.stderr.on('data', (d: Buffer) => {
-      stderr += d.toString();
-    });
-
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      rejectRun(new MsmTimeoutError(opts.msm_name, MSM_TIMEOUT_MS));
-    }, MSM_TIMEOUT_MS);
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolveRun({ stdout, stderr, exitCode: code ?? 0 });
-    });
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      rejectRun(err);
-    });
-  });
+  return spawnMsmProcess(
+    scriptPath,
+    [...protocolFlags, opts.msm_name, ...opts.businessArgs],
+    opts.msm_name,
+    state.cwdRoot,
+  );
 }
 
 /**
@@ -275,6 +299,7 @@ export async function callMsmExecMeta(meta: MsmMetaCall): Promise<MsmCallResult>
   const scriptPath = resolveMsmExecScriptPath();
 
   const flagArgs: string[] = [];
+  let msmName = 'msm-exec';
   switch (meta.kind) {
     case 'list':
       flagArgs.push('--list');
@@ -284,47 +309,21 @@ export async function callMsmExecMeta(meta: MsmMetaCall): Promise<MsmCallResult>
       break;
     case 'help':
       flagArgs.push('--help');
-      if (meta.msm_name) flagArgs.push(meta.msm_name);
+      if (meta.msm_name) {
+        flagArgs.push(meta.msm_name);
+        msmName = meta.msm_name;
+      }
       break;
     case 'schema':
       flagArgs.push('--schema');
-      if (meta.msm_name) flagArgs.push(meta.msm_name);
+      if (meta.msm_name) {
+        flagArgs.push(meta.msm_name);
+        msmName = meta.msm_name;
+      }
       break;
   }
 
-  return new Promise((resolveRun, rejectRun) => {
-    const child = spawn('npx', ['tsx', scriptPath, ...flagArgs], {
-      cwd: state.cwdRoot,
-      timeout: MSM_TIMEOUT_MS,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d: Buffer) => {
-      stdout += d.toString();
-    });
-    child.stderr.on('data', (d: Buffer) => {
-      stderr += d.toString();
-    });
-
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      const msmName = meta.kind === 'help' || meta.kind === 'schema'
-        ? meta.msm_name ?? 'msm-exec'
-        : 'msm-exec';
-      rejectRun(new MsmTimeoutError(msmName, MSM_TIMEOUT_MS));
-    }, MSM_TIMEOUT_MS);
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolveRun({ stdout, stderr, exitCode: code ?? 0 });
-    });
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      rejectRun(err);
-    });
-  });
+  return spawnMsmProcess(scriptPath, flagArgs, msmName, state.cwdRoot);
 }
 
 // 保留 export tokenizeArgs 以便外部 (msm.ts) 复用

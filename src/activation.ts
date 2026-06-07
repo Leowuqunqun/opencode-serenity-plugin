@@ -25,7 +25,10 @@ import { setState, markReady, markDisabled, getReadyMachine } from './state.js';
 import type { PluginInput } from '@opencode-ai/plugin';
 import { log } from './util/log.js';
 import { checkSerenityConfig } from './util/init-check.js';
-import { patchMainRepoOpencodeJson } from './util/config-patch.js';
+import {
+  patchMainRepoOpencodeJson,
+  type ToastClient,
+} from './util/config-patch.js';
 
 export type SyncResult =
   | { ok: true; cwdRoot: string }
@@ -33,6 +36,8 @@ export type SyncResult =
 
 /**
  * getClient 工厂：可注入，便于测试 mock + 隔离 v1/v2 client 类型
+ *
+ * 返回类型用 unknown，activation 内部按需 cast 成 ToastClient（v1.18 解耦）。
  */
 export type GetClient = () => unknown | null;
 
@@ -126,7 +131,7 @@ async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<vo
     try {
       const result = await patchMainRepoOpencodeJson(cwdRoot, () => {
         try {
-          return getClient() as Parameters<typeof patchMainRepoOpencodeJson>[1] extends () => infer R ? R : never;
+          return getClient() as ToastClient | null;
         } catch {
           return null;
         }

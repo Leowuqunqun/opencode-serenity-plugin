@@ -32,6 +32,28 @@ const TOAST_TITLE = 'serenity plugin';
 const TOAST_DURATION_MS = 8000;
 
 /**
+ * TUI toast 客户端最小接口 (v1.18 抽出)
+ *
+ * 设计：保持 config-patch 与具体 opencode 客户端类型解耦。
+ * activation.ts 通过 `as ToastClient | null` 适配（避免反推 v1/v2 客户端类型）。
+ */
+export type ToastOpts = {
+  title?: string;
+  message: string;
+  variant?: 'info' | 'success' | 'warning' | 'error';
+  duration?: number;
+};
+
+export type ToastClient = {
+  tui?: {
+    showToast: (opts: { body: ToastOpts }) => Promise<unknown>;
+  };
+};
+
+/** 工厂签名：返回 toast 客户端或 null */
+export type GetToastClient = () => ToastClient | null;
+
+/**
  * 主仓 opencode.json 读 + 解析
  */
 function readMainConfig(cwdRoot: string): { config: Record<string, unknown>; path: string } | null {
@@ -67,7 +89,7 @@ function writeMainConfig(configPath: string, config: Record<string, unknown>): v
  */
 export async function patchMainRepoOpencodeJson(
   cwdRoot: string,
-  getClient?: () => { tui?: { showToast: (opts: { body: { title?: string; message: string; variant?: 'info' | 'success' | 'warning' | 'error'; duration?: number } }) => Promise<unknown> } } | null,
+  getClient?: GetToastClient,
 ): Promise<PatchResult> {
   const fields: PatchField[] = ['read', 'edit'];
   const read = readMainConfig(cwdRoot);

@@ -28,15 +28,22 @@
  *
  * v1.12 决策：v0.1-3 决策依然有效（"plugin 应静默"），所以 hook 抛错**不 rethrow**
  * 但**不静默丢弃** — 错误信息存到 _sessionErrors Map，调试时可查
+ *
+ * v1.18 收口：HookName / HookConfig / HOOK_NAMES 全部从 config-schema.ts 导入
+ * （单一真相源，zod record 严格校验 key ∈ HOOK_NAMES）。
  */
 
 import type { Hooks } from '@opencode-ai/plugin';
 import { log } from '../util/log.js';
+import {
+  HOOK_NAMES,
+  type HookName,
+  type HookConfig,
+} from '../config-schema.js';
 
-export type HookName = keyof Hooks;
-
-/** hook 集中开关配置（默认全开） */
-export type HookConfig = { [K in HookName]?: boolean };
+// 重新导出供现有 import 路径继续工作（hooks/util.js 是公开 API）
+export { HOOK_NAMES };
+export type { HookName, HookConfig };
 
 /** module-level disable + 错误追踪状态（plugin process lifetime；测试用 reset API） */
 const _sessionDisabled = new Set<HookName>();

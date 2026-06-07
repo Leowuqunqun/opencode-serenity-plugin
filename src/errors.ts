@@ -3,8 +3,12 @@
  *
  * 设计原则：
  * - 所有错误都是 Error 子类（保证 stack trace 完整）
- * - 错误名以 SerenityError 结尾（grep 友好）
- * - 不抛顶层（plugin 入口不抛），错误在 hook 内部被捕获
+ * - 错误名以 Error 结尾（grep 友好；不强制 SerenityError 前缀以便精细分类）
+ * - 错误传播策略：
+ *   1. plugin 入口（index.ts / tui.ts）不抛 — 返回空 hooks 或 toast 通知
+ *   2. 大多数 hook 用 safeHook / safeCreateHook 静默（v0.0.1 release 静默原则 + retry-storm 防护）
+ *   3. 例外：permission-guards.ts 的 tool.execute.before（RR5 hard block）故意
+ *      让 throw 透传 — 中断整条 Effect 链正是 RR5 想要的行为
  */
 
 /** 基类：所有 serenity plugin 错误的父类 */

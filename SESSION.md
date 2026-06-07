@@ -55,6 +55,8 @@
 - session-tool resolve-path bug fix
 - msm_exec tool-level protocol flag prefix parsing (currently only the protocol layer does it; plugin wrapper could too)
 - omo-style 5-layer hook composer migration (low priority — current isHookEnabled is sufficient)
+- **主仓 README 加 GitHub 链接** — 指向 `github.com/tellmewhattodo/opencode-serenity-plugin`
+- **`git tag v0.0.2 && git push --tags`** — 打第一个 GitHub release tag
 
 **Demos:**
 

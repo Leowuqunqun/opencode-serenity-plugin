@@ -1,36 +1,47 @@
 /**
- * msm-call.ts — plugin 端 msm_exec 协议层薄包装 (v1.14)
+ * msm-call.ts — plugin 端 msm_exec 协议层薄包装 (v1.14 → v1.16)
  *
- * 设计：将 plugin 的 msm_exec tool 调用委托给 serenity 仓 `msm-exec.ts` MSM。
+ * 设计: 将 plugin 的 msm_exec tool 调用委托给 serenity 仓 `msm-exec.ts` MSM。
  * 协议层（6 必含 flag 解析、format 包装、JSON Lines 日志、stderr 6 字段 schema）
- * 由 msm-exec.ts 实施；本文件只做 spawn 转发。
+ * 由 msm-exec.ts 实施；本文件只做 spawn 转发 + 协议 flag 拦截。
  *
- * 与 msm.ts 的 msmExecTool 关系：
- * - msmExecTool 接受 msm_name/args/format/log 字段
- * - msmExecTool 调 callMsmExec（在本文件）
- * - callMsmExec 拼 CLI 后 spawn `npx tsx msm-exec.ts <protocol-flags> <msm_name> <args>`
- * - msm-exec.ts 解析协议 flag，调业务 msm，按 format/log 包装输出
+ * v1.16: 在 plugin 端实施 S022 RFC §2.1 协议 flag 拦截
+ * - parseProtocolFlags 扫描 args 前缀段，分离协议 flag 和业务 args
+ * - tool 层根据协议 flag 路由到 msm-exec.ts:
+ *   - --list / --version / --schema / --help → callMsmExecMeta
+ *   - 其他 → callMsmExec (real exec)
  *
- * 向后兼容：
- * - 老 API（无 format/log）→ 调 msm-exec.ts 不带协议 flag → 走 text 透传
- * - 新 API（带 format=json）→ msm-exec.ts 输出 6 字段 JSON
+ * 协议 flag 拦截位置（S022 §2.1）：
+ *   协议段 = args 列表前缀连续 --flag 段
+ *   第一个非 --flag token 出现 = 协议段结束
+ *   业务段 = 剩余 token（= MSM 看到的 args）
  *
- * 元命令（--list/--schema/--help/--version）由 msmHelpTool/msmVersionTool/
- * msmSchemaTool/msmListTool 直接调 msm-exec.ts，不经过 callMsmExec。
+ * 协议 flag 未知处理：抛 InvalidProtocolFlagError 引导 LLM 重试
+ * （避免业务 msm 收到协议 flag，符合 §2.1 "禁止行为"）
+ *
+ * 与 msm.ts 的 msmExecTool 关系:
+ * - msmExecTool 接受 msm_name/args 两字段（v1.16 砍掉 format/log 独立字段）
+ * - msmExecTool tokenize args → parseProtocolFlags → 路由
+ * - 协议 flag 路由 → callMsmExecMeta
+ * - 业务段 → callMsmExec
+ *
+ * 元命令（--list/--schema/--help/--version）由 msmExecTool 内部统一调度，
+ * 不再单独暴露 msm_help/version/schema 工具（v1.16 Option C 简化）。
  */
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getState } from '../state.js';
-import { MsmNotRegisteredError } from '../errors.js';
+import { MsmNotRegisteredError, SerenityError } from '../errors.js';
 import { tokenizeArgs } from '../msm-schema.js';
 
 const MSM_TIMEOUT_MS = 30_000;
 
 export type MsmCallOptions = {
   msm_name: string;
-  args: string;
+  /** 业务 args 数组（已 tokenize，不含协议 flag） */
+  businessArgs: string[];
   format?: 'text' | 'json';
   log?: string;
 };
@@ -40,6 +51,51 @@ export type MsmCallResult = {
   stderr: string;
   exitCode: number;
 };
+
+/** 协议 flag 解析结果（v1.16 §2.1） */
+export type ParsedProtocolFlags = {
+  format: 'text' | 'json';
+  log: string | undefined;
+  help: boolean;
+  version: boolean;
+  list: boolean;
+  schema: boolean;
+};
+
+const DEFAULT_PARSED_FLAGS: ParsedProtocolFlags = {
+  format: 'text',
+  log: undefined,
+  help: false,
+  version: false,
+  list: false,
+  schema: false,
+};
+
+/** 元命令调用（v1.16 替代原 callMsmExecMeta 多形状 union） */
+export type MsmMetaCall =
+  | { kind: 'list' }
+  | { kind: 'version' }
+  | { kind: 'help'; msm_name?: string }
+  | { kind: 'schema'; msm_name?: string };
+
+/** v1.16: 协议 flag 解析错误（引导 LLM 重试用） */
+export class InvalidProtocolFlagError extends SerenityError {
+  readonly flag: string;
+  readonly value: string;
+  readonly validValues: readonly string[];
+  constructor(flag: string, value: string, validValues: readonly string[]) {
+    const validStr = validValues.length > 0 ? validValues.join(' | ') : '<path>';
+    super(
+      `invalid protocol flag "${flag}${value ? `=${value}` : ''}"; ` +
+      `valid values: ${validStr}. ` +
+      `Protocol flags must be at the prefix of args (S022 RFC §2.1).`,
+    );
+    this.name = 'InvalidProtocolFlagError';
+    this.flag = flag;
+    this.value = value;
+    this.validValues = validValues;
+  }
+}
 
 /**
  * 解析 msm-exec.ts 的绝对路径。
@@ -68,12 +124,95 @@ export function resolveMsmExecScriptPath(): string {
 }
 
 /**
- * 调 msm-exec.ts 执行业务 msm（v1.14 主路径）。
+ * v1.16 §2.1 协议 flag 拦截：扫描 args 前缀段
  *
- * 行为：
+ * 协议段规则（必须连续出现，且只能在 args 列表的前缀）：
+ * - 段内 token 必须以 `--` 开头 OR 是 -h / -V 短别名
+ * - 段结束条件：到达 args 末尾 / 遇到非上述 token / 遇到未知协议 flag
+ *
+ * 协议 flag 列表（S022 §2.2 6 必含 flag）：
+ * - --format=<text|json> | --format <text|json>
+ * - --log <path>
+ * - --help / -h
+ * - --version / -V
+ * - --list
+ * - --schema
+ *
+ * 未知 flag 处理：可能是 MSM 业务 flag（也以 -- 开头）→ break 协议段
+ * 如果 LLM 把协议 flag 拼错（如 --formats），落到业务段会被 msm 拒绝；
+ * 这是符合 S022 §2.1 复杂度低原则的设计（不预先猜未知 flag）。
+ *
+ * 短别名规则：仅 -h / -V 视为协议 flag（per §2.2 "禁止缩写"
+ * 例外，因为 h/V 是 GNU 工具的强约定）；其他 -x 一律 break 业务段。
+ *
+ * 返回:
+ * - flags: 解析出的协议 flag（默认值 + 已设字段）
+ * - rest: 协议段之后的 token（含 MSM name + 业务 args）
+ *
+ * 错误（InvalidProtocolFlagError）：
+ * - --format 值非 text/json
+ * - --log 缺值或值为空
+ * - --format 单独写但后面不是 text/json
+ */
+export function parseProtocolFlags(
+  args: string[],
+): { flags: ParsedProtocolFlags; rest: string[] } {
+  const flags: ParsedProtocolFlags = { ...DEFAULT_PARSED_FLAGS };
+  let i = 0;
+  while (i < args.length) {
+    const arg = args[i];
+    if (arg === undefined) break;
+    // 进入协议段的判定：--xxx 协议 flag 或 -h / -V 短别名
+    const isShortProtocolFlag = arg === '-h' || arg === '-V';
+    if (!arg.startsWith('--') && !isShortProtocolFlag) break;
+
+    if (arg.startsWith('--format=')) {
+      const v = arg.slice('--format='.length);
+      if (v !== 'text' && v !== 'json') {
+        throw new InvalidProtocolFlagError('--format', v, ['text', 'json']);
+      }
+      flags.format = v;
+      i++;
+    } else if (arg === '--format') {
+      const v = args[++i];
+      if (v !== 'text' && v !== 'json') {
+        throw new InvalidProtocolFlagError('--format', v ?? '', ['text', 'json']);
+      }
+      flags.format = v;
+      i++;
+    } else if (arg === '--log') {
+      const v = args[++i];
+      if (typeof v !== 'string' || v === '') {
+        throw new InvalidProtocolFlagError('--log', v ?? '', ['<path>']);
+      }
+      flags.log = v;
+      i++;
+    } else if (arg === '--help' || arg === '-h') {
+      flags.help = true;
+      i++;
+    } else if (arg === '--version' || arg === '-V') {
+      flags.version = true;
+      i++;
+    } else if (arg === '--list') {
+      flags.list = true;
+      i++;
+    } else if (arg === '--schema') {
+      flags.schema = true;
+      i++;
+    } else {
+      // 未知 flag — 视为业务 msm flag，break 协议段
+      break;
+    }
+  }
+  return { flags, rest: args.slice(i) };
+}
+
+/**
+ * 调 msm-exec.ts 执行业务 msm（v1.16 主路径）。
+ *
+ * 行为:
  * - 拼 CLI: npx tsx msm-exec.ts [protocol-flags] <msm_name> <business-args>
  * - 协议 flag 按 RFC §2.2 顺序：--format=... --log <path>
- * - 业务 args 走 tokenizeArgs 拆分（支持引号）
  * - 30s 超时
  */
 export async function callMsmExec(opts: MsmCallOptions): Promise<MsmCallResult> {
@@ -89,13 +228,10 @@ export async function callMsmExec(opts: MsmCallOptions): Promise<MsmCallResult> 
     protocolFlags.push('--log', opts.log);
   }
 
-  // 业务 args
-  const businessArgs = opts.args.trim().length === 0 ? [] : tokenizeArgs(opts.args);
-
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(
       'npx',
-      ['tsx', scriptPath, ...protocolFlags, opts.msm_name, ...businessArgs],
+      ['tsx', scriptPath, ...protocolFlags, opts.msm_name, ...opts.businessArgs],
       {
         cwd: state.cwdRoot,
         timeout: MSM_TIMEOUT_MS,
@@ -129,32 +265,31 @@ export async function callMsmExec(opts: MsmCallOptions): Promise<MsmCallResult> 
 }
 
 /**
- * 调 msm-exec.ts 执行元命令（v1.14 新增：--list/--schema/--help/--version）。
+ * 调 msm-exec.ts 执行元命令（v1.16 替代原 callMsmExecMeta 多形状 union）。
  *
- * 与 callMsmExec 区别：
- * - 不需要 msm_name（除 --schema/--help 外）
- * - 始终 text 模式（meta 输出是给人看的）
- * - 不抛错（meta 命令失败 = 业务 msm 列表问题，让 msm-exec.ts 自己报）
+ * 元命令（--list/--version/--help/--schema）由 msmExecTool 内部根据
+ * parseProtocolFlags 结果路由；不再单独暴露 msm_help/version/schema 工具。
  */
-export async function callMsmExecMeta(
-  metaFlag: 'list' | 'version' | { help: string | null } | { schema: string },
-): Promise<MsmCallResult> {
+export async function callMsmExecMeta(meta: MsmMetaCall): Promise<MsmCallResult> {
   const state = getState();
   const scriptPath = resolveMsmExecScriptPath();
 
   const flagArgs: string[] = [];
-  if (metaFlag === 'list') {
-    flagArgs.push('--list');
-  } else if (metaFlag === 'version') {
-    flagArgs.push('--version');
-  } else if ('help' in metaFlag) {
-    if (metaFlag.help === null) {
+  switch (meta.kind) {
+    case 'list':
+      flagArgs.push('--list');
+      break;
+    case 'version':
+      flagArgs.push('--version');
+      break;
+    case 'help':
       flagArgs.push('--help');
-    } else {
-      flagArgs.push('--help', metaFlag.help);
-    }
-  } else if ('schema' in metaFlag) {
-    flagArgs.push('--schema', metaFlag.schema);
+      if (meta.msm_name) flagArgs.push(meta.msm_name);
+      break;
+    case 'schema':
+      flagArgs.push('--schema');
+      if (meta.msm_name) flagArgs.push(meta.msm_name);
+      break;
   }
 
   return new Promise((resolveRun, rejectRun) => {
@@ -188,3 +323,6 @@ export async function callMsmExecMeta(
     });
   });
 }
+
+// 保留 export tokenizeArgs 以便外部 (msm.ts) 复用
+export { tokenizeArgs };

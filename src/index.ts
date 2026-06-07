@@ -26,9 +26,6 @@ import {
   msmExecTool,
   msmRegisterTool,
   msmDeregisterTool,
-  msmHelpTool,
-  msmVersionTool,
-  msmSchemaTool,
 } from './msm.js';
 import { bashOverrideTool } from './bash-override.js';
 import { createPermissionGuards } from './hooks/permission-guards.js';
@@ -59,9 +56,6 @@ const plugin: Plugin = async (input) => {
       msm_exec: msmExecTool,
       msm_register: msmRegisterTool, // v1.1: 填补"写了 MSM 无法注册"空白
       msm_deregister: msmDeregisterTool, // v1.1: 对称删除
-      msm_help: msmHelpTool, // v1.14: S022 RFC §2.4 (--help 元命令)
-      msm_version: msmVersionTool, // v1.14: S022 RFC §2.4 (--version)
-      msm_schema: msmSchemaTool, // v1.14: S022 RFC §2.4 (--schema)
     },
     ...createPermissionGuards(),
     ...createCompactingHooks(),

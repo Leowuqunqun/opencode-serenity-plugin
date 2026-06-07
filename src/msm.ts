@@ -1,8 +1,22 @@
 /**
- * msm_list + msm_exec 工具（RR3 核心实现）
+ * msm.ts (v1.16 — Option C 简化)
  *
- * 读取 cwdRoot/.opencode/skills/<instanceName>/references/mech-registry.json
- * 验证 MSM 注册后才允许执行
+ * 工具集（4 个，最终）：
+ * - bash (override)            : 同名覆盖 (RR3)
+ * - msm_list                   : PRIMARY — 列出所有 MSM
+ * - msm_exec                   : PRIMARY — 执行 MSM / 协议元命令
+ * - msm_register / deregister  : (v1.17 将合并为 msm_admin，本文件保留 v1.16 拆分)
+ *
+ * v1.16 变更（Option C）：
+ * - 删除 msm_help / msm_version / msm_schema 三个独立工具
+ *   → 由 msm_exec 内部用协议 flag 拦截（--help / --version / --list / --schema）统一调度
+ * - msmExecTool 砍掉 format/log 独立字段
+ *   → 协议 flag 通过 args 字符串前缀传入（S022 §2.1）
+ * - msmExecTool 走 parseProtocolFlags 拦截协议 flag，路由 callMsmExec / callMsmExecMeta
+ * - §9 stdout 保留：MsmExecutionError stdout 字段已在 v1.15.1 落地
+ *
+ * v1.14 变更：msm_exec 协议层经 callMsmExec → msm-exec.ts
+ * v1.13 变更：MechEntry 改由 zod schema 派生 (src/config-schema.ts)
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -20,7 +34,11 @@ import {
 import { getState, ensureReady } from './state.js';
 import { isPathInside, gitAddAndCommit } from './util/git.js';
 import { tokenizeArgs, normalizeFlags, validatePathArgsFromTokens } from './msm-schema.js';
-import { callMsmExec, callMsmExecMeta } from './util/msm-call.js';
+import {
+  callMsmExec,
+  callMsmExecMeta,
+  parseProtocolFlags,
+} from './util/msm-call.js';
 import {
   parseMechRegistryFile,
   type MechEntry,
@@ -121,11 +139,6 @@ function findMsm(name: string, registry: MechEntry[]): MechEntry {
   return entry;
 }
 
-/** v1.14: 旧 runMsm 函数已删除, msmExecTool 改调 callMsmExec (msm-exec.ts MSM 包装)
- *  删之原因: msmExecTool 现在委托给 msm-exec.ts 协议层, 不再直接 spawn 业务 msm
- *  新的 spawn 入口见 src/util/msm-call.ts
- */
-
 /* ===== msm_list tool ===== */
 export const msmListTool: ToolDefinition = tool({
   description:
@@ -154,66 +167,113 @@ export const msmListTool: ToolDefinition = tool({
   },
 });
 
-/* ===== msm_exec tool (v1.14: 协议层经 callMsmExec → msm-exec.ts) ===== */
+/* ===== msm_exec tool (v1.16: 协议 flag 拦截 + meta 路由) =====
+ *
+ * v1.16 变更（Option C）：
+ * - schema: { msm_name, args }（砍掉 v1.14 独立 format/log 字段）
+ * - args 字符串前缀可含 6 协议 flag（§2.2）：
+ *   --format=<text|json> --log <path> --help --version --list --schema
+ * - 协议 flag 由 parseProtocolFlags 拦截：
+ *   - --list / --version / --schema / --help → callMsmExecMeta
+ *   - 其他 → callMsmExec (real exec)
+ * - msm_name 在协议 flag 场景下：
+ *   - --help / --schema 用 msm_name 作为目标 MSM
+ *   - --list / --version 忽略 msm_name
+ * - 业务段（含 MSM name + 业务 args）走原 callMsmExec 路径
+ * - §9 修复：MsmExecutionError stdout 字段保留（v1.15.1 落地）
+ */
 export const msmExecTool: ToolDefinition = tool({
   description:
-    '[PRIMARY] Execute a registered MSM tool. ALWAYS call `msm_list` first to discover the name. ' +
-    '**args is a CLI command string** passed to `msm-exec.ts <msm_name> <args>` — same as you would type in a terminal ' +
-    '(e.g. `"--root"` or `"--host ubuntu --exec whoami"`). ' +
-    '**v1.14 protocol layer (S022 RFC)**: optionally pass `format="json"` for 6-field JSON-wrapped output, or `log=<path>` for JSON Lines log. ' +
+    '[PRIMARY] Execute a registered MSM tool or invoke a protocol meta-command. ' +
+    'ALWAYS call `msm_list` first to discover the MSM name. ' +
+    '**args is a CLI args string** — protocol flags (S022 RFC §2.2) are intercepted at the prefix: ' +
+    '`--format=<text|json>`, `--log <path>`, `--help [name]`, `--version`, `--list`, `--schema [name]`. ' +
+    'Examples: `args="--format=json /tmp/x"` for real exec; `args="--list"` for MSM listing; ' +
+    '`args="--schema ssh-connect"` for a MSM schema. ' +
+    '**args in real-exec mode**: rest of the string after protocol flags = business args, passed verbatim to the MSM. ' +
     '30s timeout. **Direct `bash` is disabled by serenity policy (RR3)** — msm_exec is the only path for shell work.',
   args: {
-    msm_name: z.string().describe('MSM name as registered in mech-registry.json (call msm_list first)'),
+    msm_name: z.string().describe('MSM name as registered in mech-registry.json (call msm_list first). Used for real-exec; also used as the target for --help/--schema.'),
     args: z
       .string()
       .default('')
-      .describe('CLI args string, passed verbatim to `npx tsx msm-exec.ts <msm_name> <args>`. e.g. `"--root"` or `"--host ubuntu --exec whoami"`. Leave empty "" for MSMs with no args.'),
-    format: z
-      .enum(['text', 'json'])
-      .default('text')
-      .describe('v1.14: output format. "text" (default, transparent pass-through) or "json" (6-field schema wrapping per S022 RFC §2.3)'),
-    log: z
-      .string()
-      .optional()
-      .describe('v1.14: path to a JSON Lines log file. All msm_exec behavior (success/failure/timing) appended as JSON Lines.'),
+      .describe('CLI args string. Protocol flags (--format=json, --log, --help, --version, --list, --schema) at the prefix are intercepted; the rest is passed to the MSM as business args. e.g. "--format=json /tmp/x" or "--list".'),
   },
   execute: async (input) => {
     log.info('msm', 'msm_exec called', {
       msm_name: input.msm_name,
       rawArgs: input.args,
-      format: input.format,
-      log: input.log,
     });
     await ensureReady();
     const state = getState();
+
+    // 1. tokenize + parse protocol flags (§2.1 拦截)
+    const tokenized = input.args.trim().length === 0 ? [] : tokenizeArgs(input.args);
+    const { flags, rest } = parseProtocolFlags(tokenized);
+
+    // 2. 协议元命令路由：--list / --version / --schema / --help
+    //    这些命令不需要 msm 在 registry 中，绕过 findMsm
+    if (flags.list) {
+      const result = await callMsmExecMeta({ kind: 'list' });
+      if (result.exitCode !== 0) {
+        throw new MsmExecutionError('msm-exec', result.exitCode, result.stdout, result.stderr);
+      }
+      return result.stdout || '(no output)';
+    }
+    if (flags.version) {
+      const result = await callMsmExecMeta({ kind: 'version' });
+      if (result.exitCode !== 0) {
+        throw new MsmExecutionError('msm-exec', result.exitCode, result.stdout, result.stderr);
+      }
+      return result.stdout || '(no output)';
+    }
+    if (flags.schema) {
+      // --schema 目标 msm：input.msm_name 优先，rest[0] 兜底
+      const target = input.msm_name || rest[0];
+      const result = await callMsmExecMeta({ kind: 'schema', msm_name: target });
+      if (result.exitCode !== 0) {
+        throw new MsmExecutionError(target ?? 'msm-exec', result.exitCode, result.stdout, result.stderr);
+      }
+      return result.stdout || '(no output)';
+    }
+    if (flags.help) {
+      // --help 目标 msm：input.msm_name 优先，rest[0] 兜底
+      const target = input.msm_name || rest[0];
+      const result = await callMsmExecMeta({ kind: 'help', msm_name: target });
+      if (result.exitCode !== 0) {
+        throw new MsmExecutionError(target ?? 'msm-exec', result.exitCode, result.stdout, result.stderr);
+      }
+      return result.stdout || '(no output)';
+    }
+
+    // 3. 真实 exec 路径：先 findMsm（v1.2 path-arg 校验）
     const registry = loadMechRegistry();
-    // v1.2 path-arg 校验：tokenize CLI args + 启发式 path-arg 校验
-    // 注：v1.14 协议层在 msm-exec.ts, plugin 这里仍做 path-arg 校验（防止 LLM 写穿越 path 调 msm-exec.ts）
     const entry = findMsm(input.msm_name, registry);
     log.info('msm', 'msm found in registry', { name: entry.name, skill: entry.skill });
-    const argv = tokenizeArgs(input.args);
     const normalized = normalizeFlags(entry.flags as Array<{ name?: string; flag?: string; type?: string }>);
     try {
-      validatePathArgsFromTokens(argv, normalized, state.cwdRoot);
+      // path-arg 校验在 rest 上跑（rest 是去除协议 flag 后的业务段）
+      validatePathArgsFromTokens(rest, normalized, state.cwdRoot);
     } catch (err) {
       log.warn('msm', 'msm_exec path-arg validation failed', { msm: entry.name, err: String(err) });
       throw err;
     }
 
-    // v1.14: 委托 msm-exec.ts (协议 runtime)
+    // 4. 调 msm-exec.ts（协议层 runtime）
     const result = await callMsmExec({
       msm_name: input.msm_name,
-      args: input.args,
-      format: input.format,
-      log: input.log,
+      businessArgs: rest,
+      format: flags.format,
+      log: flags.log,
     });
     log.info('msm', 'msm_exec result', {
       name: input.msm_name,
       exitCode: result.exitCode,
       stdoutLen: result.stdout.length,
       stderrLen: result.stderr.length,
-      format: input.format,
+      format: flags.format,
     });
+    // v1.15.1 §9: 错误路径保留 stdout（含 JSON 模式下的 6 字段错误）
     if (result.exitCode !== 0) {
       throw new MsmExecutionError(input.msm_name, result.exitCode, result.stdout, result.stderr);
     }
@@ -227,7 +287,8 @@ export const msmRegisterTool: ToolDefinition = tool({
     'Register a new MSM (Mech/Semi-Mech) into mech-registry.json. ' +
     'Use this after writing a new MSM script — without registration, msm_exec cannot find it. ' +
     'Path must be relative to the serenity cwd root and the script file must already exist. ' +
-    'Auto-commits the registry change as "chore(msm): register <name>".',
+    'Auto-commits the registry change as "chore(msm): register <name>". ' +
+    '**v1.17**: this tool will be merged with msm_deregister into msm_admin.',
   args: {
     name: z.string().min(1).describe('unique MSM name (kebab-case recommended)'),
     path: z.string().min(1).describe('script path, relative to cwd root (e.g. ".opencode/skills/home-serenity/scripts/foo.ts")'),
@@ -310,7 +371,8 @@ export const msmRegisterTool: ToolDefinition = tool({
 export const msmDeregisterTool: ToolDefinition = tool({
   description:
     'Remove an MSM from mech-registry.json. Does NOT delete the script file (you handle that separately). ' +
-    'Auto-commits as "chore(msm): deregister <name>".',
+    'Auto-commits as "chore(msm): deregister <name>". ' +
+    '**v1.17**: this tool will be merged with msm_register into msm_admin.',
   args: {
     name: z.string().min(1).describe('MSM name to remove (must already be registered)'),
   },
@@ -340,79 +402,15 @@ export const msmDeregisterTool: ToolDefinition = tool({
   },
 });
 
-/* ===== v1.14 msm_exec 协议元命令工具 ===== */
-
-/* ===== msm_help tool (v1.14) ===== */
-export const msmHelpTool: ToolDefinition = tool({
-  description:
-    "[PRIMARY] Show msm_exec self-help or a specific MSM's help (S022 RFC §2.4). " +
-    "If `msm_name` is provided, shows that MSM's description + subcommands + flags. " +
-    'Otherwise, shows msm_exec protocol-layer usage (6 protocol flags, output formats, log options).',
-  args: {
-    msm_name: z
-      .string()
-      .optional()
-      .describe('Optional MSM name to show help for. Omit to show msm_exec self-help.'),
-  },
-  execute: async (input) => {
-    log.info('msm', 'msm_help called', { msm_name: input.msm_name });
-    try {
-      await ensureReady();
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      return `serenity plugin is not active: ${reason}`;
-    }
-    const result = await callMsmExecMeta({ help: input.msm_name ?? null });
-    if (result.exitCode !== 0) {
-      throw new MsmExecutionError(input.msm_name ?? "msm-exec", result.exitCode, "", result.stderr);
-    }
-    return result.stdout;
-  },
-});
-
-/* ===== msm_version tool (v1.14) ===== */
-export const msmVersionTool: ToolDefinition = tool({
-  description:
-    '[PRIMARY] Show msm_exec protocol-layer version (S022 RFC §2.4). ' +
-    'Returns the msm-exec MSM version string. Useful for debugging protocol compatibility.',
-  args: {},
-  execute: async () => {
-    log.info('msm', 'msm_version called');
-    try {
-      await ensureReady();
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      return `serenity plugin is not active: ${reason}`;
-    }
-    const result = await callMsmExecMeta('version');
-    if (result.exitCode !== 0) {
-      throw new MsmExecutionError('msm-exec', result.exitCode, '', result.stderr);
-    }
-    return result.stdout;
-  },
-});
-
-/* ===== msm_schema tool (v1.14) ===== */
-export const msmSchemaTool: ToolDefinition = tool({
-  description:
-    "[PRIMARY] Show a specific MSM's full JSON schema from mech-registry.json (S022 RFC §2.4). " +
-    'Returns the registry entry: name, path, category, description, usage, subcommands, flags, error codes. ' +
-    "Use this to discover an MSM's exact subcommand/flag/args shape before calling msm_exec.",
-  args: {
-    msm_name: z.string().describe('MSM name whose schema to print (call msm_list first to see available names)'),
-  },
-  execute: async (input) => {
-    log.info('msm', 'msm_schema called', { msm_name: input.msm_name });
-    try {
-      await ensureReady();
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      return `serenity plugin is not active: ${reason}`;
-    }
-    const result = await callMsmExecMeta({ schema: input.msm_name });
-    if (result.exitCode !== 0) {
-      throw new MsmExecutionError(input.msm_name, result.exitCode, result.stdout, result.stderr);
-    }
-    return result.stdout;
-  },
-});
+/* ===== v1.16 删除 msm_help / msm_version / msm_schema 三个独立工具 =====
+ *
+ * Option C 简化：原 v1.14 三个 meta 工具折叠进 msm_exec 协议 flag 拦截
+ * - --list      → msm_exec({ msm_name: "<ignored>", args: "--list" })
+ * - --version   → msm_exec({ msm_name: "<ignored>", args: "--version" })
+ * - --schema X  → msm_exec({ msm_name: "X", args: "--schema" })
+ * - --help [X]  → msm_exec({ msm_name: "X", args: "--help" })
+ *
+ * 历史：v1.14 RFC 落地时，meta 工具拆为 3 个独立 tool（msmHelpTool/msmVersionTool/msmSchemaTool），
+ * 由 callMsmExecMeta 调度。v1.16 改回"协议 flag 拦截 + msm_exec 单入口"模型，
+ * 节省 3 个 tool slot，减少 LLM 决策树宽度。
+ */

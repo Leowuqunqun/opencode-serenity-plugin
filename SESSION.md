@@ -8,18 +8,29 @@
 
 ## 当前焦点
 
-**v0.0.1 — 首个可用版本发布** 🎉
+**v0.0.4 — msm_exec 协议层集成 (S022 RFC)** 🎉
 
 | 维度 | 状态 |
 |------|:----:|
 | 范围层 RR1-RR7 | ✅ |
 | 方案层 10 步 + 5 模块 | ✅ |
 | 接口层 6 契约 + 13 错误类 | ✅ |
-| 实现层 30 文件 / 125 tests pass | ✅ |
+| 实现层 32 文件 / 236 tests pass (v0.0.3 → v0.0.4: +9 tests) | ✅ |
 | typecheck + build green | ✅ |
 | 主仓集成（opencode.json + tui.json）| ✅ |
 | 用户实测 toast 显示 | ✅ |
 | 远程推送 origin main | ✅ |
+| **v1.14 msm_exec 协议层 (6 必含 flag)** | ✅ 2026-06-07 |
+
+**v0.0.x commit 链（最新 5 个）**：
+
+| 阶段 | 状态 | commit |
+|------|:----:|--------|
+| v1.10.1 | ✅ | `d0ab00a` |
+| **v1.11** bin install CLI (idempotent) | ✅ | `93348e3` |
+| **v1.14** msm_exec 协议层集成 (S022 RFC) | ✅ | 本次 commit (v0.0.4) |
+| **v1.12** isHookEnabled + safeCreateHook | ⏳ | 下一个 commit (v0.0.5) |
+| **v1.13** zod-first plugin config | ⏳ | 下一个 commit (v0.0.6) |
 
 **v0.0.1 commit 链（17 个）**：
 

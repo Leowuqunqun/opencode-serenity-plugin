@@ -1,8 +1,8 @@
 {
   "name": "opencode-serenity-plugin",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
-  "description": "OpenCode 平台本地插件,承载「宁静号」7 条范围约束(RR1-RR7)。覆盖“拦截 + 行为”(server entry) + “通知用户”(TUI entry)两条独立加载路径。v0.0.3 新增 `bin install` CLI:一次写两 entry 到 opencode config(idempotent)。",
+  "description": "OpenCode 平台本地插件,承载「宁静号」7 条范围约束(RR1-RR7)。覆盖“拦截 + 行为”(server entry) + “通知用户”(TUI entry)两条独立加载路径。v0.0.3 新增 `bin install` CLI;v0.0.4 新增 msm_exec 协议层 (S022 RFC, 6 必含 flag 委托给 serenity 仓 msm-exec.ts MSM)。",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -6,6 +6,64 @@
 
 ---
 
+## v0.0.2 — 2026-06-07 (release)
+
+**Scope:** RR7 init + postinstall ergonomics + 协议层精简
+
+**Commits (12 new since v0.0.1, all built on v0.0.1 silent base):**
+
+- `25e75ec` chore: bump version to 0.0.2
+- `62820e9` v1.17: merge msm_register + msm_deregister → msm_admin
+- `2889942` v1.16: protocol flag prefix + drop msm_help/version/schema (Option C)
+- `d244798` v1.15.1: msm_exec preserves stdout in MsmExecutionError (§9 fix)
+- `a5d54f4` v1.15: show version in TUI load toast
+- `bca0e63` v1.13: zod-first plugin config (D26)
+- `7ad23ee` v1.12: isHookEnabled + safeCreateHook hook 保护
+- `725a9e7` v1.14: msm_exec 协议层集成 (S022 RFC)
+- `93348e3` v1.11: bin install CLI (one-shot register server + TUI entries)
+- `d0ab00a` v1.10.1: /serenity-init visible in non-serenity dirs (self-install to global tui.json)
+- `d026b05` v1.10: RR7 init — /serenity-init slash command + DialogPrompt UX
+
+**User-visible features (additive to v0.0.1):**
+
+- **RR7 init**: `/serenity-init` slash command in TUI. User enters a prefix (e.g. `xx`); plugin writes `/.serenity` with `xx-serenity` and commits. Visible in non-serenity dirs (self-installs TUI to global on first run).
+- **bin install**: `opencode-serenity-plugin install [--global]` one-shot writes both server + TUI plugin entries to opencode config. Replaces manual config edits.
+- **msm_exec protocol layer**: S022 RFC v0.1 implemented in `msm-exec.ts` MSM + thin `msm-call.ts` plugin wrapper. 6 mandatory flags: `--format`, `--log`, `--help`, `--version`, `--list`, `--schema`. JSON Lines logging.
+- **Tool surface (4 total)**: `bash` override (RR3) + `msm_list` + `msm_exec` + `msm_admin` (merged from msm_register/deregister).
+- **Hook protection**: `isHookEnabled` + `safeCreateHook` two-layer guard. v1.6 RR5 hard block preserved (permission-guards.ts not migrated).
+- **Zod-first config**: 4 schemas in `src/config-schema.ts`; types derived via `z.infer`. HookConfig stays hand-written to avoid z.infer widening.
+- **Version in load toast**: `opencode-serenity-plugin v0.0.2 loaded` (3s) on every opencode TUI plugin load.
+- **§9 bugfix**: MsmExecutionError preserves stdout in error path, so `--format=json` callers see JSON errors.
+
+**Lock-in decisions (D23-D26):**
+
+- D23: Two-entry architecture (server + TUI) — kept
+- D24: v1.11 `bin install` CLI — implemented
+- D25: v1.12 hook protection — implemented
+- D26: v1.13 zod-first — implemented
+
+**Remote migration:**
+
+- 2026-06-07: remote moved from `git@home.gitlab:yh/opencode-serenity-plugin.git` to `git@github.com:tellmewhattodo/opencode-serenity-plugin.git`
+
+**Test count:** 320 / 320 passing (was 184 at v0.0.1)
+
+**Open follow-ups (v0.0.3+):**
+
+- msm-exec.ts unit tests (deferred from v1.14 — only E2E validated)
+- PluginConfig full wiring in plugin entry
+- session-tool resolve-path bug fix
+- msm_exec tool-level protocol flag prefix parsing (currently only the protocol layer does it; plugin wrapper could too)
+- omo-style 5-layer hook composer migration (low priority — current isHookEnabled is sufficient)
+
+**Demos:**
+
+- In serenity dir: `cd ~/my-serenity-project && opencode` → toast `opencode-serenity-plugin v0.0.2 loaded`
+- In non-serenity dir: type `/serenity-init` → dialog with smart prefix prefill from cwd dir name
+- Run `opencode-serenity-plugin install --global` to bootstrap the plugin in a fresh env
+
+---
+
 ## 当前焦点
 
 **v0.0.4 — msm_exec 协议层集成 (S022 RFC)** 🎉

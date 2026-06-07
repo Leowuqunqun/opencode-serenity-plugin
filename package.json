@@ -1,11 +1,14 @@
 {
   "name": "opencode-serenity-plugin",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
-  "description": "OpenCode 平台本地插件，承载「宁静号」5 条需求 (RR1-RR7)。v0.0.2 修复 v1.10 slash command 在非 serenity 目录不可见：TUI plugin 自安装到 global tui.json。",
+  "description": "OpenCode 平台本地插件,承载「宁静号」7 条范围约束(RR1-RR7)。覆盖“拦截 + 行为”(server entry) + “通知用户”(TUI entry)两条独立加载路径。v0.0.3 新增 `bin install` CLI:一次写两 entry 到 opencode config(idempotent)。",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "opencode-serenity-plugin": "./bin/opencode-serenity-plugin.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -14,6 +17,7 @@
   },
   "files": [
     "dist",
+    "bin",
     "README.md",
     "docs"
   ],

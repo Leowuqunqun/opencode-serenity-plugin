@@ -108,7 +108,7 @@
 - **RR7 init**: `/serenity-init` slash command in TUI. User enters a prefix (e.g. `xx`); plugin writes `/.serenity` with `xx-serenity` and commits. Visible in non-serenity dirs (self-installs TUI to global on first run).
 - **bin install**: `opencode-serenity-plugin install [--global]` one-shot writes both server + TUI plugin entries to opencode config. Replaces manual config edits.
 - **msm_exec protocol layer**: S022 RFC v0.1 implemented in `msm-exec.ts` MSM + thin `msm-call.ts` plugin wrapper. 6 mandatory flags: `--format`, `--log`, `--help`, `--version`, `--list`, `--schema`. JSON Lines logging.
-- **Tool surface (4 total)**: `bash` override (RR3) + `msm_list` + `msm_exec` + `msm_admin` (merged from msm_register/deregister).
+- **Tool surface (3 total)**: `msm_list` + `msm_exec` + `msm_admin` (merged from msm_register/deregister). ~~`bash` override (RR3)~~ ❌ 2026-06-08 移除。
 - **Hook protection**: `isHookEnabled` + `safeCreateHook` two-layer guard. v1.6 RR5 hard block preserved (permission-guards.ts not migrated).
 - **Zod-first config**: 4 schemas in `src/config-schema.ts`; types derived via `z.infer`. HookConfig stays hand-written to avoid z.infer widening.
 - **Version in load toast**: `opencode-serenity-plugin v0.0.2 loaded` (3s) on every opencode TUI plugin load.
@@ -198,7 +198,7 @@
 |---|------|---------|
 | RR1 | cwd 内必须有 `/.serenity`，内容 = 实例名 | 文件是单一真相源 |
 | RR2 | 激活后首次加载 `.opencode/skills/<实例名>/SKILL.md` | 每次新 session 启动时 |
-| RR3 | 禁 bash；命令通过 MSM（已有/新写） | 同名 bash tool 抛错 + permission.bash:deny |
+| ~~RR3~~ | ~~禁 bash；命令通过 MSM（已有/新写）~~ | ~~同名 bash tool 抛错 + permission.bash:deny~~ ❌ 2026-06-08 移除：不再禁止 bash，移除 bash-override 工具 + permission-guards 守卫 + 权限 deny。详见 serenity-plugin-development v0.2。|
 | RR4 | cwd 内全部权限 | 默认 allow |
 | RR5 | cwd 外全部无权限 | deny/throw |
 | RR6 | cwd 必须在 git repo 内 | 否则 plugin 不工作 |
@@ -306,7 +306,7 @@
 | `src/msm-schema.ts` | flag normalize (v0/v1) + tokenizeArgs + path-arg 校验 (v0.1-2 + v1-1) |
 | `src/config-schema.ts` | zod-first 4 schemas (v1.13 D26) + HookName/HOOK_NAMES export |
 | `src/install.ts` | bin install lib (project + global, XDG + APPDATA) (v1.11) |
-| `src/bash-override.ts` | 同名 bash tool 覆盖 (RR3 第三层) |
+| ~~`src/bash-override.ts`~~ | ~~同名 bash tool 覆盖 (RR3 第三层)~~ ❌ 2026-06-08 移除 |
 | `src/errors.ts` | 13 个 SerenityError 子类 + 1 基类 (v0.1-2 + v1-1 各加 1) |
 | `src/types/index.ts` | 内部类型: SerenityState + INACTIVE_STATE + SerenityPluginInput |
 

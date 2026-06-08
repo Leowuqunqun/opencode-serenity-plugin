@@ -2,10 +2,12 @@
  * Permission Guards Hook 工厂
  *
  * 包含：tool.execute.before hook
- * 职责（RR3 + RR5 + v1.6 补全）：
- * 1. 防御性拦截 bash（同名 tool 已覆盖，permission.bash=deny 已静态拦截 —— 这是第三层）
- * 2. read / edit / write 工具的 path 字段强制在 cwdRoot 内（RR5 hard block；v1.6 加 edit/write）
- * 3. symlink 防御（v1.6 扩展 v1-1 msm-schema 的 realpath 逻辑到 tool.execute.before）
+ * 职责（RR5 + v1.6 补全）：
+ * 1. read / edit / write 工具的 path 字段强制在 cwdRoot 内（RR5 hard block；v1.6 加 edit/write）
+ * 2. symlink 防御（v1.6 扩展 v1-1 msm-schema 的 realpath 逻辑到 tool.execute.before）
+ *
+ * 注意：bash 禁令已于 2026-06-08 移除，不再拦截 bash。
+ * bash-override 工具和 permission-guards 中的 bash 守卫均已删除。
  *
  * 设计：v1.6 RR5 补全 = plugin **接管**权限管理（不再依赖 opencode.json 静态 allow）
  * - 主仓 opencode.json 已复原 read/edit = "ask"（commit fe19b5e）
@@ -21,7 +23,6 @@ import { resolve as pathResolve } from 'node:path';
 import { realpathSync, existsSync } from 'node:fs';
 import { isPathInside } from '../util/git.js';
 import { getState, ensureReady } from '../state.js';
-import { BashDisabledError } from '../errors.js';
 import { isHookEnabled, type HookConfig } from './util.js';
 import { log } from '../util/log.js';
 
@@ -132,10 +133,6 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
     }
   }
 
-  if (input.tool === 'bash') {
-    log.info('guard', 'blocked bash tool call');
-    throw new BashDisabledError();
-  }
 };
 
 /** 工厂：返回 permission guards 相关的 hooks 集合

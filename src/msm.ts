@@ -1,11 +1,12 @@
 /**
  * msm.ts
  *
- * 工具集（4 个）：
- * - bash (override)   : 同名覆盖 (RR3)
+ * 工具集（3 个）：
  * - msm_list          : PRIMARY — 列出所有 MSM
  * - msm_exec          : PRIMARY — 执行 MSM / 协议元命令
  * - msm_admin         : 注册 / 注销 MSM（合并 register/deregister）
+ *
+ * 注意：bash override (RR3) 已于 2026-06-08 移除。
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';

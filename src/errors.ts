@@ -51,14 +51,6 @@ export class SkillNotFoundError extends SerenityError {
   }
 }
 
-/** RR3 违反：LLM 试图调用被禁的 bash 工具 */
-export class BashDisabledError extends SerenityError {
-  constructor() {
-    super('bash tool is disabled by serenity policy (RR3); use msm_list + msm_exec instead. To run an MSM that does not exist, ask the user to register a new one in mech-registry.json first.');
-    this.name = 'BashDisabledError';
-  }
-}
-
 /** msm_exec 失败：MSM 不在注册表中 */
 export class MsmNotRegisteredError extends SerenityError {
   constructor(msmName: string) {

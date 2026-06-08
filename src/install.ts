@@ -65,13 +65,6 @@ export type ConfigType = 'opencode.json' | 'tui.json';
 export type ReadConfig = {
   [key: string]: unknown;
   plugin?: unknown;
-  _plugin_origins?: Record<string, PluginOrigin>;
-};
-
-export type PluginOrigin = {
-  id: string;
-  installedAt: string;
-  installPath: string;
 };
 
 // ── 路径解析 ──
@@ -215,29 +208,11 @@ function collectExistingSpecs(plugin: unknown): Set<string> {
   return specs;
 }
 
-/** 从 _plugin_origins 提取已注册的 plugin id 集合 */
-function collectInstalledIds(origins: unknown): Set<string> {
-  const ids = new Set<string>();
-  if (!origins || typeof origins !== 'object' || Array.isArray(origins)) {
-    return ids;
-  }
-  for (const value of Object.values(origins as Record<string, unknown>)) {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const id = (value as Record<string, unknown>)['id'];
-      if (typeof id === 'string' && id.length > 0) {
-        ids.add(id);
-      }
-    }
-  }
-  return ids;
-}
-
 /**
  * 判定 entries 是否已安装。
  *
- * 检查顺序:
- * 1. _plugin_origins 里已有相同 id → 视为已安装 (前向兼容 object 形式)
- * 2. plugin 数组里已有相同 file:// URL → 视为已安装 (string / tuple 形式)
+ * 只检查 plugin 数组：已有相同 file:// URL 的视为已安装 (string / tuple 形式)
+ * 不写 _plugin_origins — opencode 严格校验 config JSON schema，不认未知 key。
  *
  * 返回 true = 全部 entries 都不必再写 (no-op)
  * 返回 false = 至少一个 entry 还没装
@@ -248,12 +223,12 @@ export function isAlreadyInstalled(
 ): boolean {
   if (entries.length === 0) return true;
 
-  const installedIds = collectInstalledIds(existing['_plugin_origins']);
   const existingSpecs = collectExistingSpecs(existing['plugin']);
 
   for (const entry of entries) {
-    if (installedIds.has(entry.id)) return true;
-    if (existingSpecs.has(entry.path)) return true;
+    if (existingSpecs.has(entry.path)) {
+      return true;
+    }
   }
   return false;
 }
@@ -265,10 +240,11 @@ export function isAlreadyInstalled(
  *
  * 行为契约:
  * - 文件不存在 → 创建 (含 $schema + plugin 数组)
- * - 已有 _plugin_origins → 保留,补充新 entry
  * - 已有 plugin 数组 → 保留,append 不重复 entry
  * - 已有非 plugin 字段 → 完全保留
  * - 写失败 → 返回 { changed: false, error },不抛
+ *
+ * 注意: 不写 _plugin_origins 等非标准 key — opencode 严格校验 config schema。
  *
  * @param configPath  目标 config 文件绝对路径
  * @param entries     要注册的 plugin entries (server/tui 之一或两者)
@@ -289,14 +265,13 @@ export function writePluginEntry(
     return { changed: false, configPath, error: `read failed: ${reason}` };
   }
 
-  // 分离: 真正要新增的 vs 已存在的
-  const installedIds = collectInstalledIds(config['_plugin_origins']);
+  // 分离: 真正要新增的 vs 已存在的（只检查 plugin 数组，不写 _plugin_origins）
   const existingSpecs = collectExistingSpecs(config['plugin']);
   const currentPlugin = Array.isArray(config['plugin']) ? config['plugin'] : [];
   const toAdd: string[] = [];
   const skipped: string[] = [];
   for (const entry of entries) {
-    if (installedIds.has(entry.id) || existingSpecs.has(entry.path)) {
+    if (existingSpecs.has(entry.path)) {
       skipped.push(entry.path);
     } else {
       toAdd.push(entry.path);
@@ -316,27 +291,6 @@ export function writePluginEntry(
     currentPlugin.push(spec);
   }
   config['plugin'] = currentPlugin;
-
-  // 更新 _plugin_origins 追踪
-  if (
-    !config['_plugin_origins'] ||
-    typeof config['_plugin_origins'] !== 'object' ||
-    Array.isArray(config['_plugin_origins'])
-  ) {
-    config['_plugin_origins'] = {};
-  }
-  const origins = config['_plugin_origins'] as Record<string, PluginOrigin>;
-  const installedAt = new Date().toISOString();
-  for (const entry of entries) {
-    // 只追踪本次涉及的 entry;保留历史 entry 的 origins
-    if (skipped.includes(entry.path)) continue;
-    origins[entry.path] = {
-      id: entry.id,
-      installedAt,
-      installPath: dirname(dirname(entry.absPath)), // dist/.. = package root
-    };
-  }
-  config['_plugin_origins'] = origins;
 
   // 新文件加 $schema (与 tui-install.ts 一致)
   if (!('$schema' in config)) {

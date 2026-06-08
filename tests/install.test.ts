@@ -12,20 +12,19 @@
  * 8. readJsonConfig 缺失 / 空 / 畸形 / 非 object 根节点
  * 9. writeJsonConfig 原子写 (写 .tmp + rename)
  * 10. writeJsonConfig 创建父目录
- * 11. isAlreadyInstalled 通过 id 检测
- * 12. isAlreadyInstalled 通过 abs path 检测
+ * 11. isAlreadyInstalled 通过 abs path 检测
+ * 12. isAlreadyInstalled 通过 abs path 检测 ([string, opts] tuple form)
  * 13. writePluginEntry 幂等: 跑两次不重复
  * 14. writePluginEntry 保留其他字段 (theme / keybinds / 其他 plugin)
- * 15. writePluginEntry 写 _plugin_origins
- * 16. writePluginEntry 创建新文件 (含 $schema)
- * 17. writePluginEntry 处理 plugin 字段为 null / array / 标量
- * 18. writePluginEntry 处理 [string, opts] tuple 形式
- * 19. real-world: 全新 opencode.json → 创建,只含 plugin entry
- * 20. real-world: 已有 opencode.json (含其他 plugin + 字段) → 只加 plugin,其他保留
- * 21. real-world: 已有 tui.json (含 theme 等) → 保留 theme,加 plugin
- * 22. real-world: 已有 _plugin_origins (其他 plugin 装的) → 保留,追加我们的
- * 23. 原子写: 写过程中 .tmp 文件存在,写完后消失
- * 24. 错误路径: writePluginEntry 不会破坏已有 config 文件 (即使 entries 重复)
+ * 15. writePluginEntry 创建新文件 (含 $schema)
+ * 16. writePluginEntry 处理 plugin 字段为 null / array / 标量
+ * 17. writePluginEntry 处理 [string, opts] tuple 形式
+ * 18. real-world: 全新 opencode.json → 创建,只含 plugin entry
+ * 19. real-world: 已有 opencode.json (含其他 plugin + 字段) → 只加 plugin,其他保留
+ * 20. real-world: 已有 tui.json (含 theme 等) → 保留 theme,加 plugin
+ * 21. real-world: 已有 _plugin_origins (其他 plugin 装的) → 保留原值
+ * 22. 原子写: 写过程中 .tmp 文件存在,写完后消失
+ * 23. 错误路径: writePluginEntry 不会破坏已有 config 文件 (即使 entries 重复)
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -298,14 +297,14 @@ describe('isAlreadyInstalled', () => {
     expect(isAlreadyInstalled([entry], { plugin: [[entry.path, { opt: 'val' }]] })).toBe(true);
   });
 
-  it('通过 _plugin_origins id 检测', () => {
+  it('通过 _plugin_origins id 检测 → false (不再检查 origins)', () => {
     const entry = fakeEntry('/different/path.js');
     expect(isAlreadyInstalled([entry], {
       plugin: [],
       _plugin_origins: {
         [entry.path]: { id: PLUGIN_ID, installedAt: '2026-01-01', installPath: '/old' },
       },
-    })).toBe(true);
+    })).toBe(false);
   });
 
   it('不同 id + 不同 path → false', () => {
@@ -327,7 +326,7 @@ describe('isAlreadyInstalled', () => {
 // ── writePluginEntry: 核心行为 ──
 
 describe('writePluginEntry', () => {
-  it('文件不存在 → 创建,含 $schema + plugin + _plugin_origins', () => {
+  it('文件不存在 → 创建,含 $schema + plugin（不写 _plugin_origins）', () => {
     const p = join(tmpDir, 'fresh.json');
     const entry = {
       id: PLUGIN_ID,
@@ -340,11 +339,8 @@ describe('writePluginEntry', () => {
     const content = JSON.parse(readFileSync(p, 'utf8'));
     expect(content.$schema).toBe('https://opencode.ai/config.json');
     expect(content.plugin).toEqual([entry.path]);
-    expect(content._plugin_origins[entry.path]).toEqual({
-      id: PLUGIN_ID,
-      installedAt: expect.any(String),
-      installPath: tmpDir,
-    });
+    // 不写 _plugin_origins — opencode 不认非标准 key
+    expect(content._plugin_origins).toBeUndefined();
   });
 
   it('tui.json 新文件 → $schema 是 tui.json 的 URL', () => {
@@ -435,7 +431,7 @@ describe('writePluginEntry', () => {
     expect(existsSync(p)).toBe(false);
   });
 
-  it('同一 plugin 多 entry → 一次写多 spec', () => {
+  it('同一 plugin 多 entry → 一次写多 spec（不写 _plugin_origins）', () => {
     const p = join(tmpDir, 'multi.json');
     const server = {
       id: PLUGIN_ID,
@@ -451,11 +447,10 @@ describe('writePluginEntry', () => {
     expect(result.changed).toBe(true);
     const content = JSON.parse(readFileSync(p, 'utf8'));
     expect(content.plugin).toEqual([server.path, tui.path]);
-    expect(content._plugin_origins[server.path].id).toBe(PLUGIN_ID);
-    expect(content._plugin_origins[tui.path].id).toBe(PLUGIN_ID);
+    expect(content._plugin_origins).toBeUndefined();
   });
 
-  it('保留其他 plugin 装的 _plugin_origins (只追加我们的)', () => {
+  it('保留其他 plugin 的原 _plugin_origins（不追加我们的）', () => {
     const p = join(tmpDir, 'mixed-origins.json');
     const otherOrigin = {
       'file:///other/plugin.js': { id: 'other-plugin', installedAt: '2025', installPath: '/x' },
@@ -471,8 +466,8 @@ describe('writePluginEntry', () => {
     };
     writePluginEntry(p, [entry]);
     const content = JSON.parse(readFileSync(p, 'utf8'));
-    expect(content._plugin_origins['file:///other/plugin.js']).toEqual(otherOrigin['file:///other/plugin.js']);
-    expect(content._plugin_origins[entry.path].id).toBe(PLUGIN_ID);
+    // _plugin_origins 被原样保留（不追加也不删除）
+    expect(content._plugin_origins).toEqual(otherOrigin);
   });
 });
 
@@ -492,8 +487,8 @@ describe('real-world 场景', () => {
     expect(existsSync(configPath)).toBe(true);
     const content = JSON.parse(readFileSync(configPath, 'utf8'));
     expect(content.plugin).toEqual([entry.path]);
-    // 没有其他字段噪音
-    expect(Object.keys(content).sort()).toEqual(['$schema', '_plugin_origins', 'plugin']);
+    // 没有其他字段噪音（不含 _plugin_origins）
+    expect(Object.keys(content).sort()).toEqual(['$schema', 'plugin']);
   });
 
   it('用户已有 opencode.json (含其他 plugin + 字段) → 只加 plugin,其他保留', () => {

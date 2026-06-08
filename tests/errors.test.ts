@@ -4,7 +4,6 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  BashDisabledError,
   InitGitCommitError,
   InvalidInstanceNameError,
   MsmExecutionError,
@@ -24,7 +23,6 @@ describe('errors', () => {
       new SerenityFileNotFoundError('/x'),
       new SerenityFileEmptyError('/x'),
       new SkillNotFoundError('/x', 'home-serenity'),
-      new BashDisabledError(),
       new MsmNotRegisteredError('foo'),
       new MsmTimeoutError('foo', 1000),
       new MsmExecutionError('foo', 1, 'out', 'err'),

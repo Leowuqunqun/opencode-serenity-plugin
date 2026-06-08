@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 /**
- * opencode-serenity-plugin CLI (v1.11)
+ * opencode-serenity-plugin CLI (v1.11 → v0.0.4 全局化)
  *
  * Usage:
  *   opencode-serenity-plugin install [flags]
  *
  * Flags:
- *   --global     Write only to global tui.json (skip project opencode.json)
  *   --dry-run    Print what would be done without writing
  *   --verbose    Show detailed output (default: silent on no-op success)
  *   --help       Show this help
@@ -20,24 +19,22 @@
  * Notes:
  * - 逻辑层在 ../dist/install.js (来自 src/install.ts)。
  *   跑 install 前必须 `pnpm build` (或 `npm run build`)。
- * - 项目 vs global 自动检测:
- *   - cwd 在 git repo → 写 project opencode.json + global tui.json
- *   - cwd 不在 git repo → 只写 global tui.json
- *   - --global 强制只写 global tui.json
+ * - v0.0.4: 两个 entry (server + TUI) 都装到全局 config:
+ *   - dist/index.js → ~/.config/opencode/opencode.json#plugin
+ *   - dist/tui.js   → ~/.config/opencode/tui.json#plugin
+ * - 所有目录下 opencode 都加载两个 entry,由 tryActivateSync 判断是否激活。
+ *   (之前 server entry 装项目级 opencode.json, 非 serenity 目录不加载 server)
  */
 
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve, join } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import {
-  PLUGIN_ID,
   resolvePluginEntries,
   resolveInstallPathFromBin,
   getGlobalConfigPath,
-  readJsonConfig,
   writePluginEntry,
 } from '../dist/install.js';
-import { tryFindGitRoot } from '../dist/util/git.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -93,48 +90,28 @@ Usage:
   opencode-serenity-plugin install [flags]
 
 Commands:
-  install    Write server + TUI plugin entries to opencode config (idempotent)
+  install    Write server + TUI plugin entries to global opencode configs (idempotent)
 
 Flags:
-  --global     Write only to global tui.json (skip project opencode.json)
   --dry-run    Print what would be done without writing
   --verbose    Show detailed output
   --help, -h   Show this help
   --version    Print version and exit
 
-What gets installed:
-  - <cwd>/opencode.json#plugin  → dist/index.js   (server entry, project only)
-  - <global>/tui.json#plugin    → dist/tui.js     (TUI entry, global for V1)
+What gets installed (global, all directories):
+  - ~/.config/opencode/opencode.json#plugin  → dist/index.js   (server entry)
+  - ~/.config/opencode/tui.json#plugin       → dist/tui.js     (TUI entry)
 
-Auto-detect:
-  - cwd is in a git repo → install both project + global
-  - cwd is NOT in a git repo → install global only
-  - --global → always skip project
+Behavior:
+  - server entry loads in all directories; active only in serenity dirs
+  - TUI entry loads in all directories; toast + /serenity-init visible everywhere
+  - no project-level install needed
 
 Exit codes:
   0  Success (including no-op when already installed)
   1  Hard error (permission denied, dist/ not built, etc.)
   2  Conflict: plugin already installed at a different path
 `);
-}
-
-// ── 工具 ──
-
-/** 检测 plugin id 是否已在 _plugin_origins 里以不同路径注册 */
-function detectConflictId(entries, config) {
-  const origins = config['_plugin_origins'];
-  if (!origins || typeof origins !== 'object' || Array.isArray(origins)) {
-    return null;
-  }
-  for (const entry of entries) {
-    for (const [path, origin] of Object.entries(origins)) {
-      if (origin && typeof origin === 'object' && origin.id === entry.id
-          && path !== entry.path) {
-        return { id: entry.id, existingPath: path, newPath: entry.path };
-      }
-    }
-  }
-  return null;
 }
 
 // ── 主入口 ──
@@ -156,40 +133,24 @@ function installCommand(flags) {
     return 1;
   }
 
-  // 3. 决定目标
-  const targets = [];
-  if (!flags.global) {
-    const gitRoot = tryFindGitRoot(process.cwd());
-    if (gitRoot) {
-      targets.push({
-        configPath: join(gitRoot, 'opencode.json'),
-        entries: [entries.server],
-        label: `project opencode.json (${gitRoot})`,
-      });
-    } else if (flags.verbose) {
-      process.stdout.write(`→ cwd not in a git repo, skipping project opencode.json\n`);
-    }
-  }
-  targets.push({
-    configPath: getGlobalConfigPath('tui.json'),
-    entries: [entries.tui],
-    label: `global tui.json`,
-  });
+  // 3. 决定目标 — 两个 entry 都装到全局 config
+  //    server entry 在全局 opencode.json，TUI entry 在全局 tui.json。
+  //    所有目录下 opencode 都加载两个 entry，由 tryActivateSync 判断是否激活。
+  //    （之前 server entry 装到项目级 opencode.json，导致非 serenity 目录不加载 server）
+  const targets = [
+    {
+      configPath: getGlobalConfigPath('opencode.json'),
+      entries: [entries.server],
+      label: `global opencode.json`,
+    },
+    {
+      configPath: getGlobalConfigPath('tui.json'),
+      entries: [entries.tui],
+      label: `global tui.json`,
+    },
+  ];
 
-  // 4. 冲突检测
-  for (const t of targets) {
-    const config = readJsonConfig(t.configPath);
-    const conflict = detectConflictId(t.entries, config);
-    if (conflict) {
-      process.stderr.write(`error: ${conflict.id} already installed at a different path\n`);
-      process.stderr.write(`  existing: ${conflict.existingPath}\n`);
-      process.stderr.write(`  new:      ${conflict.newPath}\n`);
-      process.stderr.write(`hint: remove the existing entry manually, then re-run install\n`);
-      return 2;
-    }
-  }
-
-  // 5. 执行
+  // 4. 执行 — writePluginEntry 内已做幂等检查（isAlreadyInstalled）
   let changed = 0;
   let noop = 0;
   for (const t of targets) {

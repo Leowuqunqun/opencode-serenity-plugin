@@ -11,8 +11,8 @@
  * v1.9 变更：default export 改为 { id, server } 对象形式（R-β fix，与 tui.ts 对称）
  *
  * Hook 工厂分层（v0.1-3 + v1.3）：
- * - createPermissionGuards：tool.execute.before（RR3 bash 防御 + RR5 路径守卫）
- * - createCompactingHooks：system.transform（RR3/RR7 提示）+ session.compacting（关键状态注入）
+ * - createPermissionGuards：tool.execute.before（RR5 路径守卫）
+ * - createCompactingHooks：system.transform（RR7 提示）+ session.compacting（关键状态注入）
  * - createShellEnv：shell.env（HOME_SERENITY_ROOT + SERENITY_INSTANCE 注入）
  * - createPermissionAutoReply：event hook（监听 permission.asked → reply "always" cwdRoot 内）
  *
@@ -27,7 +27,6 @@ import {
   msmAdminTool,
 
 } from './msm.js';
-import { bashOverrideTool } from './bash-override.js';
 import { createPermissionGuards } from './hooks/permission-guards.js';
 import { createCompactingHooks } from './hooks/compacting.js';
 import { createShellEnv } from './hooks/shell-env.js';
@@ -51,7 +50,6 @@ const plugin: Plugin = async (input) => {
   // 注册 hooks + tools（Phase 2 未完成时 hook 内 await ensureReady() 阻塞）
   const hooks: Hooks = {
     tool: {
-      bash: bashOverrideTool, // 同名覆盖（RR3 第三层）
       msm_list: msmListTool,
       msm_exec: msmExecTool,
       msm_admin: msmAdminTool, // v1.17: 合并 register/deregister 为单 tool

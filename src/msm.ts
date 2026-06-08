@@ -160,8 +160,7 @@ export const msmExecTool: ToolDefinition = tool({
     msm_name: z.string().describe('MSM name as registered in mech-registry.json.'),
     args: z
       .array(z.string())
-      .default([])
-      .describe('Business args; each element is one argument, preserved losslessly (spaces, newlines, special chars).'),
+      .describe('Business args; each element is one argument, preserved losslessly (spaces, newlines, special chars). REQUIRED: pass [] for no args (opencode tool panel UI does not show fields with .default()).'),
   },
   execute: async (input) => {
     log.info('msm', 'msm_exec called', {

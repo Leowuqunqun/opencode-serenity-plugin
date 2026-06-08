@@ -138,21 +138,25 @@ export const msmListTool: ToolDefinition = tool({
   },
 });
 
-/* ===== msm_exec tool (纯执行，无协议元命令) ===== */
+/* ===== msm_exec tool (纯执行，无协议元命令) =====
+ *
+ * S028 D5 极简版：只讲 msmName + args + 1 示例。
+ * - 不再写"ALWAYS call msm_list first"（LLM 已知）
+ * - 不再写"30s timeout"（实际 600s，runtime 内统一）
+ * - 不再写"bash is disabled (RR3)"（已在 init-check / 工具面板冗余告知）
+ * - 不再写"args 是 string array"（zod schema 已在 args 字段定义）
+ */
 export const msmExecTool: ToolDefinition = tool({
   description:
-    '[PRIMARY] Execute a registered MSM tool. ' +
-    'ALWAYS call `msm_list` first to discover the MSM name. ' +
-    '**args is a string array** — each element is passed as a separate argument to the MSM. ' +
-    'Spaces, newlines, and special characters in elements are preserved losslessly. ' +
-    'Example: `args=["exec", "ubuntu", "ls -la"]`. ' +
-    '30s timeout. **Direct `bash` is disabled by serenity policy (RR3)** — msm_exec is the only path for shell work.',
+    'Execute a registered MSM tool. ' +
+    'Call msm_list first to discover MSM names. ' +
+    'Example: msm_name="ssh-connect", args=["exec", "ubuntu", "ls -la"].',
   args: {
-    msm_name: z.string().describe('MSM name as registered in mech-registry.json (call msm_list first).'),
+    msm_name: z.string().describe('MSM name as registered in mech-registry.json.'),
     args: z
       .array(z.string())
       .default([])
-      .describe('Business args as string array. Each element is a separate argument — spaces/newlines within elements are preserved.'),
+      .describe('Business args; each element is one argument, preserved losslessly (spaces, newlines, special chars).'),
   },
   execute: async (input) => {
     log.info('msm', 'msm_exec called', {

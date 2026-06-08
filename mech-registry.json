@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "description": "opencode-serenity-plugin 内部 msm 注册表 (plugin 仓独立 — 不依赖 serenity 仓)",
+  "entries": []
+}

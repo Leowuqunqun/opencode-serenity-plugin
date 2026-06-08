@@ -6,6 +6,60 @@
 
 ---
 
+## v0.0.3 — 2026-06-08 (S028 release)
+
+**Scope:** msm_exec 协议层从 "spawn 子进程 (serenity 仓 msm-exec.ts)" 反转为 "in-process 库 (plugin 仓 msm-exec-runtime.ts)" — 反转 S024/D26, plugin 端 msm_exec 实现首次**完全自包含**, 不再依赖主仓.
+
+**主要变化:**
+
+- **新增 `src/util/msm-exec-runtime.ts` (687 行)** — 从 serenity 仓 msm-exec.ts 移植, 零三方依赖 (仅 node:fs / child_process / path / url). 业务 msm spawn 内部完成 (cwd=state.cwdRoot, timeout 10 分钟).
+- **`src/util/msm-call.ts` 重写 (104 行)** — 移除薄 spawn 包装, 改为直接 in-process 委托 `runMsmExec(argv, opts)`. API shape (`callMsmExec({msm_name, businessArgs})`) 保持不变.
+- **D13 收口 (双注册表问题)** — msm-call 计算 `<cwdRoot>/.opencode/skills/<inst>/references/mech-registry.json` 路径传入 runtime. runtime 在 caller 提供 path 时**不**走 D6 bootstrap (避免覆盖 msm_admin 写入的注册表). plugin-root 注册表 (D9) 仅作 CLI 调试 fallback, 业务流不再依赖 plugin-root 注册表.
+- **msmExecTool description 极简 (D5)** — 移除冗余字段 ("ALWAYS call msm_list first" / "30s timeout (实际 600s, 过期文案)" / "args 是 string array" / "bash RR3 提示"), 只保留 msm_name + args + 1 示例.
+- **CLI 守卫** — 文件底部加 `if (import.meta.url === pathToFileURL(process.argv[1]).href)` 守卫, 避免 import 时 main() 静默触发. (S028 v0.0.3 修复 — 移植 v0.0.2 时守卫遗漏).
+- **新增 `mech-registry.json` (plugin 根)** — D10 初始 = `{version:1, description:..., entries:[]}`, 给 CLI 调试 fallback 用.
+
+**测试变化 (320 → 320, 3 个新文件覆盖):**
+
+| 文件 | cases | 范围 |
+|------|------:|------|
+| `tests/msm-call.test.ts` (重写) | 8 | vi.mock msm-exec-runtime, 测 callMsmExec argv/cwd/registryPath 透传 + 错误透传 |
+| `tests/msm-exec-tool.test.ts` (新) | 7 | msmExecTool §9 fix 行为 + happy path E2E + 错误路径, 真实 stub msm 脚本 + 注册表 |
+| `tests/msm-exec-runtime.test.ts` (新) | 19 | 协议 flag 解析 + 元命令 + 注册表错误处理 + 业务 spawn |
+| **总计** | **34 (新增/重写) + 286 (保留) = 320** | 测试总数不变; 新覆盖 v1.14 follow-up: "msm-exec.ts unit tests (deferred from v1.14)" |
+
+**Lock-in 决策 (D9-D13):**
+
+| # | 决策 | 关键事实 |
+|---|------|----------|
+| D9 | plugin 仓独立注册表 (C 变体) | 路径 = `<plugin-root>/mech-registry.json` |
+| D10 | 初始 = 空 `{version:1, entries:[]}` | 不预填 |
+| D11 | timeout 统一 600s (10 分钟) | plugin 端 600s (与 v0.0.2 一致) + runtime 600s (原 30s) |
+| D12 | msmExec description 极简 | msmName + args (2 字段) + 1 示例 |
+| D13 | 业务流走 cwdRoot 注册表 (收口双源) | msm-call 传入 path 1, runtime 用 caller path 时不 bootstrap, D9 仅作 CLI fallback |
+
+**心智模型校正 (永久):**
+
+- **plugin = serenity 的创建者/管理者** (durable infrastructure, source of truth)
+- **serenity 仓 = serenity 的实例** (replicable, 可删除重建, 下游 artifact)
+- plugin 改 → serenity wipe & rebuild, 不存在"两真源"漂移问题
+
+**S028 关联 SESSION:**
+
+- `AGENT_SESSIONS/2026-06-08--S028--plugin-self-contained-msm/SESSION.md` — D1-D13 全部固化, 含 8 步实施规划 + 风险点
+
+**Open follow-ups (v0.0.4+):**
+
+- ~~msm-exec.ts unit tests (deferred from v1.14)~~ ✅ S028 解决
+- ~~msm_exec tool-level protocol flag prefix parsing~~ ✅ S028 解决 (plugin 完全自包含, flag 解析在 plugin 内)
+- PluginConfig full wiring in plugin entry
+- session-tool resolve-path bug fix
+- omo-style 5-layer hook composer migration (low priority)
+- 主仓 README 加 GitHub 链接
+- `git tag v0.0.3 && git push --tags`
+
+---
+
 ## v0.0.2 — 2026-06-07 (release)
 
 **Scope:** RR7 init + postinstall ergonomics + 协议层精简

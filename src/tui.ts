@@ -80,7 +80,7 @@ const Tui: TuiPlugin = async (api) => {
 
   // A: 一次性 toast（激活瞬间提示，5s 后消失）
   api.ui.toast({
-    title: 'serenity',
+    title: `opencode-serenity-plugin v${VERSION}`,
     message: 'plugin activated — read/edit = allow (cwdRoot-scoped)',
     variant: 'success',
     duration: 5000,

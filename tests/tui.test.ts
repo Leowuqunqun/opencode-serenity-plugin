@@ -152,11 +152,12 @@ describe('TUI plugin entry', () => {
     // v1.15: 至少 2 个 toast — "loaded"（版本号） + "plugin activated"（RR7 行为）
     expect(calls.length).toBeGreaterThanOrEqual(2);
 
-    // 找 "plugin activated" toast（title='serenity' + message 包含 'plugin activated'）
+    // 找 "plugin activated" toast（title 以 'opencode-serenity-plugin v' 开头 + message 包含 'plugin activated'）
+    // v0.0.3 hotfix: title 从 'serenity' 改为 'opencode-serenity-plugin v${VERSION}'（与 Toast #1 一致）
     // 不再断言 first——v1.15 新增的 loaded toast 现在排第一
     const activated = calls.find(
       (c) =>
-        (c[0] as { title?: string; message?: string }).title === 'serenity' &&
+        (c[0] as { title?: string; message?: string }).title?.startsWith('opencode-serenity-plugin v') &&
         (c[0] as { message?: string }).message?.includes('plugin activated'),
     ) as [{ title?: string; message?: string; variant?: string; duration?: number }] | undefined;
     expect(activated).toBeTruthy();

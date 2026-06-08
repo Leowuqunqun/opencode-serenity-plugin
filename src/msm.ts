@@ -29,6 +29,10 @@ import {
   type MechEntry,
   type RegistryFile,
 } from './config-schema.js';
+import pkg from '../package.json' with { type: 'json' };
+
+/** v0.0.3 — plugin version exposed via msmExecTool description + msmListTool output (was silent) */
+const VERSION: string = pkg.version;
 
 /** 加载 mech-registry.json（v0 简化：实例内一份） */
 /** 支持两种 schema：
@@ -132,9 +136,9 @@ export const msmListTool: ToolDefinition = tool({
     const registry = loadMechRegistry();
     log.info('msm', 'msm_list result', { count: registry.length, cwdRoot: getState().cwdRoot });
     if (registry.length === 0) {
-      return '(no MSM registered)';
+      return `(serenity-plugin v${VERSION})\n(no MSM registered)`;
     }
-    return registry.map((e) => `${e.name} | ${e.skill} | ${e.category} | ${e.description}`).join('\n');
+    return `(serenity-plugin v${VERSION})\n` + registry.map((e) => `${e.name} | ${e.skill} | ${e.category} | ${e.description}`).join('\n');
   },
 });
 
@@ -150,7 +154,8 @@ export const msmExecTool: ToolDefinition = tool({
   description:
     'Execute a registered MSM tool. ' +
     'Call msm_list first to discover MSM names. ' +
-    'Example: msm_name="ssh-connect", args=["exec", "ubuntu", "ls -la"].',
+    'Example: msm_name="ssh-connect", args=["exec", "ubuntu", "ls -la"]. ' +
+    `(serenity-plugin v${VERSION})`,
   args: {
     msm_name: z.string().describe('MSM name as registered in mech-registry.json.'),
     args: z

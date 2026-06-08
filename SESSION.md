@@ -56,7 +56,32 @@
 - session-tool resolve-path bug fix
 - omo-style 5-layer hook composer migration (low priority)
 - 主仓 README 加 GitHub 链接
-- `git tag v0.0.3 && git push --tags`
+- ~~`git tag v0.0.3 && git push --tags`~~ ✅ v0.0.3 release 收尾 (见下)
+
+---
+
+## v0.0.3 release 收尾 — 2026-06-08
+
+**触发**: S028 后 user 反馈"msm_exec 还是老样子" + "tui 加载时也不显示版本号", 根因 = plugin 无 version 暴露 → v0.0.2 vs v0.0.3 无法识别 (opencode 工具面板 / TUI 启动 banner / msm_list 输出 都没有 version 字段). "模糊性" 根因不是 require cache, 是 plugin 没把 version 暴露出来.
+
+**修改 (3 处暴露):**
+
+1. `package.json` — `version: 0.0.2` → `0.0.3` (单一真相源, 跟 tui.ts#VERSION 共用)
+2. `src/msm.ts` — import `pkg` + `VERSION` 常量, 暴露 2 处:
+   - `msmExecTool.description` 末尾追加 `(serenity-plugin v${VERSION})` — opencode 工具面板可见
+   - `msmListTool` 输出顶部加 `(serenity-plugin v${VERSION})` 行 — `msm_list` 调用即可确认
+3. `src/tui.ts` — **不改**: v1.15 已有 `api.ui.toast({ title: 'opencode-serenity-plugin v${VERSION}', message: 'loaded', ...})`, 改 package.json 即可自动显示新版本
+
+**git 操作 (develop-kit 不会自动做):**
+
+- `git tag v0.0.3 && git push origin v0.0.3` — 走 plugin-exec (kit 不推 tag)
+
+**user 验证步骤:**
+
+1. 重启 opencode
+2. 看 TUI 启动 toast: 应该是 "opencode-serenity-plugin v0.0.3 loaded"
+3. 调 `msm_list` 看顶部: 应该是 "(serenity-plugin v0.0.3)" 行
+4. 调任一 msm 看 stderr 行为: 应该是 in-process 行为 (无 spawn wrapper 日志)
 
 ---
 

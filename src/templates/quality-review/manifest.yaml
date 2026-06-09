@@ -1,0 +1,4 @@
+name: quality-review
+eal: meta
+description: "quality-review skill for {{prefix}}-serenity"
+version: 0.1.0

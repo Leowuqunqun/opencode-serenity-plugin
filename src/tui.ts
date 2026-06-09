@@ -1,10 +1,15 @@
 /**
- * opencode-serenity-plugin TUI entry（v1.9 → ... → v1.15）
+ * opencode-serenity-plugin TUI entry（v1.9 → ... → v1.15 → v0.1 D6）
  *
  * 独立 TUI plugin（与 server plugin 平级）。opencode 1.16+ 强制 PluginModule
  * 二选一（server | tui），所以走两条独立 entry：
  * - server entry: dist/index.js（走 Hooks 系统）
  * - tui entry:    dist/tui.js  （走 TuiPluginApi）
+ *
+ * v0.1 D6:
+ * - 启动时检测当前目录的宁静号状态，显示在 toast 上
+ * - 三种状态：Activated / Not Activated / Error
+ * - 版本号始终显示
  *
  * v1.9 修复：
  * - R-α fix: TUI entry 不放 opencode.json；放到主仓 tui.json#plugin
@@ -63,14 +68,13 @@ import {
   InitGitCommitError,
 } from './errors.js';
 import { log } from './util/log.js';
+import { findSerenityRootSafe, readSerenityInstanceName } from './fs/resolve-path.js';
 import pkg from '../package.json' with { type: 'json' };
 
 const VERSION: string = pkg.version;
 
 const Tui: TuiPlugin = async (api) => {
-  // v1.15 — 每次加载都显示版本号（用户调试 / 确认实际加载的版本）
-  //   duration 3000：3s 自动消失，不阻塞后续 toast
-  //   放在 self-install 之前：self-install 失败/跳过时也可见
+  // v1.15 — 每次加载都显示版本号
   api.ui.toast({
     title: `opencode-serenity-plugin v${VERSION}`,
     message: 'loaded',
@@ -78,17 +82,46 @@ const Tui: TuiPlugin = async (api) => {
     duration: 3000,
   });
 
-  // A: 一次性 toast（激活瞬间提示，5s 后消失）
+  // v0.1 D6 — 检测当前目录的宁静号状态
+  const cwd = api.state.path.directory;
+  let serenityStatus: string;
+  let serenityVariant: 'success' | 'info' | 'error';
+  let serenityInstance: string | null = null;
+
+  const root = findSerenityRootSafe(cwd);
+  if (root) {
+    const name = readSerenityInstanceName(root);
+    serenityInstance = name;
+    // 验证 SKILL.md 存在（RR2 同级检测）
+    const { existsSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const skillPath = name
+      ? resolve(root, '.opencode', 'skills', name, 'SKILL.md')
+      : null;
+    if (skillPath && existsSync(skillPath)) {
+      serenityStatus = `✓ Serenity Activated${name ? ` (${name})` : ''}`;
+      serenityVariant = 'success';
+    } else {
+      serenityStatus = `⚠ Serenity Error${name ? ` (${name})` : ''}`;
+      serenityVariant = 'error';
+    }
+  } else {
+    serenityStatus = '○ Serenity Not Activated';
+    serenityVariant = 'info';
+  }
+
   api.ui.toast({
-    title: `opencode-serenity-plugin v${VERSION}`,
-    message: 'plugin activated — read/edit = allow (cwdRoot-scoped)',
-    variant: 'success',
+    title: `serenity v${VERSION}`,
+    message: serenityInstance
+      ? `${serenityStatus} — instance: ${serenityInstance}`
+      : serenityStatus,
+    variant: serenityVariant,
     duration: 5000,
   });
 
-  // B: v1.10.1 — 自安装到 global tui.json
-  //    让 plugin 在**非 serenity 目录**也能被 opencode 加载，从而
-  //    /serenity-init 全局可见。失败不抛（仅 log），slash command 仍注册。
+  // A: v1.1 — self-install to global tui.json
+  //    让 plugin 在非 serenity 目录也被加载，从而 /serenity-init 全局可见
+  //    失败不抛（仅 log），slash command 仍注册
   try {
     const pluginFile = fileURLToPath(import.meta.url);
     const result = ensureGlobalTuiPluginRegistration(pluginFile);

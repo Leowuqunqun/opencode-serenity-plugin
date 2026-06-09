@@ -27,6 +27,8 @@ import {
   msmAdminTool,
 
 } from './msm.js';
+import { fileSystemTool } from './fs/file-system-tool.js';
+import { sessionTool } from './session/session-tool.js';
 import { createPermissionGuards } from './hooks/permission-guards.js';
 import { createCompactingHooks } from './hooks/compacting.js';
 import { createShellEnv } from './hooks/shell-env.js';
@@ -52,8 +54,9 @@ const plugin: Plugin = async (input) => {
     tool: {
       msm_list: msmListTool,
       msm_exec: msmExecTool,
-      msm_admin: msmAdminTool, // v1.17: 合并 register/deregister 为单 tool
-
+      msm_admin: msmAdminTool,
+      file_system: fileSystemTool, // v0.1 D4: 跨实例文件系统工具
+      session_tool: sessionTool, // v0.1 D5: 通用会话管理工具
     },
     ...createPermissionGuards(),
     ...createCompactingHooks(),

@@ -1,0 +1,4 @@
+name: git
+eal: meta
+description: "git skill for {{prefix}}-serenity"
+version: 0.1.0

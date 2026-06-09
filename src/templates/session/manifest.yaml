@@ -1,0 +1,4 @@
+name: session
+eal: meta
+description: "session skill for {{prefix}}-serenity"
+version: 0.1.0

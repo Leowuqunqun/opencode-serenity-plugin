@@ -35,6 +35,8 @@ import {
   getGlobalConfigPath,
   writePluginEntry,
 } from '../dist/install.js';
+import { installSkill } from '../dist/skills/install-skill.js';
+import { initWizard } from '../dist/init/init-wizard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -45,24 +47,60 @@ const INSTALL_PATH = resolveInstallPathFromBin(__filename);
 function parseArgs(argv) {
   const flags = {
     command: null,
+    /** skill name for install-skill, or target path for init */
+    skillName: null,
+    prefix: null,
+    /** flag for non-interactive init */
+    nonInteractive: false,
+    /** flag for force overwrite */
+    force: false,
     global: false,
     dryRun: false,
     verbose: false,
     help: false,
     version: false,
   };
+  let expectPrefix = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
+
+    // handle --prefix <value> (consumes next arg)
+    if (expectPrefix) {
+      flags.prefix = arg;
+      expectPrefix = false;
+      continue;
+    }
+
     switch (arg) {
+      case 'init':
+        flags.command = 'init';
+        // next arg is the target path (optional)
+        if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
+          flags.skillName = argv[++i];
+        }
+        break;
       case 'install': flags.command = 'install'; break;
+      case 'install-skill':
+        flags.command = 'install-skill';
+        // next arg is the skill name
+        if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
+          flags.skillName = argv[++i];
+        }
+        break;
       case 'uninstall': flags.command = 'uninstall'; break;
       case '--global': flags.global = true; break;
       case '--dry-run': flags.dryRun = true; break;
       case '--verbose': case '-v': flags.verbose = true; break;
+      case '--non-interactive': flags.nonInteractive = true; break;
+      case '--force': flags.force = true; break;
       case '--help': case '-h': flags.help = true; break;
       case '--version': flags.version = true; break;
       default:
-        if (arg.startsWith('--')) {
+        if (arg.startsWith('--prefix=')) {
+          flags.prefix = arg.slice('--prefix='.length);
+        } else if (arg === '--prefix') {
+          expectPrefix = true;
+        } else if (arg.startsWith('--')) {
           process.stderr.write(`error: unknown flag: ${arg}\n`);
           process.exit(1);
         }
@@ -87,30 +125,30 @@ function printHelp() {
   process.stdout.write(`opencode-serenity-plugin v${version}
 
 Usage:
+  opencode-serenity-plugin init [path] [flags]
   opencode-serenity-plugin install [flags]
+  opencode-serenity-plugin install-skill <name> [flags]
 
 Commands:
-  install    Write server + TUI plugin entries to global opencode configs (idempotent)
+  init            Create a new serenity instance (interactive wizard)
+  install         Write server + TUI plugin entries to global opencode configs (idempotent)
+  install-skill   Install a domain skill from built-in templates into the current serenity instance
+
+  init [path]           Path for the new serenity instance (default: current directory)
+  install-skill <name>  Available skills vary by version
 
 Flags:
-  --dry-run    Print what would be done without writing
-  --verbose    Show detailed output
-  --help, -h   Show this help
-  --version    Print version and exit
-
-What gets installed (global, all directories):
-  - ~/.config/opencode/opencode.json#plugin  → dist/index.js   (server entry)
-  - ~/.config/opencode/tui.json#plugin       → dist/tui.js     (TUI entry)
-
-Behavior:
-  - server entry loads in all directories; active only in serenity dirs
-  - TUI entry loads in all directories; toast + /serenity-init visible everywhere
-  - no project-level install needed
+  --prefix=<str>   Skill prefix (default: auto-detect from .serenity)
+  --non-interactive Skip interactive prompts (use defaults)
+  --force           Overwrite existing files
+  --dry-run        Print what would be done without writing
+  --verbose        Show detailed output
+  --help, -h       Show this help
+  --version        Print version and exit
 
 Exit codes:
-  0  Success (including no-op when already installed)
-  1  Hard error (permission denied, dist/ not built, etc.)
-  2  Conflict: plugin already installed at a different path
+  0  Success
+  1  Hard error
 `);
 }
 
@@ -190,7 +228,63 @@ function installCommand(flags) {
   return 0;
 }
 
-function main() {
+// ── install-skill 命令 ──
+
+function installSkillCommand(flags) {
+  const name = flags.skillName;
+  if (!name) {
+    process.stderr.write('error: install-skill requires a skill name\n');
+    process.stderr.write('usage: opencode-serenity-plugin install-skill <name> [--prefix=<str>]\n');
+    return 1;
+  }
+
+  const result = installSkill({
+    pluginRoot: INSTALL_PATH,
+    name,
+    cwd: process.cwd(),
+    prefix: flags.prefix || undefined,
+    dryRun: flags.dryRun,
+  });
+
+  if (!result.success) {
+    process.stderr.write(`error: ${result.message}\n`);
+    return 1;
+  }
+
+  if (flags.dryRun && flags.verbose && result.createdFiles?.length) {
+    process.stdout.write('Files to create:\n');
+    for (const f of result.createdFiles) {
+      process.stdout.write(`  ${f}\n`);
+    }
+  }
+
+  process.stdout.write(result.message + '\n');
+  return 0;
+}
+
+// ── init 命令 ──
+
+async function initCommand(flags) {
+  const targetPath = flags.skillName || process.cwd(); // reuse skillName as positional target
+
+  const result = await initWizard({
+    targetPath,
+    pluginRoot: INSTALL_PATH,
+    prefix: flags.prefix || undefined,
+    nonInteractive: flags.nonInteractive,
+    force: flags.force,
+  });
+
+  if (!result.success) {
+    process.stderr.write(`error: ${result.message}\n`);
+    return 1;
+  }
+
+  process.stdout.write(result.message + '\n');
+  return 0;
+}
+
+async function main() {
   const flags = parseArgs(process.argv.slice(2));
 
   if (flags.version) {
@@ -203,8 +297,12 @@ function main() {
   }
 
   switch (flags.command) {
+    case 'init':
+      return await initCommand(flags);
     case 'install':
       return installCommand(flags);
+    case 'install-skill':
+      return installSkillCommand(flags);
     case 'uninstall':
       process.stderr.write(`error: 'uninstall' not implemented in v1.11 (D24 scope: install only)\n`);
       process.stderr.write(`hint: manually remove entry from <config>#plugin, then delete from _plugin_origins\n`);
@@ -215,4 +313,4 @@ function main() {
   }
 }
 
-process.exit(main());
+main().then((code) => process.exit(code ?? 0));

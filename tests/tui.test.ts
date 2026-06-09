@@ -149,20 +149,23 @@ describe('TUI plugin entry', () => {
     await (tui as { tui: (api: unknown) => Promise<void> }).tui(api);
     expect(api.ui.toast).toHaveBeenCalled();
     const calls = api.ui.toast.mock.calls;
-    // v1.15: 至少 2 个 toast — "loaded"（版本号） + "plugin activated"（RR7 行为）
+    // v0.1 D6: 至少 2 个 toast — "loaded"（版本号） + 宁静号状态
     expect(calls.length).toBeGreaterThanOrEqual(2);
 
-    // 找 "plugin activated" toast（title 以 'opencode-serenity-plugin v' 开头 + message 包含 'plugin activated'）
-    // v0.0.3 hotfix: title 从 'serenity' 改为 'opencode-serenity-plugin v${VERSION}'（与 Toast #1 一致）
-    // 不再断言 first——v1.15 新增的 loaded toast 现在排第一
-    const activated = calls.find(
+    // 找状态 toast（title 以 'serenity v' 开头）
+    // v0.1 D6: 由 "plugin activated" 改为宁静号激活状态（Activated / Not Activated / Error）
+    const status = calls.find(
       (c) =>
-        (c[0] as { title?: string; message?: string }).title?.startsWith('opencode-serenity-plugin v') &&
-        (c[0] as { message?: string }).message?.includes('plugin activated'),
+        (c[0] as { title?: string }).title?.startsWith('serenity v') &&
+        (c[0] as { message?: string }).message?.includes('Serenity'),
     ) as [{ title?: string; message?: string; variant?: string; duration?: number }] | undefined;
-    expect(activated).toBeTruthy();
-    expect(activated![0].variant).toBe('success');
-    expect(activated![0].duration).toBe(5000);
+    expect(status).toBeTruthy();
+    // /tmp/myproj 没有 .serenity → Not Activated
+    expect(status![0].message).toContain('Not Activated');
+    expect(status![0].variant).toBe('info');
+    expect(status![0].duration).toBe(5000);
+    // 版本号必须出现
+    expect(status![0].title).toMatch(/v\d+\.\d+\.\d+/);
   });
 
   it('注册 /serenity-init slash command', async () => {

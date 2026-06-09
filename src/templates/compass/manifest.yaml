@@ -1,0 +1,4 @@
+name: compass
+eal: meta
+description: "compass skill for {{prefix}}-serenity"
+version: 0.1.0

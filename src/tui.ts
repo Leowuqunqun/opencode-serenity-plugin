@@ -69,6 +69,7 @@ import {
 } from './errors.js';
 import { log } from './util/log.js';
 import { findSerenityRootSafe, readSerenityInstanceName } from './fs/resolve-path.js';
+import { setBashDisabled, isBashDisabled } from './bash-toggle.js';
 import pkg from '../package.json' with { type: 'json' };
 
 const VERSION: string = pkg.version;
@@ -233,6 +234,54 @@ const Tui: TuiPlugin = async (api) => {
             },
           }),
         );
+      },
+    },
+    // D: /serenity-bash-on — 启用 bash
+    {
+      title: 'serenity: enable bash',
+      value: 'serenity-bash-on',
+      description: 'Enable bash tool (default)',
+      slash: { name: 'serenity-bash-on' },
+      onSelect: () => {
+        setBashDisabled(false);
+        api.ui.toast({
+          title: 'Bash',
+          message: 'bash is now enabled',
+          variant: 'success',
+          duration: 3000,
+        });
+      },
+    },
+    // D: /serenity-bash-off — 禁用 bash（静默拒绝）
+    {
+      title: 'serenity: disable bash',
+      value: 'serenity-bash-off',
+      description: 'Disable bash tool (silent reject via plugin hook)',
+      slash: { name: 'serenity-bash-off' },
+      onSelect: () => {
+        setBashDisabled(true);
+        api.ui.toast({
+          title: 'Bash',
+          message: 'bash is now disabled (silent reject)',
+          variant: 'warning',
+          duration: 3000,
+        });
+      },
+    },
+    // D: /serenity-bash-status — 查看当前状态
+    {
+      title: 'serenity: bash status',
+      value: 'serenity-bash-status',
+      description: 'Show current bash toggle status',
+      slash: { name: 'serenity-bash-status' },
+      onSelect: () => {
+        const disabled = isBashDisabled();
+        api.ui.toast({
+          title: 'Bash Status',
+          message: disabled ? 'bash is DISABLED (silent reject)' : 'bash is enabled',
+          variant: disabled ? 'warning' : 'success',
+          duration: 5000,
+        });
       },
     },
   ]);

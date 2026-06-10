@@ -6,8 +6,9 @@
  * 1. read / edit / write 工具的 path 字段强制在 cwdRoot 内（RR5 hard block；v1.6 加 edit/write）
  * 2. symlink 防御（v1.6 扩展 v1-1 msm-schema 的 realpath 逻辑到 tool.execute.before）
  *
- * 注意：bash 禁令已于 2026-06-08 移除，不再拦截 bash。
- * bash-override 工具和 permission-guards 中的 bash 守卫均已删除。
+ * 注意：bash 禁令于 2026-06-08 移除（旧 RR3），改用运行时开关：
+ *   TUI slash command /serenity-bash-on|off|status 控制，通过文件 IPC 通信，
+ *   在 tool.execute.before 中做静默拒绝。默认 bash 启用。
  *
  * 设计：v1.6 RR5 补全 = plugin **接管**权限管理（不再依赖 opencode.json 静态 allow）
  * - 主仓 opencode.json 已复原 read/edit = "ask"（commit fe19b5e）
@@ -25,6 +26,7 @@ import { isPathInside } from '../util/git.js';
 import { getState, ensureReady } from '../state.js';
 import { isHookEnabled, type HookConfig } from './util.js';
 import { log } from '../util/log.js';
+import { isBashDisabled } from '../bash-toggle.js';
 
 type ToolArgs = Record<string, unknown>;
 
@@ -131,6 +133,13 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
         );
       }
     }
+  }
+
+  // bash toggle: 静默拒绝（文件 IPC，TUI slash command 控制）
+  if (input.tool === 'bash' && isBashDisabled()) {
+    throw new Error(
+      `[serenity] bash is disabled (use /serenity-bash-on to enable)`,
+    );
   }
 
 };

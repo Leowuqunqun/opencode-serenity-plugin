@@ -138,7 +138,7 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
   // bash toggle: 静默拒绝（文件 IPC，TUI slash command 控制）
   if (input.tool === 'bash' && isBashDisabled()) {
     throw new Error(
-      `[serenity] bash is disabled (use /serenity-bash-on to enable)`,
+      `bash is disabled by user, use msm instead`,
     );
   }
 

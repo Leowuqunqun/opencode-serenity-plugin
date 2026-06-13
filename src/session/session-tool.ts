@@ -23,6 +23,7 @@ import {
   createSession,
   archiveSessions,
   sessionSummary,
+  qaSession,
 } from './lib.js';
 
 export const sessionTool: ToolDefinition = tool({
@@ -32,13 +33,14 @@ export const sessionTool: ToolDefinition = tool({
     'All paths are resolved relative to the serenity instance root.',
   args: {
     subcommand: z
-      .enum(['list', 'show', 'create', 'health', 'archive', 'summary'])
+      .enum(['list', 'show', 'create', 'health', 'qa', 'archive', 'summary'])
       .describe(
         'Operation to perform:\n' +
         '  list    — List all sessions with status summary\n' +
         '  show    — View session details (accepts S### or directory name)\n' +
         '  create  — Create a new session (--type=item|project --desc <desc>)\n' +
         '  health  — Health check: stale/stalled/drift/ghost\n' +
+        '  qa      — Fact-check a session: verify SESSION.md claims against reality\n' +
         '  archive — Archive completed sessions past their grace period\n' +
         '  summary — Dashboard: stats + recent activity + warnings',
       ),
@@ -113,6 +115,13 @@ export const sessionTool: ToolDefinition = tool({
 
     if (sub === 'summary') {
       return sessionSummary(sessionsDir);
+    }
+
+    if (sub === 'qa') {
+      if (!input.name) {
+        throw new Error('session-tool qa: requires --name (S### or directory name)');
+      }
+      return qaSession(sessionsDir, input.name);
     }
 
     throw new Error(`session-tool: unknown subcommand "${sub}"`);

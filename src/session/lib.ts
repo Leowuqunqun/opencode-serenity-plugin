@@ -393,3 +393,217 @@ export function sessionSummary(sessionsDir: string): string {
 
   return lines.join('\n');
 }
+
+// ── QA / 事实核对 ──
+
+interface QaIssue {
+  severity: 'info' | 'warning' | 'error';
+  category: string;
+  message: string;
+}
+
+/** 事实核对：检查 SESSION.md 声明与实际情况的一致性 */
+export function qaSession(sessionsDir: string, name: string): string {
+  const session = findSession(sessionsDir, name);
+  if (!session) {
+    throw new Error(`Session not found: "${name}". Use "list" to see available sessions.`);
+  }
+
+  const mdPath = join(session.path, SESSION_MD);
+  if (!existsSync(mdPath)) {
+    return `[ERROR] Session "${session.dirName}" has no SESSION.md — nothing to verify.`;
+  }
+
+  const content = readFileSync(mdPath, 'utf8');
+  const issues: QaIssue[] = [];
+
+  // ── 1. 结构性检查：必选章节是否存在 ──
+  const requiredSections = [
+    { heading: '目标', label: '目标 (goal)' },
+    { heading: '状态', label: '状态 (status)' },
+    { heading: '关键决策', label: '关键决策 (key decisions)' },
+    { heading: '进度记录', label: '进度记录 (progress)' },
+    { heading: '产出物', label: '产出物 (outputs)' },
+    { heading: '未解决的问题', label: '未解决的问题 (unresolved)' },
+  ];
+
+  for (const section of requiredSections) {
+    // (?![\s\S]) = JS 惯用 "end of string" 断言（[\s\S] 匹配任意字符含换行）
+    const headingRegex = new RegExp(`^##\\s*${section.heading}[\\s\\S]*?(?=^##|(?![\\s\\S]))`, 'm');
+    const match = content.match(headingRegex);
+    if (!match) {
+      issues.push({
+        severity: 'warning',
+        category: 'structure',
+        message: `Missing section: ${section.label}`,
+      });
+      continue;
+    }
+
+    // 检查章节是否只有空占位符（用 new RegExp 支持变量 heading）
+    const headingLineRegex = new RegExp(`^##\\s*${section.heading}\\s*$`, 'm');
+    const body = match[0].replace(headingLineRegex, '').trim();
+    if (!body || /^[-*]\s*$/.test(body)) {
+      issues.push({
+        severity: 'warning',
+        category: 'structure',
+        message: `Section "${section.label}" is empty (only placeholder)`,
+      });
+    }
+  }
+
+  // ── 2. 完成度矛盾检查 ──
+  const completedTasks = (content.match(/\[\s*x\s*\]/gi) ?? []).length;
+  const pendingTasks = (content.match(/\[\s*[ \t]\s*\]/gi) ?? []).length;
+
+  // 从"状态"段提取 completion mark（避免 goal/progress 中的"完成"误触发）
+  const statusSection = content.match(/^##\s*状态[\s\S]*?(?=^##|(?![^]))/mi);
+  const statusBody = statusSection
+    ? statusSection[0].replace(/^##\s*状态.*$/m, '').trim()
+    : '';
+  const hasCompletionMark = statusBody
+    ? /#+\s*(?:完成|done|completed|closed)\b/i.test(statusBody)
+      || /(?:全部完成|已全部完成|所有.*任务.*完成|任务.*全部完成|已完成.*所有)/i.test(statusBody)
+    : false;
+
+  // 从"未解决的问题"章节正文提取 unresolved 计数，避免 section 标题中的"未解决"误报
+  const unresolvedSection = content.match(/^##\s*未解决的问题[\s\S]*?(?=^##|(?![^]))/mi);
+
+  const unresolvedBody = unresolvedSection
+    ? unresolvedSection[0].replace(/^##\s*未解决的问题.*$/m, '').trim()
+    : '';
+  const unresolvedCount = unresolvedBody
+    ? (unresolvedBody.match(/(?:未解决|open|question|TODO)/gi) ?? []).length
+    : 0;
+
+  if (hasCompletionMark && pendingTasks > 0) {
+    issues.push({
+      severity: 'error',
+      category: 'consistency',
+      message: `Session marked as completed but has ${pendingTasks} pending task(s)`,
+    });
+  }
+
+  if (hasCompletionMark && unresolvedCount > 0) {
+    issues.push({
+      severity: 'warning',
+      category: 'consistency',
+      message: `Session marked as completed but has ${unresolvedCount} unresolved item(s)`,
+    });
+  }
+
+  if (completedTasks > 0 && pendingTasks === 0 && !hasCompletionMark) {
+    issues.push({
+      severity: 'info',
+      category: 'consistency',
+      message: `All ${completedTasks} task(s) completed but session not marked complete`,
+    });
+  }
+
+  // ── 3. 进度新鲜度检查 ──
+  const progressSection = content.match(/##\s*进度记录[\s\S]*?(?=^##|\z)/m);
+  if (progressSection) {
+    const dateMatches = progressSection[0].match(/\b(\d{4}-\d{2}-\d{2})\b/g);
+    if (dateMatches && dateMatches.length > 0) {
+      const lastDateStr = dateMatches[dateMatches.length - 1];
+      if (lastDateStr) {
+        const lastDate = new Date(lastDateStr);
+        const now = new Date();
+        const daysSince = Math.floor((now.getTime() - lastDate.getTime()) / 86400000);
+        if (daysSince > HEALTH_STALE_DAYS && pendingTasks > 0) {
+          issues.push({
+            severity: 'warning',
+            category: 'stale',
+            message: `No progress entry for ${daysSince} days (last: ${lastDateStr}), session still has ${pendingTasks} pending task(s)`,
+          });
+        }
+      }
+    }
+  }
+
+  // ── 4. 决策质量检查 ──
+  const decisionSection = content.match(/##\s*关键决策[\s\S]*?(?=^##|\z)/m);
+  if (decisionSection) {
+    const decisionLines = decisionSection[0].split('\n').filter((l) => /^\|\s*\d+\s*\|/.test(l));
+    if (decisionLines.length > 0) {
+      const emptyDecisions = decisionLines.filter((l) => {
+        const cells = l.split('|').map((c) => c.trim());
+        // | 1 | 决策 | 理由 | — 如果决策或理由列为空
+        return cells.length >= 4 && (!cells[2] || !cells[3] || cells[2] === '-' || cells[3] === '-');
+      });
+      if (emptyDecisions.length > 0) {
+        issues.push({
+          severity: 'info',
+          category: 'quality',
+          message: `${emptyDecisions.length} decision(s) have empty reason — consider filling gaps`,
+        });
+      }
+    } else if (!hasCompletionMark) {
+      issues.push({
+        severity: 'info',
+        category: 'quality',
+        message: 'No decisions recorded yet — add key decisions as the session progresses',
+      });
+    }
+  }
+
+  // ── 5. 产出物文件存在性检查 ──
+  const outputSection = content.match(/##\s*产出物[\s\S]*?(?=^##|\z)/m);
+  if (outputSection) {
+    const outputLines = outputSection[0].split('\n').filter((l) => /^\s*[-*]\s/.test(l));
+    const fileRefs: string[] = [];
+    for (const line of outputLines) {
+      // 提取看起来像文件路径的引用（含 / 或 . 或 ` 包裹）
+      const refs = line.match(/`[^`]+`/g) ?? [];
+      fileRefs.push(...refs.map((r) => r.replace(/`/g, '')));
+      // 也匹配行内路径模式
+      const inlineRefs = line.match(/\b[\w./-]+\.[a-zA-Z]{1,5}\b/g) ?? [];
+      fileRefs.push(...inlineRefs.filter((r) => r.includes('/') || r.includes('.')));
+    }
+
+    if (fileRefs.length > 0) {
+      const missing = fileRefs.filter((ref) => !existsSync(join(session.path, ref)));
+      if (missing.length > 0 && completedTasks > 0) {
+        issues.push({
+          severity: 'warning',
+          category: 'outputs',
+          message: `${missing.length} referenced file(s) not found: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? `... (+${missing.length - 3} more)` : ''}`,
+        });
+      }
+    }
+  }
+
+  // ── 报告生成 ──
+  const errorCount = issues.filter((i) => i.severity === 'error').length;
+  const warningCount = issues.filter((i) => i.severity === 'warning').length;
+  const infoCount = issues.filter((i) => i.severity === 'info').length;
+  const verified = errorCount === 0 && warningCount === 0;
+
+  const lines: string[] = [
+    `QA Report: ${session.dirName}`,
+    `────────────────${'─'.repeat(session.dirName.length)}`,
+    `Summary: ${issues.length} issue(s) found (${errorCount} error, ${warningCount} warning, ${infoCount} info)`,
+    `Status: ${verified ? '✓ Verified' : '⚠ Issues found'}`,
+  ];
+
+  if (issues.length > 0) {
+    lines.push('');
+    for (const issue of issues) {
+      const tag = issue.severity === 'error' ? 'ERR' : issue.severity === 'warning' ? 'WRN' : 'INF';
+      lines.push(`  [${tag}:${issue.category}] ${issue.message}`);
+    }
+  }
+
+  lines.push('', 'Recommendations:');
+  if (errorCount > 0) {
+    lines.push('  • Fix errors before closing the session (status vs content mismatch)');
+  }
+  if (warningCount > 0) {
+    lines.push('  • Review warnings — they may indicate incomplete or outdated information');
+  }
+  if (verified) {
+    lines.push('  • Session looks clean — no issues detected');
+  }
+
+  return lines.join('\n');
+}

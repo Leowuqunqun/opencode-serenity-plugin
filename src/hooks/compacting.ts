@@ -51,7 +51,48 @@ const sessionCompactingImpl: NonNullable<Hooks['experimental.session.compacting'
   );
 };
 
-/** 工厂：返回 compacting / system transform 相关的 hooks 集合
+/**
+ * tool.definition — 为 task tool 注入 serenity 精简上下文，
+ * 让 LLM 在创建 subagent 时自动把 context 传入 prompt 参数。
+ *
+ * 只劫持 toolID === 'task'，其他 tool 透传。
+ */
+const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
+  input,
+  output,
+) => {
+  // 只处理 task tool（subagent 创建）
+  if (input.toolID !== 'task') return;
+
+  try {
+    await ensureReady();
+  } catch {
+    return;
+  }
+
+  const state = getState();
+  if (!state.activated || !state.instanceName) return;
+
+  const context = [
+    `=== Serenity System Context ===`,
+    `Instance: ${state.instanceName}`,
+    `Root: ${state.cwdRoot}`,
+    ``,
+    `Available serenity tools for subagents:`,
+    `  - msm_list — discover registered MSM tools with descriptions`,
+    `  - msm_exec — execute an MSM by name with string array args`,
+    `  - file_system — safe file operations within serenity root`,
+    `  - session_tool — session lifecycle management`,
+    ``,
+    `IMPORTANT: Include this serenity context in the 'prompt'`,
+    `parameter so the subagent can use serenity tools.`,
+    `=== End Serenity Context ===`,
+  ].join('\n');
+
+  output.description = context + '\n\n' + output.description;
+};
+
+/** 工厂：返回 compacting / system transform / tool definition 相关的 hooks 集合
  *
  * v1.12: 改用 safeCreateHook（factory pattern）
  * - safeHook（旧）：禁用时返回 undefined（hook 不注册）
@@ -69,6 +110,12 @@ export function createCompactingHooks(config?: HookConfig): Partial<Hooks> {
   hooks['experimental.session.compacting'] = safeCreateHook(
     'experimental.session.compacting',
     () => sessionCompactingImpl,
+    config,
+  );
+
+  hooks['tool.definition'] = safeCreateHook(
+    'tool.definition',
+    () => toolDefinitionImpl,
     config,
   );
 

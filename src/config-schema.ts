@@ -36,6 +36,7 @@ import type { Hooks } from '@opencode-ai/plugin';
 export const HOOK_NAMES = [
   'shell.env',
   'tool.execute.before',
+  'tool.definition',
   'experimental.chat.system.transform',
   'experimental.session.compacting',
 ] as const satisfies readonly (keyof Hooks)[];

@@ -111,7 +111,8 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
 
   // v1.6: edit + write 一起 hard block（read 已有；webfetch A2 决定不动）
   // v1.6: grep 加入 — path 参数强制在 cwdRoot 内，禁止搜索宁静号之外的内容
-  if (input.tool === 'read' || input.tool === 'edit' || input.tool === 'write' || input.tool === 'grep') {
+  // v0.1: glob 加入 — 与 grep 同级限制
+  if (input.tool === 'read' || input.tool === 'edit' || input.tool === 'write' || input.tool === 'grep' || input.tool === 'glob') {
     for (const p of paths) {
       const verdict = classifyPath(p, state.cwdRoot);
       if (verdict === 'outside' || verdict === 'symlink') {

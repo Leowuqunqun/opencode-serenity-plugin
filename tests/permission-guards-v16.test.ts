@@ -245,6 +245,62 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
     }
   });
 
+  it('glob path 越界 → throw（v0.1 glob 限制）', async () => {
+    const { cwdRoot: c, outside: o } = setup();
+    try {
+      const outsideDir = o;
+      mkdirSync(outsideDir, { recursive: true });
+      const { createPermissionGuards } = await import('../src/hooks/permission-guards.js');
+      const hooks = createPermissionGuards();
+      const hook = hooks['tool.execute.before']!;
+      const { resetState, setState, markReady } = await import('../src/state.js');
+      resetState();
+      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      markReady();
+      await expect(
+        hook({ tool: 'glob', sessionID: 's', callID: 'c' } as any, { args: { pattern: '*.ts', path: outsideDir } } as any),
+      ).rejects.toThrow(/outside the serenity workspace root/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('glob path 在 cwdRoot 内 → 不 throw', async () => {
+    const { cwdRoot: c } = setup();
+    try {
+      const { createPermissionGuards } = await import('../src/hooks/permission-guards.js');
+      const hooks = createPermissionGuards();
+      const hook = hooks['tool.execute.before']!;
+      const { resetState, setState, markReady } = await import('../src/state.js');
+      resetState();
+      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      markReady();
+      await expect(
+        hook({ tool: 'glob', sessionID: 's', callID: 'c' } as any, { args: { pattern: '*.ts', path: c } } as any),
+      ).resolves.toBeUndefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('glob 无 path 参数 → 不 throw', async () => {
+    const { cwdRoot: c } = setup();
+    try {
+      const { createPermissionGuards } = await import('../src/hooks/permission-guards.js');
+      const hooks = createPermissionGuards();
+      const hook = hooks['tool.execute.before']!;
+      const { resetState, setState, markReady } = await import('../src/state.js');
+      resetState();
+      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      markReady();
+      await expect(
+        hook({ tool: 'glob', sessionID: 's', callID: 'c' } as any, { args: { pattern: '*.ts' } } as any),
+      ).resolves.toBeUndefined();
+    } finally {
+      cleanup();
+    }
+  });
+
   it('write 字段名 filePath（v1.6 启发式后缀）→ 越界 throw', async () => {
     const { cwdRoot: c, outside: o } = setup();
     try {

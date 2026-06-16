@@ -272,7 +272,7 @@ const Tui: TuiPlugin = async (api) => {
 
 ### 11.1 根因
 
-TUI plugin 只在 `tui.json` 文件里登记的路径下被 opencode 加载。plugin 路径只登记在项目 tui.json（`/home/yh/our-home/HOME-SERENITY/home-serenity/tui.json`），非 serenity 目录 walk-up 找不到 tui.json → plugin 不加载 → `Tui(api)` 永不调 → slash command 不出现。
+TUI plugin 只在 `tui.json` 文件里登记的路径下被 opencode 加载。plugin 路径只登记在项目 tui.json（`<serenity-root>/tui.json`），非 serenity 目录 walk-up 找不到 tui.json → plugin 不加载 → `Tui(api)` 永不调 → slash command 不出现。
 
 机制文件：
 - `packages/opencode/src/config/paths.ts:10-21`（`ConfigPaths.files` walk-up 找 tui.json）

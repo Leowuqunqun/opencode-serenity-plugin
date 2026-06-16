@@ -7,8 +7,7 @@
  *       业务 MSM，按 --format/--log 包装输出。零 spawn（除业务 msm 本身），
  *       plugin 端 3 msm tool 完全自包含。
  *
- * 源：本文件 90% 移植自 serenity 仓
- *      /home/yh/our-home/HOME-SERENITY/home-serenity/.opencode/skills/home-serenity/scripts/msm-exec.ts
+ * 源：本文件 90% 移植自 serenity 仓 msm-exec.ts
  *      (S024 v1.14 产物, 2026-06-07 by commit 725a9e7)
  *
  * 移植变更（S028）：

@@ -2,7 +2,7 @@
  * Global TUI config auto-registration utility (v1.10.1)
  *
  * 背景：TUI plugin 只在 tui.json 文件里登记的路径下被加载。默认登记在
- * 项目 tui.json（`/home/yh/our-home/HOME-SERENITY/home-serenity/tui.json`），
+ * 项目 tui.json（`<project-root>/tui.json`），
  * 这意味着非 serenity 目录下 opencode 找不到 tui.json → plugin 不加载
  * → `Tui(api)` 永不调 → `/serenity-init` slash command 不出现。
  *

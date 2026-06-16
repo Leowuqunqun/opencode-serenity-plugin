@@ -155,3 +155,19 @@ export class MsmSymlinkError extends SerenityError {
     this.name = 'MsmSymlinkError';
   }
 }
+
+/** 文件系统操作错误（file-system-tool） */
+export class FileSystemError extends SerenityError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FileSystemError';
+  }
+}
+
+/** 会话管理操作错误（session-tool） */
+export class SessionError extends SerenityError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SessionError';
+  }
+}

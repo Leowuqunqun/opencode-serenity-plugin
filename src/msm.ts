@@ -19,6 +19,7 @@ import {
   MsmExecutionError,
   MsmNotInRegistryError,
   MsmNotRegisteredError,
+  MsmPathEscapeError,
   MsmScriptNotFoundError,
 } from './errors.js';
 import { getState, ensureReady } from './state.js';
@@ -241,7 +242,7 @@ async function registerMsmInner(input: RegisterInput): Promise<string> {
   // 3. 路径必须在 cwdRoot 内
   const absPath = resolve(state.cwdRoot, input.path);
   if (!isPathInside(state.cwdRoot, absPath)) {
-    throw new Error(`msm_admin: path "${input.path}" resolves to "${absPath}" which is outside cwdRoot; serenity plugin blocks path traversal`);
+    throw new MsmPathEscapeError(input.name, 'path', input.path, absPath);
   }
 
   // 4. 脚本文件必须存在

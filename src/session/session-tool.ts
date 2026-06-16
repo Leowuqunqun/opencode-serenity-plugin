@@ -16,6 +16,7 @@
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import { z } from 'zod';
 import { findSerenityRoot, resolveRootPath } from '../fs/resolve-path.js';
+import { SessionError } from '../errors.js';
 import {
   listSessions,
   showSession,
@@ -80,14 +81,14 @@ export const sessionTool: ToolDefinition = tool({
 
     if (sub === 'show') {
       if (!input.name) {
-        throw new Error('session-tool show: requires --name (S### or directory name)');
+        throw new SessionError('session-tool show: requires --name (S### or directory name)');
       }
       return showSession(sessionsDir, input.name);
     }
 
     if (sub === 'create') {
       if (!input.desc) {
-        throw new Error('session-tool create: requires --desc (short description)');
+        throw new SessionError('session-tool create: requires --desc (short description)');
       }
       // create 是 Semi-Mech 操作，由 LLM 完成命名/分类等认知决策
       // 此工具提供目录创建 + SESSION.md 骨架写入
@@ -119,11 +120,11 @@ export const sessionTool: ToolDefinition = tool({
 
     if (sub === 'qa') {
       if (!input.name) {
-        throw new Error('session-tool qa: requires --name (S### or directory name)');
+        throw new SessionError('session-tool qa: requires --name (S### or directory name)');
       }
       return qaSession(sessionsDir, input.name);
     }
 
-    throw new Error(`session-tool: unknown subcommand "${sub}"`);
+    throw new SessionError(`session-tool: unknown subcommand "${sub}"`);
   },
 });

@@ -58,7 +58,7 @@ export function tryActivateSync(input: PluginInput, getClient?: GetClient): Sync
     cwdRoot = findGitRoot(cwd);
     log.info('phase1', 'RR6 ok: cwd in git repo', { cwdRoot });
   } catch (err) {
-    const reason = errMsg(err, 'RR6: cwd not in git repo');
+    const reason = formatErrorMessage(err, 'RR6: cwd not in git repo');
     log.warn('phase1', 'RR6 failed', { reason, cwd });
     markDisabled(reason);
     return { ok: false, reason };
@@ -149,6 +149,6 @@ async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<vo
   }
 }
 
-function errMsg(err: unknown, fallback: string): string {
+function formatErrorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }

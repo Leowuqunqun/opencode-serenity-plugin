@@ -1,22 +1,21 @@
 /**
- * opencode-serenity-plugin — v1.9 入口（v0.1 + v1-1 symlink + v1.1 msm_register + v1.3 auto-perm）
+ * opencode-serenity-plugin — server entry
  *
- * 启动协议见 architecture-v0.md
- * 契约见 contract-v0.md
- * 范围层见 docs/requirements-v0-scope.md（RR1-RR7）
- * v0.1 变更见 docs/v0.1-candidates.md（候选 1：两阶段 init / 候选 3：hook 工厂分层）
- * v1-1 变更：msm-schema symlink 防御（fs.realpathSync）
- * v1.1 变更：msm_register + msm_deregister 工具
- * v1.3 变更：permission auto-reply（监听 permission.asked event，cwdRoot 内 always）
- * v1.9 变更：default export 改为 { id, server } 对象形式（R-β fix，与 tui.ts 对称）
+ * 职责：注册 5 个自定义工具 + 6 个 system hook，实现 serenity 认知基础设施的
+ *       plugin 层（MSM 框架、文件系统操作、会话管理、路径守卫、skill 注入等）。
  *
- * Hook 工厂分层（v0.1-3 + v1.3）：
- * - createPermissionGuards：tool.execute.before（RR5 路径守卫）
- * - createCompactingHooks：system.transform（RR7 提示）+ session.compacting（关键状态注入）
- * - createShellEnv：shell.env（HOME_SERENITY_ROOT + SERENITY_INSTANCE 注入）
- * - createPermissionAutoReply：event hook（监听 permission.asked → reply "always" cwdRoot 内）
+ * 设计文档见 docs/：
+ *   - architecture-v0.md — 两阶段 init + 模块分解
+ *   - contract-v0.md — 6 契约 + 13 错误类
+ *   - requirements-v0-scope.md — RR1-RR7 范围层
  *
- * 注意：v1-2 hashline edit 已撤回（实测 LLM 用得糟糕，见 commit history）
+ * Hook 工厂分层：
+ *   createPermissionGuards → tool.execute.before（RR5 路径守卫 + bash 开关）
+ *   createCompactingHooks  → system.transform（SKILL.md 注入）
+ *                           + session.compacting（关键状态保留）
+ *                           + tool.definition（subagent context 注入）
+ *   createShellEnv         → shell.env（HOME_SERENITY_ROOT + SERENITY_INSTANCE）
+ *   createPermissionAutoReply → event permission.asked（cwdRoot 内自动 always）
  */
 
 import type { Plugin, Hooks } from '@opencode-ai/plugin';

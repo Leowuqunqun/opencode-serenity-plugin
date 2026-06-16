@@ -14,6 +14,7 @@ import {
   statSync,
 } from 'node:fs';
 import { join, basename } from 'node:path';
+import { SessionError } from '../errors.js';
 
 // ── 类型 ──
 
@@ -140,7 +141,7 @@ export function listSessions(sessionsDir: string): string {
 export function showSession(sessionsDir: string, name: string): string {
   const session = findSession(sessionsDir, name);
   if (!session) {
-    throw new Error(`Session not found: "${name}". Use "list" to see available sessions.`);
+    throw new SessionError(`Session not found: "${name}". Use "list" to see available sessions.`);
   }
 
   const mdPath = join(session.path, SESSION_MD);
@@ -167,7 +168,7 @@ export function createSession(opts: CreateSessionOptions): string {
 
   // Validate desc format
   if (!/^[a-z][a-z0-9-]{0,49}$/.test(desc)) {
-    throw new Error(
+    throw new SessionError(
       `Invalid description "${desc}": must be kebab-case (lowercase a-z, 0-9, dashes; max 50 chars, no leading digit or dash)`,
     );
   }
@@ -213,7 +214,7 @@ export function createSession(opts: CreateSessionOptions): string {
   const sessionPath = join(sessionsDir, dirName);
 
   if (!dryRun && existsSync(sessionPath)) {
-    throw new Error(`Session directory already exists: "${dirName}"`);
+    throw new SessionError(`Session directory already exists: "${dirName}"`);
   }
 
   if (dryRun) {
@@ -301,7 +302,7 @@ export function archiveSessions(opts: ArchiveOptions): string {
     // 归档单个指定会话
     const session = findSession(sessionsDir, name);
     if (!session) {
-      throw new Error(`Session not found: "${name}"`);
+      throw new SessionError(`Session not found: "${name}"`);
     }
 
     // 检查是否可归档（完成 + 超过 grace period）
@@ -406,7 +407,7 @@ interface QaIssue {
 export function qaSession(sessionsDir: string, name: string): string {
   const session = findSession(sessionsDir, name);
   if (!session) {
-    throw new Error(`Session not found: "${name}". Use "list" to see available sessions.`);
+    throw new SessionError(`Session not found: "${name}". Use "list" to see available sessions.`);
   }
 
   const mdPath = join(session.path, SESSION_MD);

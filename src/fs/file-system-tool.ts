@@ -30,6 +30,7 @@ import {
 import { resolve, dirname, normalize } from 'node:path';
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import { z } from 'zod';
+import { FileSystemError } from '../errors.js';
 import {
   findSerenityRoot,
   resolveRootPath,
@@ -50,10 +51,10 @@ interface FileInfo {
   mtime: string;
 }
 
-function detectFileType(st: Stats): FileInfo['type'] {
-  if (st.isDirectory()) return 'dir';
-  if (st.isFile()) return 'file';
-  if (st.isSymbolicLink()) return 'symlink';
+function detectFileType(stat: Stats): FileInfo['type'] {
+  if (stat.isDirectory()) return 'dir';
+  if (stat.isFile()) return 'file';
+  if (stat.isSymbolicLink()) return 'symlink';
   return 'other';
 }
 
@@ -65,13 +66,13 @@ function humanSize(bytes: number): string {
 
 function getFileInfo(absPath: string, name: string): FileInfo {
   try {
-    const st = statSync(absPath);
+    const stat = statSync(absPath);
     return {
       name,
-      type: detectFileType(st),
-      size: st.size,
-      sizeHuman: humanSize(st.size),
-      mtime: st.mtime.toISOString(),
+      type: detectFileType(stat),
+      size: stat.size,
+      sizeHuman: humanSize(stat.size),
+      mtime: stat.mtime.toISOString(),
     };
   } catch {
     return { name, type: 'other', size: 0, sizeHuman: '?', mtime: '?' };
@@ -83,7 +84,7 @@ function getFileInfo(absPath: string, name: string): FileInfo {
 function validateWritePath(root: string, target: string): string {
   const absPath = target.startsWith('/') ? normalize(target) : resolveRootPath(root, target);
   if (!isPathInsideSerenity(root, absPath)) {
-    throw new Error(
+    throw new FileSystemError(
       `file-system: path "${target}" resolves to "${absPath}" which is outside serenity root "${root}"`,
     );
   }
@@ -94,13 +95,13 @@ function assertNotProtected(root: string, absPath: string, targetLabel: string):
   // Protect .serenity file from deletion
   const serenityMarker = resolve(root, '.serenity');
   if (absPath === serenityMarker) {
-    throw new Error(
+    throw new FileSystemError(
       `file-system: refusing to delete protected path: ${targetLabel} (.serenity is the serenity instance marker)`,
     );
   }
   // Protect the root directory itself
   if (absPath === root) {
-    throw new Error(
+    throw new FileSystemError(
       `file-system: refusing to delete the serenity root directory: ${targetLabel}`,
     );
   }
@@ -181,18 +182,18 @@ export const fileSystemTool: ToolDefinition = tool({
 
     // ── resolve ──
     if (sub === 'resolve') {
-      if (!input.path) throw new Error('file-system resolve: requires a path argument');
+      if (!input.path) throw new FileSystemError('file-system resolve: requires a path argument');
       return resolveRootPath(root, input.path);
     }
 
     // ── relative ──
     if (sub === 'relative') {
-      if (!input.path) throw new Error('file-system relative: requires a path argument');
+      if (!input.path) throw new FileSystemError('file-system relative: requires a path argument');
       const absPath = input.path.startsWith('/')
         ? input.path
         : resolveRootPath(root, input.path);
       if (!isPathInsideSerenity(root, absPath)) {
-        throw new Error(
+        throw new FileSystemError(
           `file-system relative: path "${input.path}" resolves to "${absPath}" which is outside serenity root "${root}"`,
         );
       }
@@ -201,7 +202,7 @@ export const fileSystemTool: ToolDefinition = tool({
 
     // ── exists ──
     if (sub === 'exists') {
-      if (!input.path) throw new Error('file-system exists: requires a path argument');
+      if (!input.path) throw new FileSystemError('file-system exists: requires a path argument');
       const absPath = input.path.startsWith('/')
         ? input.path
         : resolveRootPath(root, input.path);
@@ -210,13 +211,13 @@ export const fileSystemTool: ToolDefinition = tool({
 
     // ── list（增强：返回 JSON 元数据）──
     if (sub === 'list') {
-      if (!input.path) throw new Error('file-system list: requires a path argument');
+      if (!input.path) throw new FileSystemError('file-system list: requires a path argument');
       const absPath = input.path.startsWith('/')
         ? input.path
         : resolveRootPath(root, input.path);
 
       if (!existsSync(absPath)) {
-        throw new Error(`file-system list: path "${absPath}" does not exist`);
+        throw new FileSystemError(`file-system list: path "${absPath}" does not exist`);
       }
 
       const names = readdirSync(absPath);
@@ -227,13 +228,13 @@ export const fileSystemTool: ToolDefinition = tool({
 
     // ── mkdir（递归创建，类似 mkdir -p）──
     if (sub === 'mkdir') {
-      if (!input.path) throw new Error('file-system mkdir: requires a path argument');
+      if (!input.path) throw new FileSystemError('file-system mkdir: requires a path argument');
       const absPath = validateWritePath(root, input.path);
 
       if (existsSync(absPath)) {
-        const st = statSync(absPath);
-        if (st.isDirectory()) return `directory already exists: ${input.path}`;
-        throw new Error(`file-system mkdir: path "${input.path}" exists but is not a directory`);
+        const stat = statSync(absPath);
+        if (stat.isDirectory()) return `directory already exists: ${input.path}`;
+        throw new FileSystemError(`file-system mkdir: path "${input.path}" exists but is not a directory`);
       }
 
       mkdirSync(absPath, { recursive: true });
@@ -246,7 +247,7 @@ export const fileSystemTool: ToolDefinition = tool({
       const targets: string[] = [...(input.paths ?? [])];
       if (input.path) targets.push(input.path);
       if (targets.length === 0) {
-        throw new Error('file-system rm: requires at least one path argument (path or paths)');
+        throw new FileSystemError('file-system rm: requires at least one path argument (path or paths)');
       }
 
       const dryRun = input['dry-run'] ?? false;
@@ -261,8 +262,8 @@ export const fileSystemTool: ToolDefinition = tool({
           continue;
         }
 
-        const st = statSync(absPath);
-        const isDir = st.isDirectory();
+        const stat = statSync(absPath);
+        const isDir = stat.isDirectory();
 
         // 保护 .serenity 和根目录
         try {
@@ -304,16 +305,16 @@ export const fileSystemTool: ToolDefinition = tool({
     // ── mv（移动/重命名）──
     if (sub === 'mv') {
       if (!input.src || !input.dst) {
-        throw new Error('file-system mv: requires both --src and --dst arguments');
+        throw new FileSystemError('file-system mv: requires both --src and --dst arguments');
       }
       const srcAbs = validateWritePath(root, input.src);
       const dstAbs = validateWritePath(root, input.dst);
 
       if (!existsSync(srcAbs)) {
-        throw new Error(`file-system mv: source not found: ${input.src}`);
+        throw new FileSystemError(`file-system mv: source not found: ${input.src}`);
       }
       if (existsSync(dstAbs)) {
-        throw new Error(`file-system mv: destination already exists: ${input.dst}`);
+        throw new FileSystemError(`file-system mv: destination already exists: ${input.dst}`);
       }
 
       // 自动创建目标父目录
@@ -329,21 +330,21 @@ export const fileSystemTool: ToolDefinition = tool({
     // ── cp（复制）──
     if (sub === 'cp') {
       if (!input.src || !input.dst) {
-        throw new Error('file-system cp: requires both --src and --dst arguments');
+        throw new FileSystemError('file-system cp: requires both --src and --dst arguments');
       }
       const srcAbs = validateWritePath(root, input.src);
       const dstAbs = validateWritePath(root, input.dst);
 
       if (!existsSync(srcAbs)) {
-        throw new Error(`file-system cp: source not found: ${input.src}`);
+        throw new FileSystemError(`file-system cp: source not found: ${input.src}`);
       }
       if (existsSync(dstAbs)) {
-        throw new Error(`file-system cp: destination already exists: ${input.dst}`);
+        throw new FileSystemError(`file-system cp: destination already exists: ${input.dst}`);
       }
 
-      const st = statSync(srcAbs);
-      if (st.isDirectory() && !input.recursive) {
-        throw new Error(
+      const stat = statSync(srcAbs);
+      if (stat.isDirectory() && !input.recursive) {
+        throw new FileSystemError(
           `file-system cp: source is a directory, use --recursive to copy: ${input.src}`,
         );
       }
@@ -360,7 +361,7 @@ export const fileSystemTool: ToolDefinition = tool({
 
     // ── touch（创建空文件 / 更新时间戳）──
     if (sub === 'touch') {
-      if (!input.path) throw new Error('file-system touch: requires a path argument');
+      if (!input.path) throw new FileSystemError('file-system touch: requires a path argument');
       const absPath = validateWritePath(root, input.path);
 
       if (existsSync(absPath)) {
@@ -379,6 +380,6 @@ export const fileSystemTool: ToolDefinition = tool({
       return `created empty file: ${input.path}`;
     }
 
-    throw new Error(`file-system: unknown subcommand "${sub}"`);
+    throw new FileSystemError(`file-system: unknown subcommand "${sub}"`);
   },
 });

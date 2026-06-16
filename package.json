@@ -1,7 +1,7 @@
 {
   "name": "opencode-serenity-plugin",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
+  "private": false,
   "description": "OpenCode 平台本地插件,承载「宁静号」7 条范围约束(RR1-RR7)。覆盖“拦截 + 行为”(server entry) + “通知用户”(TUI entry)两条独立加载路径,提供 msm_list/msm_exec/msm_admin 三个 PRIMARY 工具替代裸 bash,以及 /serenity-init 一键初始化。",
   "type": "module",
   "main": "./dist/index.js",
@@ -35,7 +35,7 @@
     "serenity",
     "msm"
   ],
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=20"
   },

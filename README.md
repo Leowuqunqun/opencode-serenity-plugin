@@ -1,12 +1,12 @@
-# opencode-serenity-plugin
+# @shgroup/opencode-serenity-plugin
 
-> **v0.1.0** (2026-06-15) — Serenity 认知基础设施的 [OpenCode](https://github.com/open-code-ai/opencode) 平台插件层。
+> **v0.2.0** — Serenity 认知基础设施的 [OpenCode](https://github.com/open-code-ai/opencode) 平台插件层。
 >
 > 提供 MSM 工具调用框架（`msm_list` / `msm_exec` / `msm_admin`）、
 > 安全文件系统操作（`file_system`）、会话管理（`session_tool`），
 > 以及 TUI slash command（`/serenity-init`、bash 开关）。
 >
-> 远程仓库：[github.com/tellmewhattodo/opencode-serenity-plugin](https://github.com/tellmewhattodo/opencode-serenity-plugin)
+> 源码：[github.com/tellmewhattodo/opencode-serenity-plugin](https://github.com/tellmewhattodo/opencode-serenity-plugin)
 
 ---
 
@@ -20,20 +20,21 @@
 | 包管理器 | pnpm |
 | OpenCode 版本 | >= 1.16 |
 
-### 标准安装流程（推荐）
+### 标准安装（推荐）
 
 ```bash
-# 场景 A：从零克隆
+npm install @shgroup/opencode-serenity-plugin
+npx opencode-serenity-plugin install
+```
+
+### 从源码构建（贡献者用）
+
+```bash
 git clone git@github.com:tellmewhattodo/opencode-serenity-plugin.git
 cd opencode-serenity-plugin
-
-# 场景 B：宁静号工作空间内（已位于 AI_LAB/ 下）
-# cd AI_LAB/opencode-serenity-plugin
-# 选择上述任一场景后继续：
-
-pnpm install                # 安装依赖
-pnpm build                  # 编译 TypeScript → dist/
-npx opencode-serenity-plugin install   # 自动写入项目 + 全局配置
+pnpm install
+pnpm build
+npx opencode-serenity-plugin install
 ```
 
 `install` 命令的结果：

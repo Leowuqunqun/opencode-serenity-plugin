@@ -7,6 +7,8 @@
  * 3. plugin 未激活 → 不注入（跳过）
  * 4. 注入 context 包含实例名、根路径、可用工具清单
  * 5. safeCreateHook 降级（disabled → no-op）
+ *
+ * v0.3 新增：WARNING 语句（subagent 继承全部约束）
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -30,7 +32,7 @@ describe('tool.definition — serenity context injection', () => {
     resetState();
   });
 
-  it('task tool → 描述已注入 serenity context', async () => {
+  it('task tool → 描述已注入 serenity context + WARNING', async () => {
     setState(makeState());
     markReady();
     const hooks = createCompactingHooks();
@@ -44,6 +46,13 @@ describe('tool.definition — serenity context injection', () => {
     expect(output.description).toContain('=== Serenity System Context ===');
     expect(output.description).toContain('Instance: home-serenity');
     expect(output.description).toContain('Root: /repo');
+    // WARNING 语句
+    expect(output.description).toContain('WARNING: Subagents inherit ALL serenity constraints.');
+    expect(output.description).toContain('Spawning a subagent does NOT bypass serenity restrictions.');
+    // 约束列表
+    expect(output.description).toContain('File access (read/edit/write/grep/glob) is LIMITED');
+    expect(output.description).toContain('The `bash` tool may be DISABLED');
+    // 可用工具
     expect(output.description).toContain('msm_list');
     expect(output.description).toContain('msm_exec');
     expect(output.description).toContain('file_system');

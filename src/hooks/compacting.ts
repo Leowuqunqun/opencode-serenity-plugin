@@ -27,11 +27,18 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
   }
 
   const state = getState();
+
+  // 注入根目录绝对路径 + 实例名（帮助 Agent 避免路径错误）
+  // idempotent：检查 output.system 中是否已包含该标记
+  const rootMarker = `[Serenity Root] ${state.cwdRoot}`;
+  if (!output.system.some(s => typeof s === 'string' && s.includes(rootMarker))) {
+    const rootInfo = `\n${rootMarker} — Instance: ${state.instanceName}\n`;
+    output.system.push(rootInfo);
+  }
+
+  // 注入 SKILL.md 全文
   if (!state.skillContent) return;  // SKILL.md 读失败或缺失 → 跳过
-
-  // idempotent dedup：检查 output.system 是否已包含 skillContent
   if (output.system.includes(state.skillContent)) return;
-
   output.system.push(state.skillContent);
 };
 
@@ -52,8 +59,15 @@ const sessionCompactingImpl: NonNullable<Hooks['experimental.session.compacting'
 };
 
 /**
- * tool.definition — 为 task tool 注入 serenity 精简上下文，
- * 让 LLM 在创建 subagent 时自动把 context 传入 prompt 参数。
+ * tool.definition — 为 task tool（subagent 创建）注入 serenity 上下文。
+ *
+ * 核心信息：subagent 继承全部 serenity 约束。
+ * 目的：防止 primary agent 以为“派 subagent 能绕过限制”。
+ *
+ * 包括：
+ *   1. 实例信息（instance name + root path）
+ *   2. 明确声明 subagent 受相同限制（路径守卫、bash 开关等）
+ *   3. subagent 可用的工具清单
  *
  * 只劫持 toolID === 'task'，其他 tool 透传。
  */
@@ -78,9 +92,21 @@ const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
     `Instance: ${state.instanceName}`,
     `Root: ${state.cwdRoot}`,
     ``,
-    `Available serenity tools for subagents:`,
-    `  - msm_list — discover registered MSM tools with descriptions`,
-    `  - msm_exec — execute an MSM by name with string array args`,
+    `WARNING: Subagents inherit ALL serenity constraints.`,
+    `Spawning a subagent does NOT bypass serenity restrictions.`,
+    ``,
+    `Constraints that also apply to subagents:`,
+    `  - File access (read/edit/write/grep/glob) is LIMITED to the serenity root.`,
+    `    Paths outside ${state.cwdRoot} will be REJECTED.`,
+    `  - The \`bash\` tool may be DISABLED. Prefer serenity tools.`,
+    `  - For shell commands, use msm_exec with an appropriate MSM.`,
+    ``,
+    `If the primary agent is blocked by a constraint, the subagent will be blocked too.`,
+    `Do NOT delegate restricted operations to a subagent as a workaround.`,
+    ``,
+    `Available serenity tools (subagent can use these):`,
+    `  - msm_list  — discover registered MSM tools with descriptions`,
+    `  - msm_exec  — execute an MSM by name with string array args`,
     `  - file_system — safe file operations within serenity root`,
     `  - session_tool — session lifecycle management`,
     ``,

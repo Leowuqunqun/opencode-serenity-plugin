@@ -56,7 +56,7 @@ describe('tool.definition — serenity context injection', () => {
     expect(output.description).toContain('msm_list');
     expect(output.description).toContain('msm_exec');
     expect(output.description).toContain('file_system');
-    expect(output.description).toContain('session_tool');
+    expect(output.description).toContain('session');
     expect(output.description).toContain('Launch a subagent');
     // 原始描述保留在尾部
     expect(output.description.endsWith('to handle complex tasks.')).toBe(true);

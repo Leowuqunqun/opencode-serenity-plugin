@@ -30,8 +30,8 @@ import {
 export const sessionTool: ToolDefinition = tool({
   description:
     'Session lifecycle management for cognitive containers (CCC). ' +
-    'Manages AGENT_SESSIONS/ directory: list, show, create, health, archive, summary. ' +
-    'All paths are resolved relative to the CCC root.',
+    'Manages AGENT_SESSIONS/ directory: list, show, create, health, qa, archive, summary. ' +
+    'CCCs should register `session-tool` MSM that wraps `session` for domain-specific extensions.',
   args: {
     subcommand: z
       .enum(['list', 'show', 'create', 'health', 'qa', 'archive', 'summary'])

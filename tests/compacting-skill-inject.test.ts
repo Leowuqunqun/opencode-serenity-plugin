@@ -49,7 +49,7 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     expect(output.system[0]).toContain('RR5');
     expect(output.system[0]).toContain('msm_exec');
     expect(output.system[0]).toContain('ssh-connect');
-    expect(output.system[0]).toContain('session-tool');
+    expect(output.system[0]).toContain('session');
     // index 1: SKILL.md
     expect(output.system[1]).toBe('# Mock SKILL.md\n\nThis is the test skill content.');
   });
@@ -138,7 +138,7 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     expect(block).toContain('inherits ALL constraints');
     expect(block).toContain('no bypass');
     expect(block).toContain('ssh-connect');
-    expect(block).toContain('session-tool');
+    expect(block).toContain('session');
   });
 
   it('constraints block 不使用旧 [Serenity Root] 格式', async () => {

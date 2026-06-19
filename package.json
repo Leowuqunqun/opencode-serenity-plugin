@@ -2,7 +2,7 @@
   "name": "@shgroup/opencode-serenity-plugin",
   "version": "0.3.0",
   "private": false,
-  "description": "Serenity — 为 OpenCode Agent 提供认知容器 (CCC) 基础设施。6 个工具 (msm_list/msm_exec/msm_admin/file_system/session_tool/ccc_status) + 6 个 hook + TUI。受控工作空间：根内自由，根外隔离。",
+  "description": "Serenity — 为 OpenCode Agent 提供认知容器 (CCC) 基础设施。6 个工具 (msm_list/msm_exec/msm_admin/file_system/session/ccc_status) + 6 个 hook + TUI。受控工作空间：根内自由，根外隔离。",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

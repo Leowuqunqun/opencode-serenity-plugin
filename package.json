@@ -1,8 +1,8 @@
 {
   "name": "@shgroup/opencode-serenity-plugin",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "private": false,
-  "description": "OpenCode 平台本地插件,承载「宁静号」7 条范围约束(RR1-RR7)。覆盖“拦截 + 行为”(server entry) + “通知用户”(TUI entry)两条独立加载路径,提供 msm_list/msm_exec/msm_admin 三个 PRIMARY 工具替代裸 bash,以及 /serenity-init 一键初始化。",
+  "description": "Serenity — 为 OpenCode Agent 提供认知容器 (CCC) 基础设施。6 个工具 (msm_list/msm_exec/msm_admin/file_system/session_tool/ccc_status) + 6 个 hook + TUI。受控工作空间：根内自由，根外隔离。",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

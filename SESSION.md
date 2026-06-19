@@ -74,7 +74,7 @@
 
 **git 操作 (develop-kit 不会自动做):**
 
-- `git tag v0.0.3 && git push origin v0.0.3` — 走 plugin-exec (kit 不推 tag)
+- `git tag v0.0.3 && git push origin v0.0.3` — 走 `serenity-plugin-develop-kit --cmd` (kit 不推 tag)
 
 **user 验证步骤:**
 
@@ -153,7 +153,7 @@
 |------|:----:|
 | v0.3.4 release（npm + git tag 对齐）| ✅ 2026-06-20 |
 | 384/384 tests pass（28 文件）| ✅ |
-| README 重写（ACC/CCC narrative）| 🔴 已完成源码，待重启 session 后 commit |
+| README 重写（ACC/CCC narrative）| ✅ 已提交 (fee0ee1) |
 | **已知 issue**: `msm_name`→`name` 参数改名（v0.3.2）导致旧 session tool call schema 失效 | 🟡 重启 session 解决 |
 
 ---

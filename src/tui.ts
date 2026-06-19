@@ -64,7 +64,6 @@ import {
 import { ensureGlobalTuiPluginRegistration } from './util/tui-install.js';
 import {
   InvalidCccNameError,
-  NotInGitRepoError,
   InitGitCommitError,
 } from './errors.js';
 import { log } from './util/log.js';
@@ -193,11 +192,14 @@ const Tui: TuiPlugin = async (api) => {
                 const result = await initSerenity(cwd, prefix);
                 dialog.clear();
                 if (result.kind === 'created') {
+                  const msg = result.gitInited
+                    ? `Git repo auto-created. Initialized ${result.name}; restart opencode to complete`
+                    : `Initialized ${result.name}; please restart opencode`;
                   api.ui.toast({
                     title: 'serenity',
-                    message: `Initialized ${result.name}; please restart opencode`,
+                    message: msg,
                     variant: 'success',
-                    duration: 5000,
+                    duration: 6000,
                   });
                 } else {
                   api.ui.toast({
@@ -210,9 +212,7 @@ const Tui: TuiPlugin = async (api) => {
               } catch (err) {
                 dialog.clear();
                 let msg: string;
-                if (err instanceof NotInGitRepoError) {
-                  msg = 'cwd is not a git repository; run `git init` first, then `/serenity-init` again';
-                } else if (err instanceof InitGitCommitError) {
+                if (err instanceof InitGitCommitError) {
                   msg = `git add+commit failed (rolled back): ${err.message}`;
                 } else if (err instanceof InvalidCccNameError) {
                   msg = err.message;

@@ -23,7 +23,6 @@ import { writeSerenityFile } from '../src/util/serenity-file.js';
 import {
   InitGitCommitError,
   InvalidCccNameError,
-  NotInGitRepoError,
 } from '../src/errors.js';
 
 /** 创建一个空的 git repo（含 user.email / user.name 以便 commit）*/
@@ -119,13 +118,14 @@ describe('isValidPrefix', () => {
 });
 
 describe('initSerenity', () => {
-  it('happy path: 写文件 + git commit', async () => {
+  it('happy path: 写文件 + git commit (已有 git repo)', async () => {
     const tmp = setupGitRepo();
     try {
       const result = await initSerenity(tmp, 'xx');
       expect(result.kind).toBe('created');
       if (result.kind === 'created') {
         expect(result.name).toBe('xx-serenity');
+        expect(result.gitInited).toBe(false); // 已有 git repo，不 auto-init
       }
       expect(readSerenityFileOrFail(tmp)).toBe('xx-serenity');
       const commitLog = execFileSync('git', ['log', '--oneline'], { cwd: tmp, encoding: 'utf-8' });
@@ -176,6 +176,7 @@ describe('initSerenity', () => {
       expect(result.kind).toBe('created');
       if (result.kind === 'created') {
         expect(result.name).toBe('xx-serenity');
+        expect(result.gitInited).toBe(true); // auto-init 了 git
       }
       // 验证 git repo 已创建
       const gitDir = join(tmp, '.git');

@@ -6,7 +6,7 @@
  *
  * 设计约束（RR7 spec §5 失败矩阵）：
  * - prefix 不合法 → throw InvalidCccNameError
- * - cwd 不在 git repo → throw NotInGitRepoError（透传 findGitRoot）
+ * - cwd 不在 git repo → 自动 git init -b main（v0.4）
  * - /.serenity 已存在 → return { kind: 'already', name }（不覆盖）
  * - git add/commit 失败 → rollback 写文件 + throw InitGitCommitError
  *
@@ -70,13 +70,12 @@ export function defaultPrefix(dirName: string): string {
 }
 
 export type InitResult =
-  | { kind: 'created'; name: string }
+  | { kind: 'created'; name: string; gitInited: boolean }
   | { kind: 'already'; name: string };
 
 /**
  * 初始化 cwd 为 serenity 实例（RR7）。
  * @throws InvalidInstanceNameError prefix 不是 kebab-case
- * @throws NotInGitRepoError cwd 不在 git repo（透传 findGitRoot）
  * @throws InitGitCommitError git add/commit 失败（已 rollback 写文件）
  */
 export async function initSerenity(cwd: string, prefix: string): Promise<InitResult> {
@@ -86,9 +85,11 @@ export async function initSerenity(cwd: string, prefix: string): Promise<InitRes
 
   // v0.4: 非 git 目录时自动 git init，消除鸡生蛋死锁
   let gitRoot = tryFindGitRoot(cwd);
+  let gitInited = false;
   if (!gitRoot) {
     gitInit(cwd);
     gitRoot = findGitRoot(cwd); // 验证 init 成功
+    gitInited = true;
   }
 
   if (serenityFileExists(gitRoot)) {
@@ -107,5 +108,5 @@ export async function initSerenity(cwd: string, prefix: string): Promise<InitRes
     throw new InitGitCommitError(reason);
   }
 
-  return { kind: 'created', name };
+  return { kind: 'created', name, gitInited };
 }

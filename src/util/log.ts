@@ -19,13 +19,15 @@
 
 type Level = 'info' | 'warn' | 'error' | 'debug';
 
-function noop(_level: Level, _tag: string, _msg: string, _data?: Record<string, unknown>): void {
-  // v0.0.1: intentionally empty
+function logFn(level: Level, tag: string, msg: string, data?: Record<string, unknown>): void {
+  const ts = new Date().toISOString();
+  const dataStr = data ? ' ' + JSON.stringify(data) : '';
+  console.error(`[serenity:${level}:${tag}] ${ts} ${msg}${dataStr}`);
 }
 
 export const log = {
-  info: (tag: string, msg: string, data?: Record<string, unknown>) => noop('info', tag, msg, data),
-  warn: (tag: string, msg: string, data?: Record<string, unknown>) => noop('warn', tag, msg, data),
-  error: (tag: string, msg: string, data?: Record<string, unknown>) => noop('error', tag, msg, data),
-  debug: (tag: string, msg: string, data?: Record<string, unknown>) => noop('debug', tag, msg, data),
+  info: (tag: string, msg: string, data?: Record<string, unknown>) => logFn('info', tag, msg, data),
+  warn: (tag: string, msg: string, data?: Record<string, unknown>) => logFn('warn', tag, msg, data),
+  error: (tag: string, msg: string, data?: Record<string, unknown>) => logFn('error', tag, msg, data),
+  debug: (tag: string, msg: string, data?: Record<string, unknown>) => logFn('debug', tag, msg, data),
 };

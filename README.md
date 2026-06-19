@@ -1,129 +1,149 @@
-# @shgroup/opencode-serenity-plugin
+# Serenity（宁静号）
 
-> **Serenity（宁静号）** — 为 OpenCode Agent 提供受控工作空间的插件。
+> **给 AI 一个它不能逃逸、但可以自由思考的工作空间。**
 >
-> 安装后，Agent 自动获得安全文件操作、可审计命令执行、工作会话追踪等能力。
-> 所有这些能力被限定在一个有明确边界的"认知容器"内——根内自由，根外隔离。
+> 不是安全沙箱，是认知容器。
 
 ---
 
-## 这是什么
+## 你遇到的可能是同一个问题
 
-Serenity 是一个 [OpenCode](https://github.com/open-code-ai/opencode) 平台插件。它的核心资产是**认知容器**（Cognitive Container）：
+你用 OpenCode + Claude / DeepSeek 写代码。它很聪明——但聪明也意味着危险。
 
-| 概念 | 是什么 | 怎么用 |
-|------|--------|--------|
-| 认知容器 | 一个 `.serenity` 标记的 git 目录。Agent 在该目录内拥有受控的工作权限。 | 每个项目创建一个。`home-serenity/` 是家庭管理用，`my-project-serenity/` 是开发用。 |
-| 本插件 | 认知容器的"蓝图"。定义了容器有什么能力、遵守什么约束。 | `npm install` + `install`，一次配置，所有容器共用。 |
+有一天你发现 Agent 改了你不该改的文件。或者它跑了 `rm -rf`。或者三周后你忘了它当时做了什么决策、改了哪些文件、为什么那样改。
 
-类比：插件是操作系统，认知容器是用户目录——装一次 OS，在各个目录下工作。
+你开始犹豫：到底该给它多大权限？
 
-### 为什么需要认知容器
-
-OpenCode Agent 原生的 `bash`、`read`、`edit`、`write` 可以访问整个文件系统。Serenity 加上一层边界：
-
-| 无 Serenity | 有 Serenity |
-|-------------|------------|
-| Agent 可以读写任何路径 | 读写限制在容器根内（P3 权限二分） |
-| `bash` 执行不可审计 | `msm_exec` 执行可追踪、可审查 |
-| 没有工作记录 | 每次多步工作自动创建 SESSION |
-| 没有上下文持久化 | SKILL.md 自动注入 Agent 对话 |
+Serenity 的回答：**不给权限——给它一个容器。**
 
 ---
 
-## 三个硬约束
+## 认知容器：不是牢笼，是工作室
 
-每个认知容器遵守三条原则，由插件自动执行：
+一个 Serenity 容器是一个 `.serenity` 标记的 git 目录。Agent 在这个目录内：
 
-| # | 原则 | 含义 | 谁执行 |
-|---|------|------|--------|
-| P1 | **有根** | 容器有且仅有一个 `.serenity` 标记的根目录 | `cc-fs` 工具 |
-| P2 | **git 管** | 根目录必须在 git 管理下，所有变更可追溯 | 激活检查 + `msm_admin` 自动 commit |
-| P3 | **权限二分** | 根内完全读写，根外零权限 | `permission-guards` hook（RR5） |
+| 在容器里，它可以 | 出了容器，什么都不能 |
+|------------------|---------------------|
+| 自由读写任何文件 | 读写被硬阻断（P3） |
+| 注册和执行 MSM 工具 | 裸 `bash` 降级为高危后备（D19） |
+| 创建会话、记录决策 | — |
+| 加载技能、自动注入上下文 | — |
 
----
+类比：你给一个木匠一把钥匙。这把钥匙只能打开**他的工作间**。工作间里有所有他需要的工具。出了门，钥匙失效。
 
-## 8 个工具
-
-安装后 Agent 获得以下工具，替代裸 bash 和原生文件操作：
-
-| 工具 | 作用 |
-|------|------|
-| `msm_list` | 查看当前容器已注册的可执行操作（MSM）。**任何 shell 操作前先调这个。** |
-| `msm_exec` | 容器唯一标准执行路径。替代裸 bash。自动注入 `SERENITY_ROOT` / `SERENITY_CCC` / `SERENITY_VERSION` 到子进程。 |
-| `msm_admin` | 向容器注册新的 MSM。注册表变更自动 git commit。 |
-| `cc-fs` | 安全文件操作。12 个子命令：`root` / `resolve` / `exists` / `list` / `tree` / `relative` / `mkdir` / `rm` / `mv` / `cp` / `touch` / `append`。写操作限定在容器根内。 |
-| `session` | 工作会话全周期管理。`create` / `list` / `show` / `health` / `qa` / `archive` / `summary`。CCCs 应注册 `session-tool` MSM 包装 `session`。 |
-| `cc-ck` | 容器健康检查。验证 P1（`.serenity` 存在）、P2（git 仓库）、P3（`opencode.json` 配置完整）。 |
-| `eap` | EAP 认知质量框架 | 认知容器建立在 EAP 理论基础上——"思维的功能价值与其外部可重建性成正比"。提供完整的诊断方法论和实践指南 |
-| `neat` | Neat 设计协作协议 | EAP 的实践方法论——小步对齐、显式决策、文档驱动。设计/需求对齐时的结构化协作流程 |
+这不是限制——这是**专注**。
 
 ---
 
-## 安装
+## 为什么不是又一个安全工具
+
+Serenity 的边界不止于"禁止写入外部路径"。它建立了一套**可成长的工作环境**：
+
+```
+你的项目/
+├── .serenity              ← 容器标记：这里是边界
+├── AGENT_SESSIONS/         ← 每次多步工作自动生成 SESSION.md
+├── .opencode/skills/       ← 容器专属技能（自动加载到 Agent 对话）
+│   └── mech-registry.json  ← 容器专属工具注册表
+└── (你的代码和文件)        ← Agent 在此自由工作
+```
+
+每当你启动一次多步任务，Agent 自动创建会话记录——目标、决策、进度、产出物。两周后回头看，仍然知道当时发生了什么。
+
+每当你需要一个新的可重复操作，注册一个 MSM——它变成可审计、可追踪、可复现的工具，而不是一段消失在 bash 历史里的命令。
+
+**这是一个会随着你的使用而变强的环境。**
+
+---
+
+## 开箱即用：8 个内置工具
+
+安装后 Agent 直接获得以下能力，不用写一行代码：
+
+### 核心三角
+
+| 工具 | 回答什么问题 |
+|------|-------------|
+| `msm_list` | 当前容器有哪些可执行的操作？ |
+| `msm_exec` | 安全执行一个已注册的操作。替代裸 bash。 |
+| `msm_admin` | 为容器注册新操作。自动 git commit。 |
+
+### 工作支撑
+
+| 工具 | 回答什么问题 |
+|------|-------------|
+| `cc-fs` | 如何在容器内安全地操作文件？（12 个子命令：`root` `resolve` `exists` `list` `tree` `relative` `mkdir` `rm` `mv` `cp` `touch` `append`） |
+| `session` | 多步工作的目标、决策、进度在哪？ |
+| `cc-ck` | 容器健康吗？P1 / P2 / P3 还正常吗？ |
+
+### 认知质量
+
+| 工具 | 回答什么问题 |
+|------|-------------|
+| `eap` | 如何确保你的表达外部可重建？——完整 EAP 理论框架 |
+| `neat` | 如何小步对齐、显式决策、文档驱动？——结构化协作方法论 |
+
+这不是"8 个独立功能"——这是一个**工作系统**。每个工具各司其职，互相引用。
+
+---
+
+## 开始
 
 ```bash
-# 前置：Node >= 20，OpenCode >= 1.16
 npm install @shgroup/opencode-serenity-plugin
 npx opencode-serenity-plugin install
 ```
 
-`install` 写入两处配置：
+然后在任何 git 仓库中，输入 slash command：
 
-| 目标 | 路径 | 作用 |
-|------|------|------|
-| 项目级 | 当前目录 `opencode.json` | 注册 8 个工具 |
-| 全局级 | `~/.config/opencode/tui.json` | 注册 `/serenity-init` slash command |
-
----
-
-## 创建认知容器
-
-```bash
-# 1. 进入 git 管理的目录
-mkdir my-project && cd my-project && git init
-
-# 2. 在 OpenCode 中输入
+```
 /serenity-init
 ```
 
-TUI 会询问容器前缀（如 `my-project`）和一句话描述。确认后自动创建：
+TUI 会问你容器名（如 `my-project`）和一句话描述。确认后自动创建容器骨架——即刻可用。
 
-```
-my-project-serenity/
-├── .serenity                ← 容器标记文件
-├── AGENT_SESSIONS/           ← 工作会话记录
-├── .opencode/skills/
-│   └── my-project-serenity/
-│       ├── SKILL.md          ← 容器主入口文档
-│       └── references/
-│           └── mech-registry.json
-```
-
-初始化后立即可用：
-
-```
-msm_list                    # 查看已注册 MSM
-cc-ck                       # 验证容器健康状态
-session create --desc "my-first-task"
-cc-fs tree --path src/
+```bash
+同一个插件可以管理多个容器。家目录一个，工作项目一个，实验一个。
+每个容器独立，互不干扰。
 ```
 
 ---
 
-## 概念模型（深入阅读）
+## 它为什么泛用
 
-如果你关心"为什么这样设计"，Serenity 的底层模型是 **ACC/CCC 分层**：
+Serenity 不绑定任何领域。你说它是给什么的？
 
-```
-ACC (Abstract Cognitive Container)  →  本插件（持久源，定义"什么是容器"）
-  └── CCC (Concrete Cognitive Container)  →  每个 `xxx-serenity/` 目录（可操作实例，可从 ACC 重建）
-```
+| 场景 | 容器就是 |
+|------|---------|
+| 管理家庭数字系统（服务器、网络、NAS） | 家庭运维中枢 |
+| 开发一个软件项目 | 受控开发环境 |
+| 做 AI 实验、跑模型、记录结果 | 可复现实验舱 |
+| 写字幕、做翻译、处理媒体文件 | 内容工作台 |
 
-关系：ACC 是蓝图，CCC 是建筑。修改插件（ACC） → build + install → 所有 CCC 自动获得新能力。
-
-日常使用时不需要这些术语——"Serenity" 或"认知容器"就够了。
+容器的**形状**取决于你注册什么 MSM、写什么 SKILL.md——Serenity 的**骨架**始终是一样的：边界 + 工具系统 + 会话记录 + 认知质量框架。
 
 ---
 
-**版本**: v0.2.2
+## 内在哲学：ACC/CCC 模型
+
+如果你关心"为什么这样设计"，这里有一张图：
+
+```
+ACC (Abstract Cognitive Container)        本插件
+  │  定义"认知容器应该有什么"
+  │  8 个内置工具 + 6 个安全 hook + TUI
+  │
+  ├── CCC (Concrete Cognitive Container)  home-serenity/
+  ├── CCC                                 my-project-serenity/
+  └── CCC                                 experiment-serenity/
+```
+
+ACC 是蓝图，CCC 是建筑。修改蓝图，build + install，所有建筑自动获得新功能。
+
+这套模型的理论基础是 **EAP**（Explicit Abstraction Principle，显式抽象原则）——"思维的功能价值与其外部可重建性成正比"。Serenity 的每一个设计决策都从这句话推导而来。
+
+日常使用时不需要这些术语。记住"Serenity"就够了。
+
+---
+
+> **版本**: v0.3.4 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16

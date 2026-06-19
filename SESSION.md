@@ -147,13 +147,49 @@
 
 ## 当前焦点
 
-**post-v0.0.2 状态：已发布（2026-06-07）。下一波 (v0.0.3) 待定——见上文 v0.0.2 块末尾 Open follow-ups 段。**
+**v0.3.4 已发布（2026-06-20）。ACC/CCC 模型成型，384 tests pass。**
 
 | 维度 | 状态 |
 |------|:----:|
-| v0.0.2 release（RR7 init + bin install CLI + msm_exec 协议层 + hook 保护 + zod-first）| ✅ 2026-06-07 |
-| 320/320 tests pass | ✅ |
-| Remote 迁 GitHub（`github.com/tellmewhattodo/opencode-serenity-plugin`）| ✅ 2026-06-07 |
+| v0.3.4 release（npm + git tag 对齐）| ✅ 2026-06-20 |
+| 384/384 tests pass（28 文件）| ✅ |
+| README 重写（ACC/CCC narrative）| 🔴 已完成源码，待重启 session 后 commit |
+| **已知 issue**: `msm_name`→`name` 参数改名（v0.3.2）导致旧 session tool call schema 失效 | 🟡 重启 session 解决 |
+
+---
+
+## v0.3.x — ACC/CCC 模型成型（2026-06-20）
+
+### 核心发现
+- **D16-D18**: ACC/CCC 三层模型 — ACC (Abstract, 本 plugin) → CCC (Concrete, 各 `xxx-serenity/`) → CC (日常用语 "serenity")
+- **P1/P2/P3**: 认知容器三原则（有根 / git管 / 权限二分）
+- **D19**: bash 降级为高危后备，msm_exec 为标准执行路径
+- **D20-D22**: ACC 原语短名（session, cc-fs, cc-ck 等），CCC 注册 wrapper MSM
+
+### 命名重命名（v0.3.0）
+- `instanceName`→`cccName`, `buildInstanceName`→`buildCccName`, `InvalidInstanceNameError`→`InvalidCccNameError`
+- 环境变量 `SERENITY_ROOT`/`SERENITY_CCC`/`SERENITY_VERSION`（保留旧名 deprecated alias）
+- 34 文件重命名（src/~20 + tests/11 + templates/4）
+
+### 5 MSM 增强（v0.3.0）
+- cc-fs: 加 `tree` + `append` 子命令
+- msm_exec: spawn 注入 CCC 环境变量
+- 新建 `ccc-status` (后改 `cc-ck`): P1/P2/P3 健康检查
+- msm_admin: register path 默认 CCC-relative
+- msm_list: 输出加 CCC context header
+
+### EAP + Neat 升为 ACC 原语（v0.3.3）
+- 新增 `eap` / `neat` 两个 tool，渐进式披露（description=signal, execute=返回完整 SKILL.md）
+- tool 计数: 6→8
+
+### session 扩展提示 + 注册表保护（v0.3.4）
+- session tool: 检测 CCC 是否注册了 session-tool MSM，附加扩展/提示信息
+- cc-fs: 禁止直接写 `mech-registry.json`（必须走 msm_admin）
+
+### npm 发布链
+0.3.0 → 0.3.1 (session_tool→session) → 0.3.2 (cc-fs/cc-ck/msm_name→name) → 0.3.3 (eap+neat) → 0.3.4 (session hint + registry protection)
+
+所有版本 npm / git tag / package.json 三源对齐。
 | v0.0.2 详细记录（12 commits / 5 lock-in 决策 / open follow-ups）| 见上文 v0.0.2 — 2026-06-07 (release) 块 |
 
 **v0.0.x 版本说明**：v0.0.x 系列目前仅 **v0.0.1 + v0.0.2** 两个 release。在 v0.0.2 之前，仓内 commit 链曾短暂以 v0.0.4/5/6 作内部版本标记（0.0.2 reset 前），现已废弃——不要在文档/issue 中引用 v0.0.3-0.0.6。

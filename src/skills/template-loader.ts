@@ -175,10 +175,12 @@ export interface InstallTemplateOptions {
   name: string;
   /** 目标 serenity 根路径（cwdRoot） */
   serenityRoot: string;
-  /** 实例前缀 */
+  /** 实例前缀（用于占位符替换） */
   prefix: string;
   /** 占位符（可选，不传则用默认值） */
   placeholders?: Placeholders;
+  /** 不添加 prefix 前缀到目标目录名（标准技能用此 flag） */
+  noPrefix?: boolean;
   /** dry-run 模式 */
   dryRun?: boolean;
 }
@@ -199,20 +201,21 @@ export interface InstallTemplateResult {
  * 输出到 <serenityRoot>/.opencode/skills/<prefix>-<name>/
  */
 export function installTemplate(opts: InstallTemplateOptions): InstallTemplateResult {
-  const { templateDir, name, serenityRoot, prefix, dryRun } = opts;
+  const { templateDir, name, serenityRoot, prefix, dryRun, noPrefix } = opts;
   const ph = opts.placeholders ?? defaultPlaceholders(prefix);
 
   // 加载模板
   const { files } = loadTemplate(templateDir, name, ph);
 
-  // 目标路径
-  const targetDir = join(serenityRoot, '.opencode', 'skills', `${prefix}-${name}`);
+  // 目标路径 — 标准技能不添加 prefix（noPrefix），领域技能添加
+  const skillDirName = noPrefix ? name : `${prefix}-${name}`;
+  const targetDir = join(serenityRoot, '.opencode', 'skills', skillDirName);
   const createdFiles: string[] = [];
 
   if (dryRun) {
     return {
       changed: true,
-      skillDirName: `${prefix}-${name}`,
+      skillDirName,
       createdFiles: Object.keys(files),
     };
   }
@@ -241,7 +244,7 @@ export function installTemplate(opts: InstallTemplateOptions): InstallTemplateRe
 
   return {
     changed: hasChanges,
-    skillDirName: `${prefix}-${name}`,
+    skillDirName,
     createdFiles,
   };
 }

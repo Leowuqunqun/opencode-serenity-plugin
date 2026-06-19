@@ -1,18 +1,22 @@
 /**
  * init-wizard.ts — D1 Init 向导 Phase 1
  *
- * CLI 交互式创建认知容器 (CCC) 的目录骨架并复制标准技能模板。
+ * CLI 交互式创建认知容器 (CCC) 的目录骨架、git 初始化并复制标准技能模板。
+ *
+ * 设计文档：docs/ccc-init-flow-design.md（home-serenity 仓）
  *
  * 流程：
- *   1. 收集基本信息（prefix, description）
- *   2. 创建目录骨架（.serenity, .gitignore, AGENT_SESSIONS/, docs/）
- *   3. 复制 9 个标准技能模板到 .opencode/skills/
- *   4. 生成 opencode.json（注册 plugin）
- *   5. 写入 Phase 2 Agent prompt
- *   6. 输出完成信息
+ *   1. 交互问答 4 题（prefix / description / remote / scope）
+ *   2. git init → add → commit（Phase 1 写骨架前）
+ *   3. 创建目录骨架（.serenity, opencode.json, AGENT_SESSIONS/, docs/）
+ *   4. 复制 3 个标准技能模板到 .opencode/skills/
+ *   5. git remote add → push（如果提供了 remote）
+ *   6. 写入 Phase 2 Agent prompt
+ *   7. 输出完成信息
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join, basename } from 'node:path';
 import { createInterface } from 'node:readline';
 import { stdin, stdout } from 'node:process';
@@ -22,21 +26,24 @@ import {
   defaultPlaceholders,
   type Placeholders,
 } from '../skills/template-loader.js';
+import { isValidPrefix, buildCccName } from '../util/init.js';
 
 // ── 类型 ──
 
 export interface InitOptions {
   /** 目标路径 */
   targetPath: string;
-  /** 实例前缀（如 home, tg, pg） */
+  /** 实例前缀（如 home, work） */
   prefix?: string;
-  /** 实例名称（如 宁静号，用于根 skill 标题） */
-  name?: string;
-  /** 实例描述（一句话） */
+  /** 一句话描述 */
   description?: string;
+  /** Git SSH URL（如 git@github.com:user/work-serenity.git） */
+  remote?: string;
+  /** 规模：单人/小团队/多人/企业 */
+  scope?: string;
   /** Plugin 根路径（用于定位模板） */
   pluginRoot: string;
-  /** 非交互模式 */
+  /** 非交互模式（必须提供 prefix + description + remote） */
   nonInteractive?: boolean;
   /** 强制覆盖已有文件 */
   force?: boolean;
@@ -45,41 +52,28 @@ export interface InitOptions {
 export interface InitResult {
   success: boolean;
   prefix: string;
-  name: string;
+  cccName: string;
   message: string;
   createdDirs: string[];
   installedSkills: string[];
+  gitPushed: boolean;
 }
 
 // ── 默认值 ──
 
+/** Phase 1 预装的 3 个标准技能（设计决策 D20） */
 const STANDARD_SKILLS = [
   'compass',
   'session',
   'sqc',
-  'exploration',
-  'quality-review',
-  'landscape',
-  'git',
-];
+] as const;
 
-/** 从目录名推断 prefix */
+/** 从目录名推断 prefix（kebab-case，取第一部分） */
 function inferPrefix(dirName: string): string {
-  // 取第一个词（小写，非字母开头的去掉）
   const cleaned = dirName.replace(/[^a-zA-Z0-9-]/g, '');
   const first = cleaned.split(/[-_]/)[0];
   if (!first) return 'my';
   return first.toLowerCase().slice(0, 8);
-}
-
-/** 从 prefix 推断中文名 */
-function inferName(prefix: string): string {
-  const names: Record<string, string> = {
-    home: '宁静号',
-    tg: '天工宁静号',
-    pg: '盘古宁静号',
-  };
-  return names[prefix] ?? `${prefix.toUpperCase()} 宁静号`;
 }
 
 // ── 交互式问答 ──
@@ -97,29 +91,43 @@ async function askQuestion(prompt: string, defaultValue?: string): Promise<strin
   });
 }
 
-async function collectInfo(prefill: string): Promise<{
+interface CollectedInfo {
   prefix: string;
   description: string;
-}> {
+  remote: string;
+  scope: string;
+}
+
+async function collectInfo(prefill: string): Promise<CollectedInfo> {
   const prefix = await askQuestion(
-    'What prefix for skill names? (kebab-case, e.g. "home", "tg", "pg")',
+    'CCC prefix? (kebab-case, e.g. "home", "work")',
     prefill,
   );
 
   const description = await askQuestion(
-    'Describe this cognitive container (CCC) in one sentence',
-    '',
+    'What does this CCC manage? (one sentence)',
+  );
+
+  const remote = await askQuestion(
+    'Git SSH URL? (e.g. git@github.com:user/work-serenity.git, repo must be empty)',
+  );
+
+  const scope = await askQuestion(
+    'Scale? [solo/small-team/team/enterprise]',
+    'solo',
   );
 
   return {
     prefix: prefix || prefill,
-    description: description || 'A cognitive container (CCC)',
+    description: description || 'A concrete cognitive container (CCC)',
+    remote: remote || '',
+    scope: scope || 'solo',
   };
 }
 
 // ── 骨架生成 ──
 
-interface SkeletonFiles {
+interface SkeletonFile {
   path: string;
   content: string;
   isDir?: boolean;
@@ -127,55 +135,99 @@ interface SkeletonFiles {
 
 function buildSkeleton(
   prefix: string,
-): SkeletonFiles[] {
+  description: string,
+  scope: string,
+  remote: string,
+): SkeletonFile[] {
+  const cccName = buildCccName(prefix);
   const skillDir = join('.opencode', 'skills');
-  const rootSkill = `${prefix}-serenity`;
+  const rootSkill = cccName;
 
   return [
     // 目录
     { path: join('AGENT_SESSIONS'), content: '', isDir: true },
     { path: join('docs'), content: '', isDir: true },
-    { path: join('.opencode', 'scripts'), content: '', isDir: true },
-    { path: join('.opencode', 'references'), content: '', isDir: true },
     // .serenity
-    { path: '.serenity', content: `${rootSkill}\n` },
-    // .gitignore
+    { path: '.serenity', content: `${cccName}\n` },
+    // .gitignore — CCC 自己的文件全部纳入
     {
       path: '.gitignore',
       content: [
-        '# 宁静号标准 .gitignore — 外部仓库不被纳入本仓库',
+        '# CCC .gitignore — 默认全纳入版本控制',
         '# 用户可在此追加专属的排除规则',
         '',
-        '# 在宁静号项目中，所有子项目作为独立 git 仓库存放',
-        '# 通过根 .gitignore 排除它们，避免意外提交',
-      ].join('\n') + '\n',
+      ].join('\n'),
     },
-    // opencode.json
+    // opencode.json — write 全开（配合 P3 权限二分）
     {
       path: 'opencode.json',
       content: JSON.stringify({
-        $schema: 'https://opencode.ai/config.json',
-        permission: {
+        permissions: {
           read: 'allow',
           edit: 'allow',
+          write: 'allow',
         },
+        description,
       }, null, 2) + '\n',
     },
-    // 根 skill 骨架（等待 Phase 2 生成）
+    // 根 skill 骨架（等待 Phase 2 Agent 完善）
+    // 格式对齐 docs/ccc-init-flow-design.md §7.3
     {
       path: join(skillDir, rootSkill, 'SKILL.md'),
       content: [
-        `# ${rootSkill} — ${inferName(prefix)}`,
+        '---',
+        `name: ${cccName}`,
+        `description: ${description}`,
+        '---',
         '',
-        '> 由 serenity-plugin init 创建。此文件将在 Phase 2 由 Agent 完善。',
-        '> 运行 `npx tsx ` + resolve + ` 根据引导完成初始化。',
+        `# Skill: ${cccName}`,
         '',
-        '## 初始配置',
+        `> 我是这个 CCC 的根入口文件。Agent 进入此目录时优先加载我。`,
         '',
-        `- prefix: ${prefix}`,
-        '- 标准技能已预装（见 .opencode/skills/）',
-        '- 等待 Phase 2 生成完整的根 skill',
-      ].join('\n') + '\n',
+        '## 用途',
+        '',
+        description,
+        '',
+        '## 触发条件/何时加载',
+        '',
+        `- Agent 进入此 CCC 后最先加载`,
+        '- 需要 MSM 工具查询、路径解析、技能路由时',
+        '',
+        '## 系统身份',
+        '',
+        '| 属性 | 值 |',
+        '|------|-----|',
+        `| CCC 名称 | ${cccName} |`,
+        `| 规模 | ${scope} |`,
+        `| Git 远程 | ${remote || '(not configured)'} |`,
+        '',
+        '## 技能清单',
+        '',
+        '| Skill | 定位 | 何时加载 |',
+        '|-------|------|---------|',
+        `| ${cccName} | 根入口技能 | 进入 CCC 后最先加载 |`,
+        '| compass | 方向判断 | 开始新工作前 |',
+        '| session | 会话追踪 | 多步工作前 |',
+        '| sqc | 品质循环 | 定期扫描 |',
+        '',
+        '---',
+        '',
+        '<!-- Phase 2 Agent: 以下内容由你补充。',
+        `     加载 scripts/generate-root-skill.prompt.md 获取访谈问题。 -->`,
+        '',
+        '## 任务路由表',
+        '',
+        '<!-- Agent: 根据访谈结果填写 -->',
+        '',
+        '## 协作协议',
+        '',
+        '<!-- Agent: 根据访谈结果填写 -->',
+        '',
+        '## 相关技能',
+        '',
+        '<!-- Agent: 根据访谈结果填写 -->',
+        '',
+      ].join('\n'),
     },
     // 根 skill 目录结构
     { path: join(skillDir, rootSkill, 'references'), content: '', isDir: true },
@@ -185,64 +237,107 @@ function buildSkeleton(
       path: join(skillDir, rootSkill, 'scripts', 'generate-root-skill.prompt.md'),
       content: generatePhase2Prompt(prefix),
     },
-    // 根 skill 注册表骨架
+    // 根 skill 注册表骨架（3 个 MSM 预设 — 设计文档 §4.3）
     {
       path: join(skillDir, rootSkill, 'references', 'mech-registry.json'),
       content: JSON.stringify({
         version: 1,
-        serenity: rootSkill,
-        description: `Register for ${rootSkill}`,
-        entries: [],
+        description: `${cccName} MSM registry`,
+        entries: [
+          {
+            name: 'compass-tool',
+            skill: 'compass',
+            category: 'mech',
+            description: '方向判断工具。validate: 信号报告格式校验；judge: 3 通道条件评估与决策矩阵。',
+          },
+          {
+            name: 'session-tool',
+            skill: 'session',
+            category: 'mech',
+            description: '会话索引重建工具（ACC session 补充）。为历史会话分配编号并重命名目录。',
+          },
+          {
+            name: 'sqc-tool',
+            skill: 'sqc',
+            category: 'semi-mech',
+            description: 'SQC 品质循环工具。check: 品质检查；report: 验证报告；pipeline: 5 阶段流水线编排。',
+          },
+        ],
       }, null, 2) + '\n',
     },
   ];
 }
 
 // ── Phase 2 Agent Prompt ──
+// 对齐 docs/ccc-init-flow-design.md §7.2
 
 function generatePhase2Prompt(prefix: string): string {
+  const cccName = buildCccName(prefix);
+
   return [
-    `# Phase 2: Complete ${prefix}-serenity Root Skill`,
+    `# Phase 2: Complete ${cccName} Root Skill`,
     '',
-    'This CCC has been initialized with all standard meta-skills.',
-    'Now you need to complete the root skill SKILL.md.',
+    `This CCC has been initialized with 3 standard meta-skills (compass, session, sqc).`,
+    `Now you need to help the Agent complete the root skill SKILL.md through a guided interview.`,
     '',
-    '## Interview Questions',
+    '## Interview Questions (4)',
     '',
-    'Answer these questions interactively with the user, then fill in the root skill at',
-    `.opencode/skills/${prefix}-serenity/SKILL.md`,
+    'Answer these questions interactively with the user:',
     '',
-    '  1. **System description**: What project/system does this CCC manage?',
-    '2. **Scope**: Single person, small team, or enterprise?',
-    '3. **Key components**: What sub-projects or modules does the system contain?',
-    '4. **Collaboration style**: Structured (formal docs/SOP) or flexible (ad-hoc)?',
-    '5. **Language preference**: Precise, conversational, or technical?',
+    `1. **Sub-projects / modules**: What sub-projects, repos, or modules does this CCC manage?`,
+    `   → Determines the task route table entries in SKILL.md`,
     '',
-    '## Root Skill Skeleton',
+    `2. **Collaboration style**: Structured (formal docs/SOP) or flexible (ad-hoc communication)?`,
+    `   → Influences the collaboration protocols section`,
     '',
-    `Create the SKILL.md for ${prefix}-serenity with these sections:`,
+    `3. **Language preference**: Precise, conversational, or technical?`,
+    `   → Influences SKILL.md language style and EAP trigger thresholds`,
     '',
-    '- `# Skill: ${prefix}-serenity — <Name>`',
-    '- System identity and core principles',
-    '- Skill list (all 9 pre-installed skills)',
-    '- Task route table (basic routes)',
-    '- Collaboration protocols (Neat + naming + session conventions)',
-    '- EAP checklist',
+    `4. **Remote services / devices**: Any servers, APIs, or devices this CCC manages?`,
+    `   → Determines if additional domain skills should be suggested (via install-skill in Phase 2+)`,
     '',
-    '## Available Tools',
+    '## Root Skill Sections to Complete',
     '',
-    'The plugin provides these tools that work in any CCC:',
-    '- **cc-fs**: root/resolve/list (no instance-specific coupling)',
-    '- **session**: list/show/create/health/archive/summary',
-    '- **msm_list / msm_exec / msm_admin**: standard MSM management',
+    `Fill in the skeleton at .opencode/skills/${cccName}/SKILL.md:`,
+    '',
+    '- **Task route table**: Map tasks → skills/scripts (from Q1)',
+    '- **Collaboration protocols**: Neat + naming + session conventions (from Q2)',
+    '- **Related skills**: Document inter-skill relationships (from Q4)',
+    '',
+    '## Available ACC Tools',
+    '',
+    'These tools work in every CCC:',
+    '- **cc-fs**: file system operations within CCC root',
+    '- **cc-git**: git status/commit/push/log (D22)',
+    '- **session**: session lifecycle management',
+    '- **msm_list / msm_exec / msm_admin**: MSM registry operations',
+    '- **eap / neat**: cognitive quality framework (progressive disclosure)',
     '',
     '## Important',
     '',
-    '- All 9 standard skills are already installed',
-    '- The AGENT_SESSIONS/ directory exists and session is ready',
-    '- Guide the user through the 5 questions, then write the SKILL.md',
+    '- 3 standard skills are pre-installed (compass, session, sqc)',
+    '- The AGENT_SESSIONS/ directory exists and session management is ready',
+    '- Guide the user through the 4 questions, then write the SKILL.md',
     '- The SKILL.md should be fully usable — no placeholder text',
+    '',
   ].join('\n') + '\n';
+}
+
+// ── Git 初始化 helper ──
+
+function execGit(args: string[], cwd: string): string {
+  try {
+    const stdout = execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return stdout.trimEnd();
+  } catch (err: any) {
+    const stderr = err.stderr?.toString() || '';
+    const stdout = err.stdout?.toString() || '';
+    throw new Error(`git ${args[0]} failed: ${stderr || stdout || err.message}`);
+  }
 }
 
 // ── 主入口 ──
@@ -251,53 +346,66 @@ export async function initWizard(opts: InitOptions): Promise<InitResult> {
   const { targetPath, pluginRoot, force } = opts;
   const targetDirName = basename(targetPath);
 
-  // 检查目标目录
+  const emptyResult = (): InitResult => ({
+    success: false,
+    prefix: '',
+    cccName: '',
+    message: '',
+    createdDirs: [],
+    installedSkills: [],
+    gitPushed: false,
+  });
+
+  // 检查目标目录 — 已存在 CCC 则拒绝（除非 --force）
   if (existsSync(targetPath)) {
-    const hasFiles = existsSync(join(targetPath, '.serenity'));
-    if (hasFiles && !force) {
+    const hasSerenity = existsSync(join(targetPath, '.serenity'));
+    if (hasSerenity && !force) {
       return {
-        success: false,
-        prefix: '',
-        name: '',
+        ...emptyResult(),
         message: `Target already contains a CCC: ${targetPath}. Use --force to overwrite.`,
-        createdDirs: [],
-        installedSkills: [],
       };
     }
   }
 
-  // Phase 1: 收集基本信息
+  // Phase 1: 收集基本信息（交互或非交互）
   const prefill = opts.prefix ?? inferPrefix(targetDirName);
 
   let prefix: string;
   let description: string;
+  let remote: string;
+  let scope: string;
 
   if (opts.nonInteractive) {
     prefix = prefill;
-    description = opts.description ?? 'Cognitive Container (CCC)';
+    description = opts.description ?? 'A concrete cognitive container (CCC)';
+    remote = opts.remote ?? '';
+    scope = opts.scope ?? 'solo';
   } else {
     const info = await collectInfo(prefill);
     prefix = info.prefix;
     description = info.description;
+    remote = info.remote;
+    scope = info.scope;
   }
 
-  // 验证 prefix
-  if (!/^[a-z][a-z0-9-]{0,19}$/.test(prefix)) {
+  // 验证 prefix — 统一使用 isValidPrefix（与 RR7 init / path.ts 一致）
+  if (!isValidPrefix(prefix)) {
     return {
-      success: false, prefix: '', name: '',
-      message: `Invalid prefix "${prefix}": must be kebab-case (lowercase a-z, 0-9, dashes; max 20 chars)`,
-      createdDirs: [], installedSkills: [],
+      ...emptyResult(),
+      prefix,
+      message: `Invalid prefix "${prefix}": must be kebab-case (lowercase a-z, 0-9, dashes; no leading or trailing dash)`,
     };
   }
 
-  const name = opts.name ?? inferName(prefix);
+  const cccName = buildCccName(prefix);
   const ph: Placeholders = defaultPlaceholders(prefix);
 
-  // Phase 1a: 创建目录骨架
-  const createdDirs: string[] = [];
-  const skeleton = buildSkeleton(prefix);
-
+  // Phase 1a: 创建目标目录
   mkdirSync(targetPath, { recursive: true });
+
+  // Phase 1b: 写入目录骨架（git init 之前先写文件，否则 git add -A 为空）
+  const createdDirs: string[] = [];
+  const skeleton = buildSkeleton(prefix, description, scope, remote);
 
   for (const item of skeleton) {
     const fullPath = join(targetPath, item.path);
@@ -308,16 +416,19 @@ export async function initWizard(opts: InitOptions): Promise<InitResult> {
       }
     } else {
       if (existsSync(fullPath) && !force) continue;
-      const parentDir = fullPath.slice(0, fullPath.lastIndexOf('/'));
-      if (!existsSync(parentDir)) {
-        mkdirSync(parentDir, { recursive: true });
+      const lastSep = fullPath.lastIndexOf('/');
+      if (lastSep >= 0) {
+        const parentDir = fullPath.slice(0, lastSep);
+        if (!existsSync(parentDir)) {
+          mkdirSync(parentDir, { recursive: true });
+        }
       }
       writeFileSync(fullPath, item.content, 'utf8');
       createdDirs.push(item.path);
     }
   }
 
-  // Phase 1b: 复制标准技能模板
+  // Phase 1c: 复制标准技能模板
   const templatesDir = getTemplatesDir(pluginRoot);
   const installedSkills: string[] = [];
   let templatesMissing = false;
@@ -331,43 +442,64 @@ export async function initWizard(opts: InitOptions): Promise<InitResult> {
         prefix,
         placeholders: ph,
         dryRun: false,
+        noPrefix: true,
       });
       if (result.changed) {
         installedSkills.push(skillName);
       }
     } catch {
-      // 模板缺失是允许的 — 用户可后续 install-skill
       templatesMissing = true;
     }
   }
 
-  // Phase 1c: 写 .serenity 确认
-  const serenityPath = join(targetPath, '.serenity');
-  if (!existsSync(serenityPath) || force) {
-    writeFileSync(serenityPath, `${prefix}-serenity\n`, 'utf8');
+  // Phase 1d: git init + add + commit + remote + push
+  let gitPushed = false;
+  let gitError: string | undefined;
+
+  try {
+    execGit(['init', '-b', 'main'], targetPath);
+    execGit(['add', '-A'], targetPath);
+    execGit(['commit', '-m', `chore: init ${cccName} CCC`], targetPath);
+
+    if (remote) {
+      execGit(['remote', 'add', 'origin', remote], targetPath);
+      try {
+        execGit(['push', '-u', 'origin', 'main'], targetPath);
+        gitPushed = true;
+      } catch (err: any) {
+        gitError = `Git push failed: ${err.message}. CCC created locally but not pushed.`;
+      }
+    }
+  } catch (err: any) {
+    gitError = `Git init failed: ${err.message}`;
   }
 
-  // 输出
+  // ── 输出 ──
   const skillSummary = installedSkills.length > 0
     ? `Pre-installed ${installedSkills.length} skill(s): ${installedSkills.join(', ')}`
     : 'No templates were copied (templates may not exist yet)';
 
+  const message = [
+    `CCC "${cccName}" created at ${targetPath}`,
+    `  prefix: ${prefix}`,
+    `  description: ${description}`,
+    remote ? `  remote: ${remote}` : '',
+    `  ${skillSummary}`,
+    gitPushed ? '' : `  ⚠ Git: ${gitError || 'not pushed (no remote provided)'}`,
+    '',
+    'Next steps:',
+    `  1. Open ${targetPath} in OpenCode`,
+    '  2. Agent will guide you through Phase 2 to complete the root skill',
+    templatesMissing ? '  (Some skill templates not found — run `opencode-serenity-plugin install-skill <name>` to add them later)' : '',
+  ].filter(Boolean).join('\n');
+
   return {
     success: true,
     prefix,
-    name,
-    message: [
-      `CCC "${name}" created at ${targetPath}`,
-      `  prefix: ${prefix}`,
-      `  description: ${description}`,
-      `  ${skillSummary}`,
-      '',
-      `Next steps:`,
-      `  1. Open ${targetPath} in OpenCode`,
-      `  2. Agent will guide you through Phase 2 to complete the root skill`,
-      templatesMissing ? '  (Some skill templates not found — run `opencode-serenity-plugin install-skill <name>` to add them later)' : '',
-    ].filter(Boolean).join('\n'),
+    cccName,
+    message,
     createdDirs,
     installedSkills,
+    gitPushed,
   };
 }

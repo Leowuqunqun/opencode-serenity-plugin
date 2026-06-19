@@ -13,7 +13,7 @@ SQC（Serenity Quality Cycle）品质循环维护认知容器 (CCC) 的认知基
 | **DC-1** | 所有技能目录是否存在对应的 SKILL.md |
 | **DC-2** | SKILL.md 中是否包含 name 和 description |
 | **DC-3** | Skill frontmatter 中的 name 与技能目录名是否一致 |
-| **DC-4** | home-serenity SKILL.md 的"相关技能"表是否包含所有已安装技能 |
+| **DC-4** | {{ccc_name}} SKILL.md 的"相关技能"表是否包含所有已安装技能 |
 | **GP-4** | SKILL.md 是否符合模板格式要求 |
 
 ## 使用方式

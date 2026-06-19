@@ -232,7 +232,7 @@ function generatePhase2Prompt(prefix: string): string {
     '## Available Tools',
     '',
     'The plugin provides these tools that work in any CCC:',
-    '- **file_system**: root/resolve/list (no instance-specific coupling)',
+    '- **cc-fs**: root/resolve/list (no instance-specific coupling)',
     '- **session**: list/show/create/health/archive/summary',
     '- **msm_list / msm_exec / msm_admin**: standard MSM management',
     '',

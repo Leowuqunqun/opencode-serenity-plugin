@@ -158,10 +158,10 @@ export const msmExecTool: ToolDefinition = tool({
   description:
     'Execute a registered MSM tool. ' +
     'Call msm_list first to discover MSM names. ' +
-    'Example: msm_name="ssh-connect", args=["exec", "ubuntu", "ls -la"]. ' +
+    'Example: name="ssh-connect", args=["exec", "ubuntu", "ls -la"]. ' +
     `(serenity-plugin v${VERSION})`,
   args: {
-    msm_name: z.string().describe('MSM name as registered in mech-registry.json.'),
+    name: z.string().describe('MSM name as registered in mech-registry.json.'),
     args: z
       .array(z.string())
       .default([])
@@ -169,7 +169,7 @@ export const msmExecTool: ToolDefinition = tool({
   },
   execute: async (input) => {
     log.info('msm', 'msm_exec called', {
-      msm_name: input.msm_name,
+      msm_name: input.name,
       args: input.args,
     });
     await ensureReady();
@@ -177,7 +177,7 @@ export const msmExecTool: ToolDefinition = tool({
 
     // 1. find msm in registry
     const registry = loadMechRegistry();
-    const entry = findMsm(input.msm_name, registry);
+    const entry = findMsm(input.name, registry);
     log.info('msm', 'msm found in registry', { name: entry.name, skill: entry.skill });
     const normalized = normalizeFlags(entry.flags as Array<{ name?: string; flag?: string; type?: string }>);
     try {
@@ -190,18 +190,18 @@ export const msmExecTool: ToolDefinition = tool({
 
     // 2. 调 msm-exec.ts（纯执行，无协议 flag）
     const result = await callMsmExec({
-      msm_name: input.msm_name,
+      msm_name: input.name,
       businessArgs: input.args,
     });
     log.info('msm', 'msm_exec result', {
-      name: input.msm_name,
+      name: input.name,
       exitCode: result.exitCode,
       stdoutLen: result.stdout.length,
       stderrLen: result.stderr.length,
     });
     // v1.15.1 §9: 错误路径保留 stdout
     if (result.exitCode !== 0) {
-      throw new MsmExecutionError(input.msm_name, result.exitCode, result.stdout, result.stderr);
+      throw new MsmExecutionError(input.name, result.exitCode, result.stdout, result.stderr);
     }
     return result.stdout || '(no output)';
   },

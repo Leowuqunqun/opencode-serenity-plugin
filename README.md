@@ -37,7 +37,7 @@ OpenCode Agent 原生的 `bash`、`read`、`edit`、`write` 可以访问整个�
 
 | # | 原则 | 含义 | 谁执行 |
 |---|------|------|--------|
-| P1 | **有根** | 容器有且仅有一个 `.serenity` 标记的根目录 | `file_system` 工具 |
+| P1 | **有根** | 容器有且仅有一个 `.serenity` 标记的根目录 | `cc-fs` 工具 |
 | P2 | **git 管** | 根目录必须在 git 管理下，所有变更可追溯 | 激活检查 + `msm_admin` 自动 commit |
 | P3 | **权限二分** | 根内完全读写，根外零权限 | `permission-guards` hook（RR5） |
 
@@ -52,9 +52,9 @@ OpenCode Agent 原生的 `bash`、`read`、`edit`、`write` 可以访问整个�
 | `msm_list` | 查看当前容器已注册的可执行操作（MSM）。**任何 shell 操作前先调这个。** |
 | `msm_exec` | 容器唯一标准执行路径。替代裸 bash。自动注入 `SERENITY_ROOT` / `SERENITY_CCC` / `SERENITY_VERSION` 到子进程。 |
 | `msm_admin` | 向容器注册新的 MSM。注册表变更自动 git commit。 |
-| `file_system` | 安全文件操作。12 个子命令：`root` / `resolve` / `exists` / `list` / `tree` / `relative` / `mkdir` / `rm` / `mv` / `cp` / `touch` / `append`。写操作限定在容器根内。 |
+| `cc-fs` | 安全文件操作。12 个子命令：`root` / `resolve` / `exists` / `list` / `tree` / `relative` / `mkdir` / `rm` / `mv` / `cp` / `touch` / `append`。写操作限定在容器根内。 |
 | `session` | 工作会话全周期管理。`create` / `list` / `show` / `health` / `qa` / `archive` / `summary`。CCCs 应注册 `session-tool` MSM 包装 `session`。 |
-| `ccc_status` | 容器健康检查。验证 P1（`.serenity` 存在）、P2（git 仓库）、P3（`opencode.json` 配置完整）。 |
+| `cc-ck` | 容器健康检查。验证 P1（`.serenity` 存在）、P2（git 仓库）、P3（`opencode.json` 配置完整）。 |
 
 ---
 
@@ -102,9 +102,9 @@ my-project-serenity/
 
 ```
 msm_list                    # 查看已注册 MSM
-ccc_status                  # 验证容器健康状态
+cc-ck                       # 验证容器健康状态
 session create --desc "my-first-task"
-file_system tree --path src/
+cc-fs tree --path src/
 ```
 
 ---

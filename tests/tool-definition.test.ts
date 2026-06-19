@@ -55,7 +55,7 @@ describe('tool.definition — serenity context injection', () => {
     // 可用工具
     expect(output.description).toContain('msm_list');
     expect(output.description).toContain('msm_exec');
-    expect(output.description).toContain('file_system');
+    expect(output.description).toContain('cc-fs');
     expect(output.description).toContain('session');
     expect(output.description).toContain('Launch a subagent');
     // 原始描述保留在尾部

@@ -85,7 +85,7 @@ function validateWritePath(root: string, target: string): string {
   const absPath = target.startsWith('/') ? normalize(target) : resolveRootPath(root, target);
   if (!isPathInsideSerenity(root, absPath)) {
     throw new FileSystemError(
-      `file-system: path "${target}" resolves to "${absPath}" which is outside serenity root "${root}"`,
+      `cc-fs: path "${target}" resolves to "${absPath}" which is outside serenity root "${root}"`,
     );
   }
   return absPath;
@@ -96,13 +96,13 @@ function assertNotProtected(root: string, absPath: string, targetLabel: string):
   const serenityMarker = resolve(root, '.serenity');
   if (absPath === serenityMarker) {
     throw new FileSystemError(
-      `file-system: refusing to delete protected path: ${targetLabel} (.serenity is the CCC marker)`,
+      `cc-fs: refusing to delete protected path: ${targetLabel} (.serenity is the CCC marker)`,
     );
   }
   // Protect the root directory itself
   if (absPath === root) {
     throw new FileSystemError(
-      `file-system: refusing to delete the CCC root directory: ${targetLabel}`,
+      `cc-fs: refusing to delete the CCC root directory: ${targetLabel}`,
     );
   }
 }
@@ -476,6 +476,6 @@ export const fileSystemTool: ToolDefinition = tool({
       return `appended ${Buffer.byteLength(content, 'utf8')} bytes to ${input.path}`;
     }
 
-    throw new FileSystemError(`file-system: unknown subcommand "${sub}"`);
+    throw new FileSystemError(`cc-fs: unknown subcommand "${sub}"`);
   },
 });

@@ -8,8 +8,9 @@
  *
  * design：
  * - system.transform（v0.3 扩展）：
- *   1) 注入 === Serenity Constraints === 摘要块（idempotent dedup）
- *   2) 注入 state.skillContent 全文（idempotent dedup）
+ *   1) 注入 === Serenity ACC === 认知块（仅 CCC 激活时）
+ *   2) 注入 === Serenity Constraints === 约束摘要块（idempotent dedup）
+ *   3) 注入 state.skillContent 全文（idempotent dedup）
  * - 同一 session 内 system.transform 可能被多次触发（每次重建 system prompt），
  *   通过检查 output.system 是否已包含目标内容实现 idempotent dedup（无状态）
  * - compacting 保留：避免 serenity 关键状态被压缩丢失
@@ -18,6 +19,9 @@
 import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
+import pkg from '../../package.json' with { type: 'json' };
+
+const VERSION: string = pkg.version;
 
 const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform']> = async (
   _input,
@@ -30,6 +34,26 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
   }
 
   const state = getState();
+
+  // ── 注入 ACC 认知（告诉 Agent 它在 ACC/CCC 体系中运行）──
+  // 仅在 CCC 已激活时注入
+  const accMarker = '=== Serenity ACC ===';
+  if (state.cccName && !output.system.some((s) => typeof s === 'string' && s.includes(accMarker))) {
+    const accBlock = [
+      '',
+      `=== Serenity ACC ===`,
+      `ACC: opencode-serenity-plugin v${VERSION}`,
+      `CCC: ${state.cccName}  Root: ${state.cwdRoot}`,
+      '',
+      `This agent is running inside a Cognitive Container (CCC) —`,
+      `a workspace managed by the ACC (Abstract Cognitive Container)`,
+      `plugin. The ACC provides 6 built-in tools (msm_list, msm_exec,`,
+      `msm_admin, cc-fs, session, cc-ck), path isolation (P3),`,
+      `and session tracking. Additional MSMs may be registered in this CCC.`,
+      '',
+    ].join('\n');
+    output.system.push(accBlock);
+  }
 
   // 注入操作约束摘要（帮助 Agent 理解运行上下文）
   // idempotent：检查 output.system 中是否已包含标记头
@@ -120,7 +144,7 @@ const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
     `Available serenity tools (subagent can use these):`,
     `  - msm_list  — discover registered MSM tools with descriptions`,
     `  - msm_exec  — execute an MSM by name with string array args`,
-    `  - file_system — safe file operations within serenity root`,
+    `  - cc-fs — safe file operations within serenity root`,
     `  - session — session lifecycle management`,
     ``,
     `IMPORTANT: Include this serenity context in the 'prompt'`,

@@ -5,7 +5,7 @@
  * 1. msm.ts 导出 msmExecTool / msmListTool / msmAdminTool
  * 2. msmExecTool §9 fix 行为：exit 1 + JSON stdout / stderr-only / exit 0 + 空 stdout
  * 3. happy path E2E：完整链路 msmExecTool → msm-call → msm-exec-runtime → spawn msm
- * 4. msm_name 不在注册表 → MsmNotRegisteredError
+ * 4. name 不在注册表 → MsmNotRegisteredError
  *
  * 真实 E2E：cwdRoot 内放真实 stub msm 脚本 + 注册表，不 mock callMsmExec / runMsmExec。
  * 这与 msm-call.test.ts 互补：那个文件 mock 掉 msm-exec-runtime 验证 callMsmExec 行为；
@@ -129,12 +129,12 @@ describe('msmExecTool §9 fix: preserves stdout/stderr in MsmExecutionError', ()
 
     const { msmExecTool } = await import('../src/msm.js');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const promise = (msmExecTool.execute as any)({ msm_name: msmName, args: ['/nonexistent'] });
+    const promise = (msmExecTool.execute as any)({ name: msmName, args: ['/nonexistent'] });
     await expect(promise).rejects.toThrow(/FILE_NOT_FOUND/);
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (msmExecTool.execute as any)({ msm_name: msmName, args: ['/nonexistent'] });
+      await (msmExecTool.execute as any)({ name: msmName, args: ['/nonexistent'] });
       throw new Error('should not reach');
     } catch (err) {
       const { MsmExecutionError } = await import('../src/errors.js');
@@ -165,7 +165,7 @@ describe('msmExecTool §9 fix: preserves stdout/stderr in MsmExecutionError', ()
     const { msmExecTool } = await import('../src/msm.js');
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (msmExecTool.execute as any)({ msm_name: msmName, args: [] });
+      await (msmExecTool.execute as any)({ name: msmName, args: [] });
       throw new Error('should not reach');
     } catch (err) {
       const { MsmExecutionError } = await import('../src/errors.js');
@@ -187,7 +187,7 @@ describe('msmExecTool §9 fix: preserves stdout/stderr in MsmExecutionError', ()
 
     const { msmExecTool } = await import('../src/msm.js');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await (msmExecTool.execute as any)({ msm_name: msmName, args: [] });
+    const result = await (msmExecTool.execute as any)({ name: msmName, args: [] });
     expect(result).toBe('(no output)');
   });
 });
@@ -220,7 +220,7 @@ describe('msmExecTool happy path E2E (完整链路)', () => {
 
     const { msmExecTool } = await import('../src/msm.js');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await (msmExecTool.execute as any)({ msm_name: msmName, args: ['hello', 'world'] });
+    const result = await (msmExecTool.execute as any)({ name: msmName, args: ['hello', 'world'] });
     expect(result).toBe('echo:hello,world\n');
   });
 });
@@ -236,7 +236,7 @@ describe('msmExecTool 错误路径', () => {
     rmSync(cwd, { recursive: true, force: true });
   });
 
-  it('msm_name 不在注册表 → 抛 MsmNotRegisteredError', async () => {
+  it('name 不在注册表 → 抛 MsmNotRegisteredError', async () => {
     // 注册表为空
     const regDir = join(cwd, '.opencode', 'skills', INSTANCE, 'references');
     mkdirSync(regDir, { recursive: true });
@@ -253,11 +253,11 @@ describe('msmExecTool 错误路径', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await expect(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msmExecTool.execute as any)({ msm_name: 'not-registered', args: [] }),
+      (msmExecTool.execute as any)({ name: 'not-registered', args: [] }),
     ).rejects.toThrow(/not in mech-registry/);
   });
 
-  it('msm_name 在注册表但脚本文件不存在 → 业务 msm 失败 (runBusinessMsm spawn 抛错)', async () => {
+  it('name 在注册表但脚本文件不存在 → 业务 msm 失败 (runBusinessMsm spawn 抛错)', async () => {
     const msmName = 'ghost';
     // 只写注册表，不写脚本
     writeRegistryWithEntry(cwd, msmName);
@@ -267,7 +267,7 @@ describe('msmExecTool 错误路径', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await expect(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msmExecTool.execute as any)({ msm_name: msmName, args: [] }),
+      (msmExecTool.execute as any)({ name: msmName, args: [] }),
     ).rejects.toThrow();
   });
 });

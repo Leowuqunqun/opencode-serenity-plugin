@@ -55,9 +55,9 @@ const plugin: Plugin = async (input) => {
       msm_list: msmListTool,
       msm_exec: msmExecTool,
       msm_admin: msmAdminTool,
-      file_system: fileSystemTool, // v0.1 D4: 跨实例文件系统工具
+      cc_fs: fileSystemTool, // v0.1 D4: 跨实例文件系统工具 (D20: renamed to cc-fs)
       session: sessionTool, // v0.1 D5: 通用会话管理工具
-      ccc_status: cccStatusTool, // v0.3 D18: CCC 三原则状态检查
+      cc_ck: cccStatusTool, // v0.3 D18: CCC 三原则状态检查
     },
     ...createPermissionGuards(),
     ...createCompactingHooks(),

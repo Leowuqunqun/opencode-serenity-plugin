@@ -15,7 +15,8 @@
 
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import { z } from 'zod';
-import { findSerenityRoot, resolveRootPath } from '../fs/resolve-path.js';
+import { findSerenityRoot, resolveRootPath, readSerenityCccName } from '../fs/resolve-path.js';
+import { loadMechRegistryFrom } from '../msm.js';
 import { SessionError } from '../errors.js';
 import {
   listSessions,
@@ -73,17 +74,25 @@ export const sessionTool: ToolDefinition = tool({
     const root = findSerenityRoot(cwd);
     const sessionsDir = resolveRootPath(root, 'AGENT_SESSIONS');
 
+    // 检测 CCC 是否注册了 session-tool MSM（D21：CCC 扩展层）
+    const cccName = readSerenityCccName(root);
+    const entries = cccName ? loadMechRegistryFrom(root, cccName) : [];
+    const hasSessionTool = entries.some(e => e.name === 'session-tool');
+    const extHint = hasSessionTool
+      ? '\n\n[CCC] session-tool MSM 已注册，请参考 session-tool 使用扩展能力'
+      : '\n\n[CCC] 如需扩展会话能力，可注册 session-tool MSM (msm_admin register)';
+
     const sub = input.subcommand;
 
     if (sub === 'list') {
-      return listSessions(sessionsDir);
+      return listSessions(sessionsDir) + extHint;
     }
 
     if (sub === 'show') {
       if (!input.name) {
         throw new SessionError('session-tool show: requires --name (S### or directory name)');
       }
-      return showSession(sessionsDir, input.name);
+      return showSession(sessionsDir, input.name) + extHint;
     }
 
     if (sub === 'create') {
@@ -99,11 +108,11 @@ export const sessionTool: ToolDefinition = tool({
         type: input.type ?? 'item',
         goal: input.goal,
         dryRun: input['dry-run'] ?? false,
-      });
+      }) + extHint;
     }
 
     if (sub === 'health') {
-      return healthCheck(sessionsDir);
+      return healthCheck(sessionsDir) + extHint;
     }
 
     if (sub === 'archive') {
@@ -111,18 +120,18 @@ export const sessionTool: ToolDefinition = tool({
         sessionsDir,
         name: input.name,
         dryRun: input['dry-run'] ?? false,
-      });
+      }) + extHint;
     }
 
     if (sub === 'summary') {
-      return sessionSummary(sessionsDir);
+      return sessionSummary(sessionsDir) + extHint;
     }
 
     if (sub === 'qa') {
       if (!input.name) {
         throw new SessionError('session-tool qa: requires --name (S### or directory name)');
       }
-      return qaSession(sessionsDir, input.name);
+      return qaSession(sessionsDir, input.name) + extHint;
     }
 
     throw new SessionError(`session-tool: unknown subcommand "${sub}"`);

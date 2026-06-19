@@ -366,9 +366,21 @@ function parseArgs(argv: string[]): ParsedArgs {
 // ── 业务 msm 执行 (S028: 接受 cwd 参数, timeout 30s → 600s) ──
 
 function runBusinessMsm(entry: RegistryEntry, businessArgs: string[], cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  // 预检脚本文件存在性 — 防 npx tsx 在文件缺失时卡住不退出
+  const absPath = resolve(cwd, entry.path);
+  if (!existsSync(absPath)) {
+    return Promise.reject(
+      new MsmExecError(
+        "SCRIPT_NOT_FOUND",
+        "system",
+        `业务 MSM 脚本文件不存在: ${absPath}`,
+        { msmName: entry.name, path: entry.path },
+        "确认 msm_admin register 的参数 path 正确，或脚本文件未被删除",
+      ),
+    );
+  }
+
   return new Promise((resolveRun, rejectRun) => {
-    // 路径必须解析到 cwd 内（防路径逃逸）
-    const absPath = resolve(cwd, entry.path);
     // 注：path.escape 校验由 plugin 端的 v0.1-2 path-arg guard 负责
     // msm-exec-runtime 这里只 spawn，不再做二次校验（避免重复）
 

@@ -1,7 +1,7 @@
 /**
  * opencode-serenity-plugin — server entry
  *
- * 职责：注册 6 个自定义工具 + 6 个 system hook，实现 serenity 认知基础设施的
+ * 职责：注册 8 个自定义工具 + 6 个 system hook，实现 serenity 认知基础设施的
  *       plugin 层（MSM 框架、文件系统操作、会话管理、路径守卫、skill 注入等）。
  *
  * 设计文档见 docs/：
@@ -29,6 +29,8 @@ import {
 import { fileSystemTool } from './fs/file-system-tool.js';
 import { sessionTool } from './session/session-tool.js';
 import { cccStatusTool } from './ccc-status.js';
+import { eapTool } from './eap-tool.js';
+import { neatTool } from './neat-tool.js';
 import { createPermissionGuards } from './hooks/permission-guards.js';
 import { createCompactingHooks } from './hooks/compacting.js';
 import { createShellEnv } from './hooks/shell-env.js';
@@ -58,6 +60,8 @@ const plugin: Plugin = async (input) => {
       cc_fs: fileSystemTool, // v0.1 D4: 跨实例文件系统工具 (D20: renamed to cc-fs)
       session: sessionTool, // v0.1 D5: 通用会话管理工具
       cc_ck: cccStatusTool, // v0.3 D18: CCC 三原则状态检查
+      eap: eapTool,        // v0.3: EAP 认知质量框架 (渐进式披露)
+      neat: neatTool,      // v0.3: Neat 设计协作协议 (渐进式披露)
     },
     ...createPermissionGuards(),
     ...createCompactingHooks(),

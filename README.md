@@ -43,7 +43,7 @@ OpenCode Agent 原生的 `bash`、`read`、`edit`、`write` 可以访问整个�
 
 ---
 
-## 6 个工具
+## 8 个工具
 
 安装后 Agent 获得以下工具，替代裸 bash 和原生文件操作：
 
@@ -55,6 +55,8 @@ OpenCode Agent 原生的 `bash`、`read`、`edit`、`write` 可以访问整个�
 | `cc-fs` | 安全文件操作。12 个子命令：`root` / `resolve` / `exists` / `list` / `tree` / `relative` / `mkdir` / `rm` / `mv` / `cp` / `touch` / `append`。写操作限定在容器根内。 |
 | `session` | 工作会话全周期管理。`create` / `list` / `show` / `health` / `qa` / `archive` / `summary`。CCCs 应注册 `session-tool` MSM 包装 `session`。 |
 | `cc-ck` | 容器健康检查。验证 P1（`.serenity` 存在）、P2（git 仓库）、P3（`opencode.json` 配置完整）。 |
+| `eap` | EAP 认知质量框架 | 认知容器建立在 EAP 理论基础上——"思维的功能价值与其外部可重建性成正比"。提供完整的诊断方法论和实践指南 |
+| `neat` | Neat 设计协作协议 | EAP 的实践方法论——小步对齐、显式决策、文档驱动。设计/需求对齐时的结构化协作流程 |
 
 ---
 
@@ -70,7 +72,7 @@ npx opencode-serenity-plugin install
 
 | 目标 | 路径 | 作用 |
 |------|------|------|
-| 项目级 | 当前目录 `opencode.json` | 注册 6 个工具 |
+| 项目级 | 当前目录 `opencode.json` | 注册 8 个工具 |
 | 全局级 | `~/.config/opencode/tui.json` | 注册 `/serenity-init` slash command |
 
 ---

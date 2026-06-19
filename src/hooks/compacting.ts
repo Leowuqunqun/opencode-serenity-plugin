@@ -1,14 +1,17 @@
 /**
- * Compacting / System Transform Hook 工厂
+ * Compacting / System Transform / Tool Definition Hook 工厂
  *
  * 包含：
- * 1. experimental.chat.system.transform — 注入 SKILL.md 全文到 system prompt
+ * 1. experimental.chat.system.transform — 注入操作约束摘要 + SKILL.md 全文到 system prompt
  * 2. experimental.session.compacting — 压缩时注入"serenity 关键状态" context
+ * 3. tool.definition — 为 subagent task tool 注入约束警告 + 可用工具
  *
- * 设计：
- * - system.transform 唯一职责：把 state.skillContent 全文 push 到 system prompt
+ * design：
+ * - system.transform（v0.3 扩展）：
+ *   1) 注入 === Serenity Constraints === 摘要块（idempotent dedup）
+ *   2) 注入 state.skillContent 全文（idempotent dedup）
  * - 同一 session 内 system.transform 可能被多次触发（每次重建 system prompt），
- *   通过检查 output.system 是否已包含 skillContent 实现 idempotent dedup（无状态）
+ *   通过检查 output.system 是否已包含目标内容实现 idempotent dedup（无状态）
  * - compacting 保留：避免 serenity 关键状态被压缩丢失
  */
 
@@ -28,12 +31,22 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
 
   const state = getState();
 
-  // 注入根目录绝对路径 + 实例名（帮助 Agent 避免路径错误）
-  // idempotent：检查 output.system 中是否已包含该标记
-  const rootMarker = `[Serenity Root] ${state.cwdRoot}`;
-  if (!output.system.some(s => typeof s === 'string' && s.includes(rootMarker))) {
-    const rootInfo = `\n${rootMarker} — Instance: ${state.instanceName}\n`;
-    output.system.push(rootInfo);
+  // 注入操作约束摘要（帮助 Agent 理解运行上下文）
+  // idempotent：检查 output.system 中是否已包含标记头
+  const marker = '=== Serenity Constraints ===';
+  if (!output.system.some(s => typeof s === 'string' && s.includes(marker))) {
+    const block = [
+      '',
+      '=== Serenity Constraints ===',
+      `Root: ${state.cwdRoot}`,
+      '  • File access → read/edit/write/grep/glob limited to root (RR5)',
+      '  • Shell → use msm_exec (bash may be disabled)',
+      '  • Subagent → inherits ALL constraints (no bypass)',
+      '  • SSH → use ssh-connect (not raw ssh)',
+      '  • Multi-step → session-tool create first',
+      '',
+    ].join('\n');
+    output.system.push(block);
   }
 
   // 注入 SKILL.md 全文

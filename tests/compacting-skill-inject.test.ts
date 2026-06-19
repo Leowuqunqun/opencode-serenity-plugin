@@ -1,16 +1,14 @@
 /**
- * v1.4 system.transform SKILL.md 注入单测
+ * v1.4 + v0.3 system.transform 注入单测
  *
  * 覆盖：
- * 1. plugin 激活 + skillContent 有值 → 注入到 output.system
- * 2. plugin 未激活 → 跳过（不注入）
- * 3. skillContent 为 null → 跳过
- * 4. 同一 session 多次调用 → dedup（只首次注入）
+ * 1. plugin 激活 + skillContent 有值 → constraints block + SKILL.md 注入
+ * 2. plugin 未激活 → 跳过
+ * 3. skillContent 为 null → constraints block 仍注入，SKILL.md 跳过
+ * 4. 同一 session 多次调用 → constraints block + SKILL.md 都 dedup
  * 5. 不同 session → 各自独立注入
- *
- * v0.3 新增：[Serenity Root] 路径注入 + idempotent dedup
- * - root marker 在 SKILL.md 之前注入
- * - skillContent 为 null 时 root marker 仍注入
+ * 6. constraints block 包含正确的约束条目
+ * 7. session.compacting 仍正常工作
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -34,7 +32,7 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     resetState();
   });
 
-  it('plugin 激活 + skillContent 有值 → root marker + SKILL.md 都注入', async () => {
+  it('plugin 激活 + skillContent 有值 → constraints block + SKILL.md 都注入', async () => {
     setState(makeState());
     markReady();
     const hooks = createCompactingHooks();
@@ -44,10 +42,14 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     const output = { system: [] as string[] };
     await hook!({ sessionID: 'sess-1' } as any, output);
     expect(output.system).toHaveLength(2);
-    // index 0: root marker
-    expect(output.system[0]).toContain('[Serenity Root]');
-    expect(output.system[0]).toContain('/repo');
-    expect(output.system[0]).toContain('Instance: home-serenity');
+    // index 0: constraints block
+    expect(output.system[0]).toContain('=== Serenity Constraints ===');
+    expect(output.system[0]).toContain('Root: /repo');
+    expect(output.system[0]).toContain('File access');
+    expect(output.system[0]).toContain('RR5');
+    expect(output.system[0]).toContain('msm_exec');
+    expect(output.system[0]).toContain('ssh-connect');
+    expect(output.system[0]).toContain('session-tool');
     // index 1: SKILL.md
     expect(output.system[1]).toBe('# Mock SKILL.md\n\nThis is the test skill content.');
   });
@@ -63,7 +65,7 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     expect(output.system).toHaveLength(0);
   });
 
-  it('skillContent 为 null（SKILL.md 读失败）→ root marker 仍注入，SKILL.md 跳过', async () => {
+  it('skillContent 为 null（SKILL.md 读失败）→ constraints block 仍注入，SKILL.md 跳过', async () => {
     setState(makeState({ skillContent: null }));
     markReady();
     const hooks = createCompactingHooks();
@@ -72,13 +74,13 @@ describe('v1.4 system.transform SKILL.md injection', () => {
 
     const output = { system: [] as string[] };
     await hook!({ sessionID: 'sess-3' } as any, output);
-    // root marker 不受 skillContent 影响
+    // constraints block 不受 skillContent 影响
     expect(output.system).toHaveLength(1);
-    expect(output.system[0]).toContain('[Serenity Root]');
-    expect(output.system[0]).toContain('/repo');
+    expect(output.system[0]).toContain('=== Serenity Constraints ===');
+    expect(output.system[0]).toContain('Root: /repo');
   });
 
-  it('同一 session 多次调用 → root marker + SKILL.md 都 dedup（各只注入一次）', async () => {
+  it('同一 session 多次调用 → constraints block + SKILL.md 都 dedup（各只注入一次）', async () => {
     setState(makeState());
     markReady();
     const hooks = createCompactingHooks();
@@ -88,13 +90,13 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     await hook({ sessionID: 'sess-dedup' } as any, output);
     await hook({ sessionID: 'sess-dedup' } as any, output);
     await hook({ sessionID: 'sess-dedup' } as any, output);
-    // root marker (1) + SKILL.md (1) = 2，不会堆积
+    // constraints block (1) + SKILL.md (1) = 2，不会堆积
     expect(output.system).toHaveLength(2);
-    expect(output.system[0]).toContain('[Serenity Root]');
+    expect(output.system[0]).toContain('=== Serenity Constraints ===');
     expect(output.system[1]).toContain('Mock SKILL.md');
   });
 
-  it('不同 session → 各自独立注入（root marker + SKILL.md 各一份）', async () => {
+  it('不同 session → 各自独立注入（constraints block + SKILL.md 各一份）', async () => {
     setState(makeState());
     markReady();
     const hooks = createCompactingHooks();
@@ -108,10 +110,50 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     await hook({ sessionID: 'sess-B' } as any, outputB);
     expect(outputA.system).toHaveLength(2);
     expect(outputB.system).toHaveLength(2);
-    expect(outputA.system[0]).toContain('[Serenity Root]');
+    expect(outputA.system[0]).toContain('=== Serenity Constraints ===');
+    expect(outputA.system[0]).toContain('Root: /repo');
     expect(outputA.system[1]).toContain('Mock SKILL.md');
-    expect(outputB.system[0]).toContain('[Serenity Root]');
+    expect(outputB.system[0]).toContain('=== Serenity Constraints ===');
+    expect(outputB.system[0]).toContain('Root: /repo');
     expect(outputB.system[1]).toContain('Mock SKILL.md');
+  });
+
+  it('constraints block 包含全部 5 条约束条目', async () => {
+    setState(makeState());
+    markReady();
+    const hooks = createCompactingHooks();
+    const hook = hooks['experimental.chat.system.transform']!;
+
+    const output = { system: [] as string[] };
+    await hook({ sessionID: 'sess-all' } as any, output);
+    const block = output.system[0];
+
+    expect(block).toContain('=== Serenity Constraints ===');
+    expect(block).toContain('Root: /repo');
+    // 5 条约束
+    expect(block).toContain('File access');
+    expect(block).toContain('RR5');
+    expect(block).toContain('msm_exec');
+    expect(block).toContain('bash may be disabled');
+    expect(block).toContain('inherits ALL constraints');
+    expect(block).toContain('no bypass');
+    expect(block).toContain('ssh-connect');
+    expect(block).toContain('session-tool');
+  });
+
+  it('constraints block 不使用旧 [Serenity Root] 格式', async () => {
+    setState(makeState());
+    markReady();
+    const hooks = createCompactingHooks();
+    const hook = hooks['experimental.chat.system.transform']!;
+
+    const output = { system: [] as string[] };
+    await hook({ sessionID: 'sess-oldfmt' } as any, output);
+    const block = output.system[0];
+
+    // 确保旧格式被完全替换
+    expect(block).not.toContain('[Serenity Root]');
+    expect(block).not.toContain('Instance: home-serenity');
   });
 
   it('session.compacting 仍注入状态（RR7 兼容保留）', async () => {

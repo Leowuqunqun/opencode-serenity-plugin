@@ -135,12 +135,14 @@ export const msmListTool: ToolDefinition = tool({
       log.warn('msm', 'msm_list: plugin not active', { reason });
       return `CCC is not active: ${reason}`;
     }
+    const state = getState();
     const registry = loadMechRegistry();
-    log.info('msm', 'msm_list result', { count: registry.length, cwdRoot: getState().cwdRoot });
+    log.info('msm', 'msm_list result', { count: registry.length, cwdRoot: state.cwdRoot });
+    const header = `(serenity-plugin v${VERSION})  CCC: ${state.cccName}  Root: ${state.cwdRoot}`;
     if (registry.length === 0) {
-      return `(serenity-plugin v${VERSION})\n(no MSM registered)`;
+      return `${header}\n(no MSM registered)`;
     }
-    return `(serenity-plugin v${VERSION})\n` + registry.map((e) => `${e.name} | ${e.skill} | ${e.category} | ${e.description}`).join('\n');
+    return `${header}\n` + registry.map((e) => `${e.name} | ${e.skill} | ${e.category} | ${e.description}`).join('\n');
   },
 });
 
@@ -240,7 +242,7 @@ async function registerMsmInner(input: RegisterInput): Promise<string> {
   }
 
   // 3. 路径必须在 cwdRoot 内
-  const absPath = resolve(state.cwdRoot, input.path);
+  const absPath = input.path.startsWith('/') ? input.path : resolve(state.cwdRoot, input.path);
   if (!isPathInside(state.cwdRoot, absPath)) {
     throw new MsmPathEscapeError(input.name, 'path', input.path, absPath);
   }

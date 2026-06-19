@@ -111,7 +111,7 @@ function assertNotProtected(root: string, absPath: string, targetLabel: string):
 
 const SUBCOMMANDS = [
   'root', 'resolve', 'exists', 'list', 'relative',
-  'mkdir', 'rm', 'mv', 'cp', 'touch',
+  'mkdir', 'rm', 'mv', 'cp', 'touch', 'tree', 'append',
 ] as const;
 
 export const fileSystemTool: ToolDefinition = tool({
@@ -134,13 +134,15 @@ export const fileSystemTool: ToolDefinition = tool({
         '  rm       — Delete files/directories (batch: pass multiple paths via paths arg)\n' +
         '  mv       — Move or rename a file/directory\n' +
         '  cp       — Copy a file or directory\n' +
-        '  touch    — Create empty file or update timestamp',
+        '  touch    — Create empty file or update timestamp\n' +
+        '  tree     — Recursive directory listing, tree-like output as JSON\n' +
+        '  append   — Append content to a file (like shell >>)',
       ),
     path: z
       .string()
       .optional()
       .describe(
-        'Single path argument for resolve/exists/list/relative/mkdir/touch subcommands. ' +
+        'Single path argument for resolve/exists/list/relative/mkdir/touch/tree/append subcommands. ' +
         'Can be relative (from serenity root) or absolute (must be inside serenity root for write operations).',
       ),
     paths: z
@@ -169,6 +171,28 @@ export const fileSystemTool: ToolDefinition = tool({
       .optional()
       .default(false)
       .describe('Preview changes without actually modifying files. Supported by rm.'),
+    depth: z
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .optional()
+      .default(3)
+      .describe('Max depth for tree subcommand (1-10, default 3)'),
+    'files-only': z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('With tree: show only files'),
+    'dirs-only': z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('With tree: show only directories'),
+    content: z
+      .string()
+      .optional()
+      .describe('Content to append (for append subcommand)'),
   },
   execute: async (input, ctx) => {
     const cwd = ctx.directory;
@@ -378,6 +402,78 @@ export const fileSystemTool: ToolDefinition = tool({
       }
       writeFileSync(absPath, '', 'utf8');
       return `created empty file: ${input.path}`;
+    }
+
+    // ── tree (recursive directory listing) ──
+    if (sub === 'tree') {
+      if (!input.path) throw new FileSystemError('file-system tree: requires a path argument');
+      const absPath = input.path.startsWith('/')
+        ? input.path
+        : resolveRootPath(root, input.path);
+
+      if (!existsSync(absPath)) {
+        throw new FileSystemError(`file-system tree: path "${absPath}" does not exist`);
+      }
+
+      const maxDepth = input.depth ?? 3;
+      const filesOnly = input['files-only'] ?? false;
+      const dirsOnly = input['dirs-only'] ?? false;
+
+      function filterTree(entries: any[], keepType: string): any[] {
+        return entries.filter(e => {
+          if (e.type === keepType) {
+            if (e.children) e.children = filterTree(e.children, keepType);
+            return true;
+          }
+          return false;
+        });
+      }
+
+      function walk(dir: string, currentDepth: number): any[] {
+        if (currentDepth > maxDepth) return [];
+        const names = readdirSync(dir).sort();
+        return names.map(name => {
+          const full = resolve(dir, name);
+          const stat = statSync(full);
+          const entry: any = {
+            name,
+            type: detectFileType(stat),
+            size: stat.size,
+            sizeHuman: humanSize(stat.size),
+          };
+          if (stat.isDirectory()) {
+            entry.children = walk(full, currentDepth + 1);
+          }
+          return entry;
+        });
+      }
+
+      let entries = walk(absPath, 1);
+
+      if (filesOnly) {
+        entries = filterTree(entries, 'file');
+      }
+      if (dirsOnly) {
+        entries = filterTree(entries, 'dir');
+      }
+
+      return JSON.stringify({ path: absPath, entries, maxDepth }, null, 2);
+    }
+
+    // ── append (append content to file) ──
+    if (sub === 'append') {
+      if (!input.path) throw new FileSystemError('file-system append: requires a path argument');
+      if (!input.content) throw new FileSystemError('file-system append: requires content argument');
+      const absPath = validateWritePath(root, input.path);
+
+      const parentDir = dirname(absPath);
+      if (!existsSync(parentDir)) {
+        mkdirSync(parentDir, { recursive: true });
+      }
+
+      const content = input.content;
+      writeFileSync(absPath, content, { flag: 'a' });
+      return `appended ${Buffer.byteLength(content, 'utf8')} bytes to ${input.path}`;
     }
 
     throw new FileSystemError(`file-system: unknown subcommand "${sub}"`);

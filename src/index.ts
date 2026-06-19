@@ -1,7 +1,7 @@
 /**
  * opencode-serenity-plugin — server entry
  *
- * 职责：注册 5 个自定义工具 + 6 个 system hook，实现 serenity 认知基础设施的
+ * 职责：注册 6 个自定义工具 + 6 个 system hook，实现 serenity 认知基础设施的
  *       plugin 层（MSM 框架、文件系统操作、会话管理、路径守卫、skill 注入等）。
  *
  * 设计文档见 docs/：
@@ -28,6 +28,7 @@ import {
 } from './msm.js';
 import { fileSystemTool } from './fs/file-system-tool.js';
 import { sessionTool } from './session/session-tool.js';
+import { cccStatusTool } from './ccc-status.js';
 import { createPermissionGuards } from './hooks/permission-guards.js';
 import { createCompactingHooks } from './hooks/compacting.js';
 import { createShellEnv } from './hooks/shell-env.js';
@@ -56,6 +57,7 @@ const plugin: Plugin = async (input) => {
       msm_admin: msmAdminTool,
       file_system: fileSystemTool, // v0.1 D4: 跨实例文件系统工具
       session_tool: sessionTool, // v0.1 D5: 通用会话管理工具
+      ccc_status: cccStatusTool, // v0.3 D18: CCC 三原则状态检查
     },
     ...createPermissionGuards(),
     ...createCompactingHooks(),

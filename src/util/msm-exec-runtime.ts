@@ -62,6 +62,8 @@ import { readFileSync, appendFileSync, existsSync, writeFileSync, mkdirSync } fr
 import { spawn } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { getState } from "../state.js";
+import pkg from "../../package.json" with { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -384,8 +386,17 @@ function runBusinessMsm(entry: RegistryEntry, businessArgs: string[], cwd: strin
     // 注：path.escape 校验由 plugin 端的 v0.1-2 path-arg guard 负责
     // msm-exec-runtime 这里只 spawn，不再做二次校验（避免重复）
 
+    const state = getState();
     const child = spawn("npx", ["tsx", absPath, ...businessArgs], {
       cwd,
+      env: state.activated
+        ? {
+            ...process.env,
+            SERENITY_ROOT: state.cwdRoot,
+            SERENITY_CCC: state.cccName,
+            SERENITY_VERSION: pkg.version,
+          }
+        : process.env,
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 600_000, // S028 D11: 30s → 600s 统一
     });

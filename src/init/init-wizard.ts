@@ -99,23 +99,37 @@ interface CollectedInfo {
 }
 
 async function collectInfo(prefill: string): Promise<CollectedInfo> {
+  process.stdout.write('\n  Welcome to Serenity CCC initialization!\n');
+  process.stdout.write("  Let's set up your new cognitive container.\n\n");
+
   const prefix = await askQuestion(
-    'CCC prefix? (kebab-case, e.g. "home", "work")',
+    '  What would you like to name it?\n'
+    + '    (lowercase letters, numbers, dashes — e.g. "home", "work-project")\n'
+    + '  > ',
     prefill,
   );
 
   const description = await askQuestion(
-    'What does this CCC manage? (one sentence)',
+    '\n  What does it manage, in one sentence?\n'
+    + '    (e.g. "Manages home network, NAS, and smart home")\n'
+    + '  > ',
   );
 
   const remote = await askQuestion(
-    'Git SSH URL? (e.g. git@github.com:user/work-serenity.git, repo must be empty)',
+    '\n  [Optional] Git remote URL for version control?\n'
+    + '    (e.g. git@github.com:user/my-serenity.git — repo must be empty)\n'
+    + '  > ',
   );
 
   const scope = await askQuestion(
-    'Scale? [solo/small-team/team/enterprise]',
+    '\n  How many people will use this CCC?\n'
+    + '    solo  = just you\n'
+    + '    team  = multiple people\n'
+    + '  > ',
     'solo',
   );
+
+  process.stdout.write('\n');
 
   return {
     prefix: prefix || prefill,
@@ -246,21 +260,27 @@ function buildSkeleton(
         entries: [
           {
             name: 'compass-tool',
+            path: '.opencode/skills/compass/scripts/compass-tool.ts',
             skill: 'compass',
             category: 'mech',
             description: '方向判断工具。validate: 信号报告格式校验；judge: 3 通道条件评估与决策矩阵。',
+            usage: 'npx tsx .opencode/skills/compass/scripts/compass-tool.ts <validate|judge> [args...]',
           },
           {
             name: 'session-tool',
+            path: '.opencode/skills/session/scripts/session-tool.ts',
             skill: 'session',
             category: 'mech',
-            description: '会话索引重建工具（ACC session 补充）。为历史会话分配编号并重命名目录。',
+            description: '会话索引重建工具（ACC session 补充）。为历史会话分配 S### 编号并重命名目录。',
+            usage: 'npx tsx .opencode/skills/session/scripts/session-tool.ts reindex',
           },
           {
             name: 'sqc-tool',
+            path: '.opencode/skills/sqc/scripts/sqc-tool.ts',
             skill: 'sqc',
             category: 'semi-mech',
             description: 'SQC 品质循环工具。check: 品质检查；report: 验证报告；pipeline: 5 阶段流水线编排。',
+            usage: 'npx tsx .opencode/skills/sqc/scripts/sqc-tool.ts <check|report|pipeline> [args...]',
           },
         ],
       }, null, 2) + '\n',
@@ -480,7 +500,8 @@ export async function initWizard(opts: InitOptions): Promise<InitResult> {
     'Next steps (two-phase init):',
     `  Phase 1 ✅  — CCC skeleton created.`,
     `  Phase 2 ⏳  — Restart OpenCode and open ${targetPath}.`,
-    `     The Agent will automatically guide you through a 4-question interview`,
+    `     Type anything — your first message will be intercepted`,
+    `     and the Agent will guide you through a 4-question interview`,
     `     to complete the root skill configuration.`,
     templatesMissing ? '  (Some skill templates not found — run `opencode-serenity-plugin install-skill <name>` to add them later)' : '',
   ].filter(Boolean).join('\n');

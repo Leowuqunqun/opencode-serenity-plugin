@@ -52,6 +52,19 @@ export function isPathInside(parentPath: string, childPath: string): boolean {
   return child === parent || child.startsWith(parent + '/');
 }
 
+/** git init -b main（用于自动初始化非 git 目录） */
+export function gitInit(cwd: string): void {
+  try {
+    execFileSync('git', ['init', '-b', 'main'], { cwd, stdio: 'ignore' });
+    // 设置 user identity（git config），否则 commit 会失败
+    execFileSync('git', ['config', 'user.email', 'serenity@ccc.local'], { cwd, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Serenity CCC'], { cwd, stdio: 'ignore' });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`git init failed: ${reason}`);
+  }
+}
+
 /** git repo 是否是干净的（用于 RR7 init 前的 sanity check） */
 export function isGitClean(cwd: string): boolean {
   try {

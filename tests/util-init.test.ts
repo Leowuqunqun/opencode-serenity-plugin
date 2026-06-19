@@ -169,10 +169,24 @@ describe('initSerenity', () => {
     }
   });
 
-  it('not in git repo → throws NotInGitRepoError', async () => {
-    const tmp = mkdtempSync(join(tmpdir(), 'init-nogit-'));
+  it('not in git repo → auto git init + create (v0.4 auto-init)', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'init-autogit-'));
     try {
-      await expect(initSerenity(tmp, 'xx')).rejects.toThrow(NotInGitRepoError);
+      const result = await initSerenity(tmp, 'xx');
+      expect(result.kind).toBe('created');
+      if (result.kind === 'created') {
+        expect(result.name).toBe('xx-serenity');
+      }
+      // 验证 git repo 已创建
+      const gitDir = join(tmp, '.git');
+      expect(existsSync(gitDir)).toBe(true);
+      // 验证 .serenity 已写入
+      expect(readSerenityFileOrFail(tmp)).toBe('xx-serenity');
+      // 验证 git commit 已生成
+      const commitLog = execFileSync('git', ['log', '--oneline'], { cwd: tmp, encoding: 'utf-8' });
+      const commits = commitLog.trim().split('\n').filter(Boolean);
+      expect(commits).toHaveLength(1);
+      expect(commits[0]).toContain('init serenity');
     } finally {
       cleanup(tmp);
     }

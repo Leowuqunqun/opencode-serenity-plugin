@@ -15,7 +15,7 @@
  * - readSerenityFile 用于 "already" 路径回读现有实例名
  */
 
-import { findGitRoot, gitAddAndCommit } from './git.js';
+import { findGitRoot, gitAddAndCommit, gitInit, tryFindGitRoot } from './git.js';
 import {
   serenityFileExists,
   writeSerenityFile,
@@ -84,7 +84,12 @@ export async function initSerenity(cwd: string, prefix: string): Promise<InitRes
     throw new InvalidCccNameError(prefix);
   }
 
-  const gitRoot = findGitRoot(cwd);
+  // v0.4: 非 git 目录时自动 git init，消除鸡生蛋死锁
+  let gitRoot = tryFindGitRoot(cwd);
+  if (!gitRoot) {
+    gitInit(cwd);
+    gitRoot = findGitRoot(cwd); // 验证 init 成功
+  }
 
   if (serenityFileExists(gitRoot)) {
     const name = readSerenityFile(gitRoot);

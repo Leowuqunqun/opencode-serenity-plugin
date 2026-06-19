@@ -88,6 +88,12 @@ function validateWritePath(root: string, target: string): string {
       `cc-fs: path "${target}" resolves to "${absPath}" which is outside serenity root "${root}"`,
     );
   }
+  // 保护 mech-registry.json — 只能通过 msm_admin 注册/注销
+  if (absPath.endsWith('/mech-registry.json') && absPath.includes('/.opencode/skills/')) {
+    throw new FileSystemError(
+      `cc-fs: refusing to directly modify mech-registry.json — use msm_admin register/deregister instead`,
+    );
+  }
   return absPath;
 }
 

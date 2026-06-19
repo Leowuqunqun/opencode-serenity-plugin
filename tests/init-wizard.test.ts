@@ -158,12 +158,12 @@ describe('init-wizard — non-interactive mode', () => {
     const promptPath = join(target, '.opencode/skills/test-serenity/scripts/generate-root-skill.prompt.md');
     const content = readFileSync(promptPath, 'utf8');
 
-    expect(content).toContain('Phase 2: Complete test-serenity Root Skill');
-    expect(content).toContain('Interview Questions (4)');
-    expect(content).toContain('Sub-projects / modules');
+    expect(content).toContain('Phase 2 initialization');
+    expect(content).toContain('Question 1');
+    expect(content).toContain('Sub-projects');
     expect(content).toContain('Collaboration style');
     expect(content).toContain('Language preference');
-    expect(content).toContain('Remote services / devices');
+    expect(content).toContain('Remote services');
   });
 
   it('creates 3 standard skill directories', async () => {

@@ -20,6 +20,10 @@ export type SerenityState = {
   skillPath: string;
   /** SKILL.md 全文（phase2 读取，用于 system.transform 注入到 system prompt）*/
   skillContent: string | null;
+  /** Phase 2 初始化是否待进行（SKILL.md 含骨架标记 → true；Agent 完成访谈后外部清） */
+  needsPhase2: boolean;
+  /** Phase 2 访谈提示词全文（从 scripts/generate-root-skill.prompt.md 读取） */
+  phase2Prompt: string | null;
   /** 激活失败原因（仅在 activated=false 时有意义）*/
   failureReason?: string;
 };
@@ -31,6 +35,8 @@ export const INACTIVE_STATE: Readonly<SerenityState> = Object.freeze({
   cccName: '',
   skillPath: '',
   skillContent: null,
+  needsPhase2: false,
+  phase2Prompt: null,
   failureReason: 'plugin not activated',
 });
 

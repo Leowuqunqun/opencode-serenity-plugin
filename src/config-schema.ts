@@ -38,6 +38,7 @@ export const HOOK_NAMES = [
   'tool.execute.before',
   'tool.definition',
   'experimental.chat.system.transform',
+  'experimental.chat.messages.transform',
   'experimental.session.compacting',
 ] as const satisfies readonly (keyof Hooks)[];
 

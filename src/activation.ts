@@ -19,7 +19,8 @@
 import { findGitRoot } from './util/git.js';
 import { readSerenityFile } from './util/serenity-file.js';
 import { buildSkillPath, validateSkillExists } from './util/path.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { SerenityState } from './types/index.js';
 import { setState, markReady, markDisabled, getReadyMachine } from './state.js';
 import type { PluginInput } from '@opencode-ai/plugin';
@@ -110,6 +111,27 @@ async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<vo
     log.warn('phase2', 'SKILL.md read failed; will skip system.transform injection', { detail, skillPath });
   }
 
+  // Phase 2 骨架检测 — SKILL.md 含骨架标记 → 需要 Agent 深度访谈
+  let needsPhase2 = false;
+  let phase2Prompt: string | null = null;
+  if (skillContent && skillContent.includes('<!-- Phase 2 Agent:')) {
+    const promptPath = join(cwdRoot, '.opencode', 'skills', cccName, 'scripts', 'generate-root-skill.prompt.md');
+    if (existsSync(promptPath)) {
+      try {
+        phase2Prompt = readFileSync(promptPath, 'utf8');
+        needsPhase2 = true;
+        log.info('phase2', 'skeleton detected — Phase 2 interview pending', { promptPath });
+      } catch (err) {
+        log.warn('phase2', 'Phase 2 prompt read failed; skipping interview trigger', {
+          promptPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } else {
+      log.warn('phase2', 'Phase 2 prompt file missing; skeleton detected but cannot trigger interview', { promptPath });
+    }
+  }
+
   // 成功 — 写 state + mark ready
   const state: SerenityState = Object.freeze({
     activated: true,
@@ -117,6 +139,8 @@ async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<vo
     cccName,
     skillPath,
     skillContent,
+    needsPhase2,
+    phase2Prompt,
   });
   setState(state);
   markReady();

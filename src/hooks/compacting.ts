@@ -17,7 +17,7 @@
  */
 
 import type { Hooks } from '@opencode-ai/plugin';
-import { getState, ensureReady } from '../state.js';
+import { getState, ensureReady, clearPhase2Flag } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
 import pkg from '../../package.json' with { type: 'json' };
 
@@ -77,6 +77,45 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
   if (!state.skillContent) return;  // SKILL.md 读失败或缺失 → 跳过
   if (output.system.includes(state.skillContent)) return;
   output.system.push(state.skillContent);
+};
+
+/**
+ * messages.transform — Phase 2 强制访谈（DCP 同款模式）。
+ *
+ * 当 activation 检测到 SKILL.md 为骨架模板（needsPhase2=true），
+ * 将最后一条用户消息替换为 Phase 2 访谈提示词，实现"无论用户发了什么都进入初始化"。
+ *
+ * 替换后立即清除 needsPhase2，确保后续消息不被重复注入。
+ */
+const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.transform']> = async (
+  _input,
+  output,
+) => {
+  try {
+    await ensureReady();
+  } catch {
+    return;
+  }
+
+  const state = getState();
+  if (!state.needsPhase2 || !state.phase2Prompt) return;
+
+  // 从后往前找最后一个真实用户消息（跳过 synthetic / ignored / non-user）
+  const messages = output.messages ?? [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || msg.info.role !== 'user') continue;
+
+    for (const part of msg.parts) {
+      if (part.type !== 'text') continue;
+      if (part.ignored || (part as any).synthetic) continue;
+
+      // 替换消息文本为 Phase 2 访谈提示词
+      part.text = state.phase2Prompt;
+      clearPhase2Flag();
+      return;
+    }
+  }
 };
 
 const sessionCompactingImpl: NonNullable<Hooks['experimental.session.compacting']> = async (
@@ -169,6 +208,12 @@ export function createCompactingHooks(config?: HookConfig): Partial<Hooks> {
   hooks['experimental.chat.system.transform'] = safeCreateHook(
     'experimental.chat.system.transform',
     () => systemTransformImpl,
+    config,
+  );
+
+  hooks['experimental.chat.messages.transform'] = safeCreateHook(
+    'experimental.chat.messages.transform',
+    () => messagesTransformImpl,
     config,
   );
 

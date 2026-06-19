@@ -35,6 +35,13 @@ export function getState(): SerenityState {
   return _state;
 }
 
+/** Phase 2 强制访谈完成 — 清除 needsPhase2 标记（messages.transform hook 调用） */
+export function clearPhase2Flag(): void {
+  if (_state.needsPhase2) {
+    _state = { ..._state, needsPhase2: false };
+  }
+}
+
 /** 是否已激活（最常用判定，**同步快路径**） */
 export function isActive(): boolean {
   return _state.activated;

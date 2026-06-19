@@ -1,12 +1,77 @@
 # @shgroup/opencode-serenity-plugin
 
-> **v0.2.0** — Serenity 认知基础设施的 [OpenCode](https://github.com/open-code-ai/opencode) 平台插件层。
+> **ACC — Abstract Cognitive Container（抽象认知容器）**
 >
-> 提供 MSM 工具调用框架（`msm_list` / `msm_exec` / `msm_admin`）、
-> 安全文件系统操作（`file_system`）、会话管理（`session_tool`），
-> 以及 TUI slash command（`/serenity-init`、bash 开关）。
->
-> 源码：[github.com/tellmewhattodo/opencode-serenity-plugin](https://github.com/tellmewhattodo/opencode-serenity-plugin)
+> 一个 [OpenCode](https://github.com/open-code-ai/opencode) 平台插件。
+> 它不是助手、不是框架、不是部署工具。
+> 它定义"什么是认知容器"，并把它注入到你创建的任何 CCC 中。
+
+---
+
+## 概念模型
+
+### 三层结构
+
+```
+ACC ──→ CCC ──→ 你的工作
+抽象      具体      内容
+```
+
+| 层级 | 全称 | 是什么 | 例子 |
+|------|------|--------|------|
+| **ACC** | Abstract Cognitive Container | 认知容器的**抽象定义**——定义了容器应该有什么能力、遵守什么约束。持久源，不可替代。 | `opencode-serenity-plugin`（就是本仓库） |
+| **CCC** | Concrete Cognitive Container | 认知容器的**具体实例**——从 ACC 生成的可操作工作空间。可删除后重建。 | `home-serenity/`、`my-project-serenity/` |
+| **CC** (serenity) | Cognitive Container | 日常用语中的"认知容器"。代码里、沟通中说的 "serenity" 就是指 CC。 | — |
+
+**关系**：
+- ACC 是蓝图，CCC 是建筑。一栋建筑（CCC）按一张蓝图（ACC）建造。
+- 修改 ACC → 重新 build + install → CCC 获得新能力。
+- 不存在"ACC 和 CCC 谁更真实"——蓝图和建筑各有各的真实性。
+
+### 三原则
+
+每个 CCC 遵循三条硬约束，由 ACC 自动强制执行：
+
+| 原则 | 含义 | 执行者 |
+|------|------|--------|
+| **P1 有根** | CCC 有且仅有一个 `.serenity` 标记的根目录 | `file_system` 工具 + activation |
+| **P2 git管** | 根目录必须在 git 管理下，所有变更可追溯 | activation（RR6 git 检查）+ `msm_admin`（自动 commit） |
+| **P3 权限二分** | 根内完全读写，根外零权限（绝对边界） | `permission-guards`（RR5 hard block） |
+
+---
+
+## 这个插件做了什么
+
+安装后，OpenCode Agent 自动获得以下能力——这就是 ACC 定义的"认知容器的标准配置"：
+
+### 6 个工具
+
+| 工具 | 角色 | ACC/CCC 含义 |
+|------|------|-------------|
+| `msm_list` | 能力清单查询 | 查看当前 CCC 有哪些已注册的可执行操作（MSM） |
+| `msm_exec` | 安全命令执行 | CCC 的唯一标准执行路径（替代裸 bash）；spawn 子进程时自动注入 CCC 上下文 |
+| `msm_admin` | 能力扩展 | 向 CCC 注册新的 MSM；注册表变更自动 git commit |
+| `file_system` | 安全文件操作 | bash 的文件操作替代层。12 个子命令（root / resolve / exists / list / tree / relative / mkdir / rm / mv / cp / touch / append）。所有写操作限定在 CCC 根内 |
+| `session_tool` | 工作会话追踪 | 管理 `AGENT_SESSIONS/` 下的全周期工作记录 |
+| `ccc_status` | CCC 健康检查 | 验证 P1（.serenity）、P2（git）、P3（opencode.json）状态 |
+
+### 系统 Hook
+
+| Hook | 职责 |
+|------|------|
+| `tool.execute.before` | RR5 路径守卫：read/edit/write/grep/glob 的路径参数必须在 CCC 根内 |
+| `experimental.chat.system.transform` | 自动注入 CCC 的 SKILL.md 全文到 Agent 的 system prompt |
+| `experimental.session.compacting` | 上下文压缩时保留 CCC 关键状态（根路径、CCC 名） |
+| `tool.definition` | 向 subagent 的 tool 描述中注入 CCC 上下文，确保 subagent 也受相同约束 |
+| `shell.env` | 注入环境变量 `SERENITY_ROOT` / `SERENITY_CCC` / `SERENITY_VERSION` |
+| `event: permission.asked` | CCC 根内的文件操作自动授权 |
+
+### TUI Slash Command
+
+| 命令 | 作用 |
+|------|------|
+| `/serenity-init` | 将当前 git 仓库初始化为 CCC：创建 `.serenity` + git commit |
+| `/serenity-bash-on/off/status` | bash 开关（D19：bash 是高危操作，CCC 默认使用 MSM） |
 
 ---
 
@@ -17,183 +82,94 @@
 | 条件 | 要求 |
 |------|------|
 | Node.js | >= 20 |
-| 包管理器 | pnpm |
-| OpenCode 版本 | >= 1.16 |
+| OpenCode | >= 1.16 |
 
-### 标准安装（推荐）
+### 标准安装
 
 ```bash
 npm install @shgroup/opencode-serenity-plugin
 npx opencode-serenity-plugin install
 ```
 
-### 从源码构建（贡献者用）
+`install` 命令写入两处配置：
+
+| 配置目标 | 写入位置 | 作用 |
+|---------|----------|------|
+| 项目级 | 当前目录 `opencode.json` | 注册 6 个工具 |
+| 全局级 | `~/.config/opencode/tui.json` | 注册 slash command |
+
+---
+
+## 创建你自己的 CCC
+
+### 从零开始
+
+```bash
+# 1. 进入一个新目录（必须是 git 仓库）
+mkdir my-project && cd my-project && git init
+
+# 2. 确保 opencode.json 中已安装本插件（`npx opencode-serenity-plugin install`）
+
+# 3. 在 OpenCode 中输入 slash command
+/serenity-init
+
+# 按 TUI 提示：
+#   前缀：my-project
+#   描述：我的项目认知容器
+#
+# 结果：目录被标记为 CCC "my-project-serenity"
+```
+
+初始化后自动获得：
+- `AGENT_SESSIONS/` — 工作会话记录目录
+- `.opencode/skills/my-project-serenity/` — CCC 专属技能目录
+- `.opencode/skills/my-project-serenity/references/mech-registry.json` — MSM 注册表
+- 7 个标准技能模板（session / landscape / git / compass / exploration / sqc / quality-review）
+
+### 日常使用
+
+```bash
+# 查看当前 CCC 状态
+ccc_status
+
+# 查看已注册的 MSM
+msm_list
+
+# 创建新的工作会话
+session_tool create --desc "design-new-feature"
+
+# 安全操作文件（代替裸 bash）
+file_system tree --path src/
+file_system append --path notes.md --content "新的观察记录\n"
+```
+
+---
+
+## 开发
 
 ```bash
 git clone git@github.com:tellmewhattodo/opencode-serenity-plugin.git
 cd opencode-serenity-plugin
 pnpm install
+pnpm typecheck
+pnpm test
 pnpm build
 npx opencode-serenity-plugin install
 ```
 
-`install` 命令的结果：
-
-| 配置目标 | 写入位置 | 作用 |
-|---------|----------|------|
-| 项目级 | 当前目录 `opencode.json` | 注册 5 个自定义工具（`msm_list` / `msm_exec` / `msm_admin` / `file_system` / `session_tool`） |
-| 全局级 | `~/.config/opencode/tui.json` | 注册 slash command（`/serenity-init`、`/serenity-bash-on/off/status`） |
-
-### 手动配置
-
-当 `install` 命令不可用或不适用时，手动编辑：
-
-```jsonc
-// opencode.json（项目根）
-{
-  "plugin": [
-    "file:///absolute/path/to/opencode-serenity-plugin/dist/index.js"
-  ]
-}
-
-// ~/.config/opencode/tui.json（全局，slash command 可见性）
-{
-  "plugin": [
-    "file:///absolute/path/to/opencode-serenity-plugin/dist/tui.js"
-  ]
-}
-```
-
-### 快速验证
-
-插件加载后在 opencode 中查询：
-
-```
-msm_list
-```
-
-期待输出包含以下注册项：
-
-| 名称 | 技能 | 类别 | 描述 |
-|------|------|------|------|
-| `msm_list` | serenity-plugin | mech | List all available MSM |
-| `msm_exec` | serenity-plugin | mech | Execute a registered MSM |
-| `msm_admin` | serenity-plugin | mech | Register or deregister an MSM |
-| `file_system` | serenity-plugin | mech | Serenity file-system utility |
-| `session_tool` | serenity-plugin | semi-mech | Session lifecycle management |
-
-### 开发期快速迭代
-
-修改源码后不需要重复 clone：
-
-```bash
-pnpm build                    # 仅编译
-npx opencode-serenity-plugin install   # 重新写入配置
-# 或使用 serenity-plugin-develop-kit MSM 自动执行 typecheck → test → build → install
-```
-
----
-
-## 功能清单
-
-### 5 个 OpenCode 自定义工具
-
-| 工具名 | 类别 | 职责 |
-|--------|------|------|
-| `msm_list` | mech | 查询 `mech-registry.json`，列出所有已注册 MSM 及其描述。`msm_exec` 的前置查询步骤。 |
-| `msm_exec` | mech | 执行已注册 MSM。参数 `msm_name` + `args: string[]`。替代裸 bash 的安全命令入口。 |
-| `msm_admin` | mech | 注册/注销 MSM。单 tool + `action` enum（`register` / `deregister`）。注册表变更自动 git commit。 |
-| `file_system` | mech | 安全文件系统操作。10 个子命令：`root` / `resolve` / `exists` / `list` / `relative` / `mkdir` / `rm` / `mv` / `cp` / `touch`。所有写操作限制在 `.serenity` 根目录内，保护 `.serenity` 标记文件和根目录自身不被删除。 |
-| `session_tool` | semi-mech | 会话生命周期管理。7 个子命令：`list` / `show` / `create` / `health` / `archive` / `summary` / `qa`。管理 `AGENT_SESSIONS/` 目录下的会话记录。 |
-
-### 系统 Hook
-
-| Hook 名 | 执行时机 | 职责 |
-|---------|----------|------|
-| `tool.execute.before` | 每个工具调用前 | 路径守卫：`read`/`edit`/`write`/`grep`/`glob`/`webfetch` 的 `path` 参数强制在 `cwdRoot` 内（含 symlink 防御）。bash 静默拒绝开关：被禁用时 AI 收到 `"bash is disabled by user, use msm instead"`。 |
-| `experimental.chat.system.transform` | 新 session 首次激活 | 注入 `/.opencode/skills/<实例名>/SKILL.md` 全文到 system prompt 末尾。 |
-| `experimental.session.compacting` | 压缩事件 | 注入 serenity 关键状态（实例名、路径、激活状态）。 |
-| `experimental.tool.definition` | 工具定义阶段 | 向 `task` 工具描述注入精简 serenity context（使 subagent 也能感知 serenity 环境）。 |
-| `shell.env` | shell 执行前 | 注入环境变量 `HOME_SERENITY_ROOT`（实例根路径）、`SERENITY_INSTANCE`（实例名）。 |
-| `event: permission.asked` | 权限弹窗触发时 | cwdRoot 内文件操作自动回复 `always`。 |
-
-### TUI Slash Command
-
-| 命令 | 作用 |
-|------|------|
-| `/serenity-init` | 将当前 git 仓库初始化为 serenity 实例：创建 `/.serenity` + `git commit -m "chore: initialize serenity (instance: <name>)"`。 |
-| `/serenity-bash-on` | 启用 bash 工具。 |
-| `/serenity-bash-off` | 禁用 bash 工具。AI 对 bash 的任何调用收到 `"bash is disabled by user, use msm instead"` 错误。 |
-| `/serenity-bash-status` | 显示当前 bash 启用/禁用状态。 |
-
----
-
-## 开发指南
-
-### 标准开发循环
-
-```bash
-pnpm typecheck             # 编译检查，零 LLM 推理
-pnpm test                  # 执行全部 382 个测试（vitest）
-pnpm build                 # 编译到 dist/
-pnpm opencode-serenity-plugin install   # 安装到当前 project
-```
-
-推荐使用 `serenity-plugin-develop-kit` MSM 工具自动执行上述 4 步（typecheck → test → build → install），遇非零即停，提供完整审计可追溯性。
-
-### 测试架构
-
-```bash
-pnpm test                          # 全部 382 个测试
-pnpm test -- --watch               # 监视模式
-pnpm test tests/msm.test.ts        # 单文件测试
-```
-
-测试文件按模块分组于 `tests/`：
-
-| 文件 | 用例数 | 覆盖范围 |
-|------|--------|---------|
-| `tests/msm.test.ts` | — | MSM 工具（list/exec/admin） |
-| `tests/fs-file-system-tool.test.ts` | 40 | 全部 10 个文件系统子命令 + 安全边界 |
-| `tests/util-*.test.ts` | — | 各 util 函数（init / serenity-file / log 等） |
-| `tests/session-*.test.ts` | — | 会话管理各子命令 |
-| `tests/hooks/*.test.ts` | — | Hook 行为（permission-guards / compacting / 
-tool-definition / auto-reply） |
-| `tests/tui*.test.ts` | — | TUI slash command |
-| `tests/errors.test.ts` | — | 错误类层级 |
-
----
-
-## 架构模型：Template-Instance
-
-```
-opencode-serenity-plugin     ← template（持久源，source of truth）
-         ↓ build + install
-serenity 实例目录（如 home-serenity/） ← instance（可重建的下游 artifact）
-```
-
-| 角色 | 特征 |
-|------|------|
-| **template**（plugin 仓） | durable，不可替代，GitHub 发布源 |
-| **instance**（serenity 目录） | replicable，可删除后重新 build + install |
-| **关系** | 单向模板→实例。不存在"双真源防漂移"。修改 plugin 后必须重新 build + install。 |
+推荐使用 `serenity-plugin-develop-kit` MSM 自动执行 4 步流水线（typecheck → test → build → install）。
 
 ---
 
 ## 关联文档
 
-| 主题 | 文档路径 |
-|------|---------|
-| 范围层（RR1-RR7，终版） | [`docs/requirements-v0-scope.md`](docs/requirements-v0-scope.md) |
-| 架构设计（两阶段 init + 模块分解） | [`docs/architecture-v0.md`](docs/architecture-v0.md) |
-| 接口契约（6 契约 + 13 错误类） | [`docs/contract-v0.md`](docs/contract-v0.md) |
-| RR7 Init 实施记录 | [`docs/rr7-init-design.md`](docs/rr7-init-design.md) |
-| 重构方向（v1.11-v1.17） | [`docs/refactor-direction-v1.11.md`](docs/refactor-direction-v1.11.md) |
-| v0.1 候选实施（3/3 实施） | [`docs/v0.1-candidates.md`](docs/v0.1-candidates.md) |
-| MSM 自包含 RFC（S028） | [`docs/plugin-self-contained-msm-v1.md`](docs/plugin-self-contained-msm-v1.md) |
-| 设计方案索引（S031） | `AGENT_SESSIONS/2026-05-17--S031--plugin-next-round-requirements/SESSION.md` |
+| 主题 | 路径 |
+|------|------|
+| 范围层（RR1-RR7） | [`docs/requirements-v0-scope.md`](docs/requirements-v0-scope.md) |
+| 架构设计 | [`docs/architecture-v0.md`](docs/architecture-v0.md) |
+| 接口契约 | [`docs/contract-v0.md`](docs/contract-v0.md) |
 
 ---
 
-> **版本**: v0.1.0 (2026-06-15)
+> **版本**: v0.2.2
 > **作者**: yh + 宁静号 Agent

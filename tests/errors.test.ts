@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   InitGitCommitError,
-  InvalidInstanceNameError,
+  InvalidCccNameError,
   MsmExecutionError,
   MsmNotRegisteredError,
   MsmTimeoutError,
@@ -27,7 +27,7 @@ describe('errors', () => {
       new MsmTimeoutError('foo', 1000),
       new MsmExecutionError('foo', 1, 'out', 'err'),
       new InitGitCommitError('reason'),
-      new InvalidInstanceNameError('MyProject'),
+      new InvalidCccNameError('MyProject'),
     ];
     for (const e of errs) {
       expect(e).toBeInstanceOf(SerenityError);
@@ -37,9 +37,9 @@ describe('errors', () => {
     }
   });
 
-  it('InvalidInstanceNameError 名字 + 信息', () => {
-    const e = new InvalidInstanceNameError('MyProject');
-    expect(e.name).toBe('InvalidInstanceNameError');
+  it('InvalidCccNameError 名字 + 信息', () => {
+    const e = new InvalidCccNameError('MyProject');
+    expect(e.name).toBe('InvalidCccNameError');
     expect(e).toBeInstanceOf(SerenityError);
     expect(e.message).toContain('MyProject');
     expect(e.message.toLowerCase()).toContain('kebab-case');

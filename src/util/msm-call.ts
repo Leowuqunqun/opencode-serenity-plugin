@@ -47,8 +47,8 @@ export type MsmCallResult = {
  * - msm-call runMsmExec 用此路径 (新)
  * - 两处同源, 不再有双注册表漂移风险
  */
-function registryFilePath(cwdRoot: string, instanceName: string): string {
-  return join(cwdRoot, '.opencode', 'skills', instanceName, 'references', 'mech-registry.json');
+function registryFilePath(cwdRoot: string, cccName: string): string {
+  return join(cwdRoot, '.opencode', 'skills', cccName, 'references', 'mech-registry.json');
 }
 
 /**
@@ -71,7 +71,7 @@ export async function callMsmExec(opts: MsmCallOptions): Promise<MsmCallResult> 
 
   // 拼 argv: <msm_name> <business-args...>
   const argv = [opts.msm_name, ...opts.businessArgs];
-  const registryPath = registryFilePath(state.cwdRoot, state.instanceName);
+  const registryPath = registryFilePath(state.cwdRoot, state.cccName);
 
   // 用 Promise.race 加超时 (与 v0.0.2 行为一致, 600s)
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;

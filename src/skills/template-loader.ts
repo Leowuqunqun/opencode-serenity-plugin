@@ -3,7 +3,7 @@
  *
  * 职责：
  *   1. 从 plugin 的 src/templates/<name>/ 目录加载模板
- *   2. 替换占位符（{{prefix}}, {{instance_name}}, {{date}}）
+ *   2. 替换占位符（{{prefix}}, {{ccc_name}}, {{date}}）
  *   3. 输出目标路径 → 文件内容映射
  */
 
@@ -37,7 +37,7 @@ export interface TemplateFiles {
 
 export interface Placeholders {
   prefix: string;
-  instanceName: string;
+  cccName: string;
   date: string;
 }
 
@@ -47,7 +47,7 @@ export function defaultPlaceholders(prefix: string): Placeholders {
   const now = new Date();
   return {
     prefix,
-    instanceName: `${prefix}-serenity`,
+    cccName: `${prefix}-serenity`,
     date: now.toISOString().slice(0, 10),
   };
 }
@@ -84,7 +84,8 @@ function replacePlaceholders(content: string, placeholders: Placeholders): strin
   return content.replace(PLACEHOLDER_PATTERN, (_, key: string) => {
     switch (key) {
       case 'prefix': return placeholders.prefix;
-      case 'instance_name': return placeholders.instanceName;
+      case 'ccc_name': return placeholders.cccName;
+      case 'instance_name': return placeholders.cccName;   // deprecated alias
       case 'date': return placeholders.date;
       default: return `{{${key}}}`; // 保持未知占位符不变
     }

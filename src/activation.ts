@@ -81,9 +81,9 @@ export function tryActivateSync(input: PluginInput, getClient?: GetClient): Sync
  */
 async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<void> {
   // RR1 — 读 /.serenity
-  let instanceName: string;
+  let cccName: string;
   try {
-    instanceName = readSerenityFile(cwdRoot);
+    cccName = readSerenityFile(cwdRoot);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(`RR1: ${detail}`);
@@ -92,8 +92,8 @@ async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<vo
   // RR2 — 验证 SKILL.md
   let skillPath: string;
   try {
-    skillPath = buildSkillPath(cwdRoot, instanceName);
-    validateSkillExists(skillPath, cwdRoot, instanceName);
+    skillPath = buildSkillPath(cwdRoot, cccName);
+    validateSkillExists(skillPath, cwdRoot, cccName);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(`RR2: ${detail}`);
@@ -114,7 +114,7 @@ async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<vo
   const state: SerenityState = Object.freeze({
     activated: true,
     cwdRoot,
-    instanceName,
+    cccName,
     skillPath,
     skillContent,
   });
@@ -123,7 +123,7 @@ async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<vo
 
   // v1.5 init-check：plugin 启动时自检 opencode.json 关键配置
   // 只 warn，不 patch
-  checkSerenityConfig(cwdRoot, instanceName);
+  checkSerenityConfig(cwdRoot, cccName);
 
   // v1.7 config-patch：自动改主仓 opencode.json 让 cwdRoot 内 read/edit = allow
   // 用户 m0649 决定"全自动"——plugin 启动即生效（用户需重启 opencode 应用改动）

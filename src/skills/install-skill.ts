@@ -15,7 +15,7 @@
 import { existsSync } from 'node:fs';
 import {
   findSerenityRootSafe,
-  readSerenityInstanceName,
+  readSerenityCccName,
 } from '../fs/resolve-path.js';
 import {
   getTemplatesDir,
@@ -54,16 +54,16 @@ export function installSkill(opts: InstallSkillOptions): InstallSkillResult {
   if (!serenityRoot) {
     return {
       success: false,
-      message: `Not inside a serenity instance: no .serenity found from ${cwd}`,
+      message: `Not inside a CCC: no .serenity found from ${cwd}`,
     };
   }
 
   // 2. 确定 prefix
-  const prefix = opts.prefix ?? readSerenityInstanceName(serenityRoot);
+  const prefix = opts.prefix ?? readSerenityCccName(serenityRoot);
   if (!prefix) {
     return {
       success: false,
-      message: `Failed to determine instance prefix: .serenity at ${serenityRoot} is empty or unreadable`,
+      message: `Failed to determine CCC prefix: .serenity at ${serenityRoot} is empty or unreadable`,
     };
   }
 

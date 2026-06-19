@@ -63,12 +63,12 @@ import {
 } from './util/init.js';
 import { ensureGlobalTuiPluginRegistration } from './util/tui-install.js';
 import {
-  InvalidInstanceNameError,
+  InvalidCccNameError,
   NotInGitRepoError,
   InitGitCommitError,
 } from './errors.js';
 import { log } from './util/log.js';
-import { findSerenityRootSafe, readSerenityInstanceName } from './fs/resolve-path.js';
+import { findSerenityRootSafe, readSerenityCccName } from './fs/resolve-path.js';
 import { setBashDisabled, isBashDisabled } from './bash-toggle.js';
 import pkg from '../package.json' with { type: 'json' };
 
@@ -87,11 +87,11 @@ const Tui: TuiPlugin = async (api) => {
   const cwd = api.state.path.directory;
   let serenityStatus: string;
   let serenityVariant: 'success' | 'info' | 'error';
-  let serenityInstance: string | null = null;
+  let serenityInstance: string | null = null;  // CCC name
 
   const root = findSerenityRootSafe(cwd);
   if (root) {
-    const name = readSerenityInstanceName(root);
+    const name = readSerenityCccName(root);
     serenityInstance = name;
     // 验证 SKILL.md 存在（RR2 同级检测）
     const { existsSync } = await import('node:fs');
@@ -214,7 +214,7 @@ const Tui: TuiPlugin = async (api) => {
                   msg = 'cwd is not a git repository; run `git init` first, then `/serenity-init` again';
                 } else if (err instanceof InitGitCommitError) {
                   msg = `git add+commit failed (rolled back): ${err.message}`;
-                } else if (err instanceof InvalidInstanceNameError) {
+                } else if (err instanceof InvalidCccNameError) {
                   msg = err.message;
                 } else {
                   msg = err instanceof Error ? err.message : String(err);

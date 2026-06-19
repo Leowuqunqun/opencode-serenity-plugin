@@ -1,8 +1,8 @@
 /**
- * /.serenity 文件工具 — RR1 验证 + 实例名读写
+ * /.serenity 文件工具 — RR1 验证 + CCC 名读写
  *
- * 文件格式：纯文本，单行，内容 = 实例名
- * 例：文件内容 "home-serenity" → 实例名 = "home-serenity"
+ * 文件格式：纯文本，单行，内容 = CCC 名
+ * 例：文件内容 "home-serenity" → CCC 名 = "home-serenity"
  *
  * v1.10：新增 write/remove（RR7 init 用）
  */
@@ -14,7 +14,7 @@ import { SerenityFileEmptyError, SerenityFileNotFoundError } from '../errors.js'
 export const SERENITY_FILENAME = '.serenity';
 
 /**
- * 从 git root 读取 /.serenity 文件，trim 后返回实例名
+ * 从 git root 读取 /.serenity 文件，trim 后返回 CCC 名
  * @throws SerenityFileNotFoundError 文件不存在
  * @throws SerenityFileEmptyError 文件内容为空
  */
@@ -48,13 +48,13 @@ export function serenityFileExists(cwdRoot: string): boolean {
 
 /**
  * 写 `/.serenity`（创建或覆盖）。
- * 内容 = instanceName + '\n'（保持文件以换行结尾）。
+ * 内容 = cccName + '\n'（保持文件以换行结尾）。
  * v1.10：RR7 init 主路径使用。
  * @throws 如果 cwdRoot 不可写则透传 fs 错误
  */
-export function writeSerenityFile(cwdRoot: string, instanceName: string): void {
+export function writeSerenityFile(cwdRoot: string, cccName: string): void {
   const path = join(cwdRoot, SERENITY_FILENAME);
-  writeFileSync(path, instanceName + '\n', 'utf8');
+  writeFileSync(path, cccName + '\n', 'utf8');
 }
 
 /**

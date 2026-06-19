@@ -49,7 +49,7 @@ describe('callMsmExec — in-process 委托 (S028 v0.0.3)', () => {
     setState({
       activated: true,
       cwdRoot: tmp,
-      instanceName: instance,
+      cccName: instance,
       skillPath: '',
       skillContent: null,
     });

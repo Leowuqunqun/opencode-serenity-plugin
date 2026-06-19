@@ -97,7 +97,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       // mock state.activated
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'read', sessionID: 's', callID: 'c' } as any, { args: { path: outsideFile } } as any),
@@ -117,7 +117,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       const hook = hooks['tool.execute.before']!;
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'edit', sessionID: 's', callID: 'c' } as any, { args: { path: inFile } } as any),
@@ -137,7 +137,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       const hook = hooks['tool.execute.before']!;
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'edit', sessionID: 's', callID: 'c' } as any, { args: { path: outsideFile } } as any),
@@ -157,7 +157,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       const hook = hooks['tool.execute.before']!;
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'write', sessionID: 's', callID: 'c' } as any, { args: { filePath: outsideFile } } as any),
@@ -179,7 +179,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       const hook = hooks['tool.execute.before']!;
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'edit', sessionID: 's', callID: 'c' } as any, { args: { path: linkFile } } as any),
@@ -199,7 +199,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       const hook = hooks['tool.execute.before']!;
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'grep', sessionID: 's', callID: 'c' } as any, { args: { pattern: 'test', path: outsideDir } } as any),
@@ -217,7 +217,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       const hook = hooks['tool.execute.before']!;
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'grep', sessionID: 's', callID: 'c' } as any, { args: { pattern: 'test', path: c } } as any),
@@ -235,7 +235,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       const hook = hooks['tool.execute.before']!;
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'grep', sessionID: 's', callID: 'c' } as any, { args: { pattern: 'test' } } as any),
@@ -255,7 +255,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       const hook = hooks['tool.execute.before']!;
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'glob', sessionID: 's', callID: 'c' } as any, { args: { pattern: '*.ts', path: outsideDir } } as any),
@@ -273,7 +273,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       const hook = hooks['tool.execute.before']!;
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'glob', sessionID: 's', callID: 'c' } as any, { args: { pattern: '*.ts', path: c } } as any),
@@ -291,7 +291,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       const hook = hooks['tool.execute.before']!;
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'glob', sessionID: 's', callID: 'c' } as any, { args: { pattern: '*.ts' } } as any),
@@ -311,7 +311,7 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
       const hook = hooks['tool.execute.before']!;
       const { resetState, setState, markReady } = await import('../src/state.js');
       resetState();
-      setState({ activated: true, cwdRoot: c, instanceName: 'test', skillPath: '', skillContent: null });
+      setState({ activated: true, cwdRoot: c, cccName: 'test', skillPath: '', skillContent: null });
       markReady();
       await expect(
         hook({ tool: 'write', sessionID: 's', callID: 'c' } as any, { args: { targetFilePath: outsideFile } } as any),

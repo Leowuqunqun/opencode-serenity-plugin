@@ -5,7 +5,7 @@
  * 触发：TUI slash command onSelect → DialogPrompt → onConfirm → initSerenity
  *
  * 设计约束（RR7 spec §5 失败矩阵）：
- * - prefix 不合法 → throw InvalidInstanceNameError
+ * - prefix 不合法 → throw InvalidCccNameError
  * - cwd 不在 git repo → throw NotInGitRepoError（透传 findGitRoot）
  * - /.serenity 已存在 → return { kind: 'already', name }（不覆盖）
  * - git add/commit 失败 → rollback 写文件 + throw InitGitCommitError
@@ -23,21 +23,21 @@ import {
   readSerenityFile,
 } from './serenity-file.js';
 import {
-  InvalidInstanceNameError,
+  InvalidCccNameError,
   InitGitCommitError,
 } from '../errors.js';
 
-/** v1.10 RR7 命名模型：所有实例名都带 -serenity 后缀 */
+/** v1.10 RR7 命名模型：所有 CCC 名都带 -serenity 后缀 */
 export const SERENITY_SUFFIX = '-serenity';
 
-/** 拼实例名 = `${prefix}-serenity` */
-export function buildInstanceName(prefix: string): string {
+/** 拼 CCC 名 = `${prefix}-serenity` */
+export function buildCccName(prefix: string): string {
   return `${prefix}${SERENITY_SUFFIX}`;
 }
 
 /**
- * 验证 prefix 是合法 kebab-case（同 instanceName 规则）。
- * 独立函数（不委托 isValidInstanceName）以保持语义清晰。
+ * 验证 prefix 是合法 kebab-case（同 cccName 规则）。
+ * 独立函数（不委托 isValidCccName）以保持语义清晰。
  */
 export function isValidPrefix(prefix: string): boolean {
   return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(prefix);
@@ -81,7 +81,7 @@ export type InitResult =
  */
 export async function initSerenity(cwd: string, prefix: string): Promise<InitResult> {
   if (!isValidPrefix(prefix)) {
-    throw new InvalidInstanceNameError(prefix);
+    throw new InvalidCccNameError(prefix);
   }
 
   const gitRoot = findGitRoot(cwd);
@@ -91,7 +91,7 @@ export async function initSerenity(cwd: string, prefix: string): Promise<InitRes
     return { kind: 'already', name };
   }
 
-  const name = buildInstanceName(prefix);
+  const name = buildCccName(prefix);
   writeSerenityFile(gitRoot, name);
 
   try {

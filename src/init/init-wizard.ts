@@ -1,7 +1,7 @@
 /**
  * init-wizard.ts — D1 Init 向导 Phase 1
  *
- * CLI 交互式创建宁静号实例的目录骨架并复制标准技能模板。
+ * CLI 交互式创建认知容器 (CCC) 的目录骨架并复制标准技能模板。
  *
  * 流程：
  *   1. 收集基本信息（prefix, description）
@@ -107,13 +107,13 @@ async function collectInfo(prefill: string): Promise<{
   );
 
   const description = await askQuestion(
-    'Describe this serenity instance in one sentence',
+    'Describe this cognitive container (CCC) in one sentence',
     '',
   );
 
   return {
     prefix: prefix || prefill,
-    description: description || 'A serenity instance',
+    description: description || 'A cognitive container (CCC)',
   };
 }
 
@@ -204,7 +204,7 @@ function generatePhase2Prompt(prefix: string): string {
   return [
     `# Phase 2: Complete ${prefix}-serenity Root Skill`,
     '',
-    'This serenity instance has been initialized with all standard meta-skills.',
+    'This CCC has been initialized with all standard meta-skills.',
     'Now you need to complete the root skill SKILL.md.',
     '',
     '## Interview Questions',
@@ -212,7 +212,7 @@ function generatePhase2Prompt(prefix: string): string {
     'Answer these questions interactively with the user, then fill in the root skill at',
     `.opencode/skills/${prefix}-serenity/SKILL.md`,
     '',
-    '1. **System description**: What project/system does this serenity manage?',
+    '  1. **System description**: What project/system does this CCC manage?',
     '2. **Scope**: Single person, small team, or enterprise?',
     '3. **Key components**: What sub-projects or modules does the system contain?',
     '4. **Collaboration style**: Structured (formal docs/SOP) or flexible (ad-hoc)?',
@@ -231,7 +231,7 @@ function generatePhase2Prompt(prefix: string): string {
     '',
     '## Available Tools',
     '',
-    'The plugin provides these tools that work in any serenity instance:',
+    'The plugin provides these tools that work in any CCC:',
     '- **file_system**: root/resolve/list (no instance-specific coupling)',
     '- **session_tool**: list/show/create/health/archive/summary',
     '- **msm_list / msm_exec / msm_admin**: standard MSM management',
@@ -259,7 +259,7 @@ export async function initWizard(opts: InitOptions): Promise<InitResult> {
         success: false,
         prefix: '',
         name: '',
-        message: `Target already contains a serenity instance: ${targetPath}. Use --force to overwrite.`,
+        message: `Target already contains a CCC: ${targetPath}. Use --force to overwrite.`,
         createdDirs: [],
         installedSkills: [],
       };
@@ -274,7 +274,7 @@ export async function initWizard(opts: InitOptions): Promise<InitResult> {
 
   if (opts.nonInteractive) {
     prefix = prefill;
-    description = opts.description ?? 'Serenity instance';
+    description = opts.description ?? 'Cognitive Container (CCC)';
   } else {
     const info = await collectInfo(prefill);
     prefix = info.prefix;
@@ -357,7 +357,7 @@ export async function initWizard(opts: InitOptions): Promise<InitResult> {
     prefix,
     name,
     message: [
-      `Serenity instance "${name}" created at ${targetPath}`,
+      `CCC "${name}" created at ${targetPath}`,
       `  prefix: ${prefix}`,
       `  description: ${description}`,
       `  ${skillSummary}`,

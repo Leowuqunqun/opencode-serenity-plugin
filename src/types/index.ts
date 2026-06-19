@@ -14,9 +14,9 @@ export type SerenityState = {
   activated: boolean;
   /** cwd 根（git root），plugin 一切判断基于此 */
   cwdRoot: string;
-  /** 实例名（从 /.serenity 文件内容读取）*/
-  instanceName: string;
-  /** SKILL.md 绝对路径（.opencode/skills/<instanceName>/SKILL.md）*/
+  /** CCC 名（从 /.serenity 文件内容读取）*/
+  cccName: string;
+  /** SKILL.md 绝对路径（.opencode/skills/<cccName>/SKILL.md）*/
   skillPath: string;
   /** SKILL.md 全文（phase2 读取，用于 system.transform 注入到 system prompt）*/
   skillContent: string | null;
@@ -28,7 +28,7 @@ export type SerenityState = {
 export const INACTIVE_STATE: Readonly<SerenityState> = Object.freeze({
   activated: false,
   cwdRoot: '',
-  instanceName: '',
+  cccName: '',
   skillPath: '',
   skillContent: null,
   failureReason: 'plugin not activated',

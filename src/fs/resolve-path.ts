@@ -2,8 +2,8 @@
  * resolve-path.ts — 宁静号文件系统基础设施
  *
  * 核心能力：
- * - 向上遍历寻找 .serenity 文件（实例根检测）
- * - 基于实例根做路径解析
+ * - 向上遍历寻找 .serenity 文件（CCC 根检测）
+ * - 基于 CCC 根做路径解析
  * - 路径安全校验（确保在根内）
  *
  * 供 file-system-tool.ts 消费，也可被其他模块复用。
@@ -32,7 +32,7 @@ export function findSerenityRoot(cwd: string): string {
     const parent = dirname(current);
     if (parent === current) {
       throw new Error(
-        `No serenity instance found: no .serenity file found when walking up from "${cwd}"`,
+        `No CCC found: no .serenity file found when walking up from "${cwd}"`,
       );
     }
     current = parent;
@@ -52,10 +52,10 @@ export function findSerenityRootSafe(cwd: string): string | null {
 }
 
 /**
- * readSerenityInstanceName — 从 .serenity 文件读取实例名
- * @returns 实例名（如 "home-serenity", "tg-serenity"）或 null
+ * readSerenityCccName — 从 .serenity 文件读取 CCC 名
+ * @returns CCC 名（如 "home-serenity", "tg-serenity"）或 null
  */
-export function readSerenityInstanceName(root: string): string | null {
+export function readSerenityCccName(root: string): string | null {
   const marker = resolve(root, '.serenity');
   try {
     const content = readFileSync(marker, 'utf8').trim();
@@ -68,7 +68,7 @@ export function readSerenityInstanceName(root: string): string | null {
 /**
  * resolveRootPath — 将 path 基于宁静号根解析为绝对路径
  *
- * @param root 实例根路径
+ * @param root CCC 根路径
  * @param path 相对路径（如 "AGENT_SESSIONS/"）或绝对路径
  * @returns 解析后的绝对路径
  */
@@ -82,7 +82,7 @@ export function resolveRootPath(root: string, path: string): string {
 /**
  * isPathInsideSerenity — 判断路径是否在宁静号根内
  *
- * @param root 实例根路径
+ * @param root CCC 根路径
  * @param target 要检查的路径（绝对路径）
  * @returns true 当 target 在 root 目录内
  */
@@ -94,7 +94,7 @@ export function isPathInsideSerenity(root: string, target: string): boolean {
 /**
  * serenityPathRelative — 获取 target 相对于宁静号根的路径
  *
- * @param root 实例根路径
+ * @param root CCC 根路径
  * @param target 绝对路径
  * @returns 相对路径（如 ".opencode/skills/eap/SKILL.md"）
  */

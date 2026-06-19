@@ -84,7 +84,7 @@ async function setupState(cwd: string) {
   setState({
     activated: true,
     cwdRoot: cwd,
-    instanceName: INSTANCE,
+    cccName: INSTANCE,
     skillPath: '',
     skillContent: null,
   });

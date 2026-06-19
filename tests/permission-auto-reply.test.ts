@@ -17,7 +17,7 @@ function setupSerenityRepo(): string {
 }
 
 function activatedState(cwdRoot: string): SerenityState {
-  return { activated: true, cwdRoot, instanceName: 'home-serenity' };
+  return { activated: true, cwdRoot, cccName: 'home-serenity' };
 }
 
 function makeDeps(replyFn: ReturnType<typeof vi.fn>, serverUrl = 'http://localhost:0') {

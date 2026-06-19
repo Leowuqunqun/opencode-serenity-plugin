@@ -20,7 +20,7 @@ import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileSystemTool } from '../src/fs/file-system-tool.js';
 
-// ── Helper：创建临宁静号实例 ──
+// ── Helper：创建临CCC ──
 
 const INSTANCE = 'test-instance';
 

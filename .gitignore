@@ -38,3 +38,6 @@ AGENT_SESSIONS/
 .opencode/
 
 opencode.json
+
+# npm auth (local only, used for publish)
+.npmrc

@@ -96,13 +96,13 @@ function assertNotProtected(root: string, absPath: string, targetLabel: string):
   const serenityMarker = resolve(root, '.serenity');
   if (absPath === serenityMarker) {
     throw new FileSystemError(
-      `file-system: refusing to delete protected path: ${targetLabel} (.serenity is the serenity instance marker)`,
+      `file-system: refusing to delete protected path: ${targetLabel} (.serenity is the CCC marker)`,
     );
   }
   // Protect the root directory itself
   if (absPath === root) {
     throw new FileSystemError(
-      `file-system: refusing to delete the serenity root directory: ${targetLabel}`,
+      `file-system: refusing to delete the CCC root directory: ${targetLabel}`,
     );
   }
 }
@@ -117,9 +117,9 @@ const SUBCOMMANDS = [
 export const fileSystemTool: ToolDefinition = tool({
   description:
     `Serenity file-system utility (v${VERSION}). ` +
-    'Resolves paths relative to the serenity instance root (the directory containing .serenity). ' +
-    'Use this instead of raw read/edit tools when you need to work with serenity instance paths. ' +
-    'All subcommands validate that paths stay within the serenity root.',
+    'Resolves paths relative to the CCC root (the directory containing .serenity). ' +
+    'Use this instead of raw read/edit tools when you need to work with CCC paths. ' +
+    'All subcommands validate that paths stay within the CCC root.',
   args: {
     subcommand: z
       .enum(SUBCOMMANDS)

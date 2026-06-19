@@ -38,15 +38,15 @@ export class SerenityFileNotFoundError extends SerenityError {
 /** /.serenity 文件存在但内容为空或无效 */
 export class SerenityFileEmptyError extends SerenityError {
   constructor(path: string) {
-    super(`/.serenity file at "${path}" is empty or contains only whitespace; expected a non-empty instance name`);
+    super(`/.serenity file at "${path}" is empty or contains only whitespace; expected a non-empty CCC name`);
     this.name = 'SerenityFileEmptyError';
   }
 }
 
-/** RR2 违反：.opencode/skills/<instanceName>/SKILL.md 不存在 */
+/** RR2 违反：.opencode/skills/<cccName>/SKILL.md 不存在 */
 export class SkillNotFoundError extends SerenityError {
-  constructor(cwdRoot: string, instanceName: string) {
-    super(`SKILL.md not found at "${cwdRoot}/.opencode/skills/${instanceName}/SKILL.md"; serenity plugin requires RR2 (the instance skill must exist)`);
+  constructor(cwdRoot: string, cccName: string) {
+    super(`SKILL.md not found at "${cwdRoot}/.opencode/skills/${cccName}/SKILL.md"; serenity plugin requires RR2 (the CCC skill must exist)`);
     this.name = 'SkillNotFoundError';
   }
 }
@@ -124,13 +124,13 @@ export class InitGitCommitError extends SerenityError {
 }
 
 /** v1.10 RR7：用户输入的 prefix 不是 kebab-case */
-export class InvalidInstanceNameError extends SerenityError {
+export class InvalidCccNameError extends SerenityError {
   constructor(name: string) {
     super(
-      `Invalid serenity prefix "${name}"; must be kebab-case ` +
+      `Invalid CCC prefix "${name}"; must be kebab-case ` +
       `(lowercase a-z, 0-9, dashes; no leading or trailing dash)`,
     );
-    this.name = 'InvalidInstanceNameError';
+    this.name = 'InvalidCccNameError';
   }
 }
 

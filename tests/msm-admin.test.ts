@@ -85,7 +85,7 @@ describe('msm_admin action=register (v1.17 — 合并自 v1.1 msm_register)', ()
     try {
       makeScript(cwd, '.opencode/skills/home-serenity/scripts/test-msm.ts');
       writeRegistry(cwd, 'home-serenity', { version: 1, description: 'test', entries: [] });
-      setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
+      setState({ activated: true, cwdRoot: cwd, cccName: 'home-serenity' });
 
       const result = await msmAdminTool.execute(
         {
@@ -115,7 +115,7 @@ describe('msm_admin action=register (v1.17 — 合并自 v1.1 msm_register)', ()
     try {
       makeScript(cwd, 'scripts/foo.ts');
       writeRegistry(cwd, 'home-serenity', []);
-      setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
+      setState({ activated: true, cwdRoot: cwd, cccName: 'home-serenity' });
 
       await msmAdminTool.execute(
         {
@@ -145,7 +145,7 @@ describe('msm_admin action=register (v1.17 — 合并自 v1.1 msm_register)', ()
       writeRegistry(cwd, 'home-serenity', [
         { name: 'dup', path: 'scripts/dup.ts', skill: 'home-serenity', category: 'mech', description: 'd', usage: 'u', flags: [] },
       ]);
-      setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
+      setState({ activated: true, cwdRoot: cwd, cccName: 'home-serenity' });
 
       await expect(
         msmAdminTool.execute(
@@ -169,7 +169,7 @@ describe('msm_admin action=register (v1.17 — 合并自 v1.1 msm_register)', ()
     const { cwd } = setupRepo();
     try {
       writeRegistry(cwd, 'home-serenity', []);
-      setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
+      setState({ activated: true, cwdRoot: cwd, cccName: 'home-serenity' });
 
       await expect(
         msmAdminTool.execute(
@@ -193,7 +193,7 @@ describe('msm_admin action=register (v1.17 — 合并自 v1.1 msm_register)', ()
     const { cwd } = setupRepo();
     try {
       writeRegistry(cwd, 'home-serenity', []);
-      setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
+      setState({ activated: true, cwdRoot: cwd, cccName: 'home-serenity' });
 
       // 缺 path
       await expect(
@@ -251,7 +251,7 @@ describe('msm_admin action=deregister (v1.17 — 合并自 v1.1 msm_deregister)'
       writeRegistry(cwd, 'home-serenity', [
         { name: 'x', path: 'scripts/x.ts', skill: 'home-serenity', category: 'mech', description: 'd', usage: 'u', flags: [] },
       ]);
-      setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
+      setState({ activated: true, cwdRoot: cwd, cccName: 'home-serenity' });
 
       const result = await msmAdminTool.execute(
         { action: 'deregister', name: 'x' } as any,
@@ -271,7 +271,7 @@ describe('msm_admin action=deregister (v1.17 — 合并自 v1.1 msm_deregister)'
     const { cwd } = setupRepo();
     try {
       writeRegistry(cwd, 'home-serenity', []);
-      setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
+      setState({ activated: true, cwdRoot: cwd, cccName: 'home-serenity' });
 
       await expect(
         msmAdminTool.execute(
@@ -295,7 +295,7 @@ describe('msm_admin round-trip (v1.17)', () => {
     try {
       makeScript(cwd, 'scripts/rt.ts');
       writeRegistry(cwd, 'home-serenity', []);
-      setState({ activated: true, cwdRoot: cwd, instanceName: 'home-serenity' });
+      setState({ activated: true, cwdRoot: cwd, cccName: 'home-serenity' });
 
       // 1. register
       const r1 = await msmAdminTool.execute(

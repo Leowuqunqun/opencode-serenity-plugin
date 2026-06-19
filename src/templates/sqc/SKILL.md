@@ -4,7 +4,7 @@
 
 ## 用途
 
-SQC（Serenity Quality Cycle）品质循环维护宁静号实例的认知基础设施质量。
+SQC（Serenity Quality Cycle）品质循环维护认知容器 (CCC) 的认知基础设施质量。
 
 ## 检查维度
 

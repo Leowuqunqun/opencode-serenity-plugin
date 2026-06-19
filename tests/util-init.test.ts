@@ -1,7 +1,7 @@
 /**
  * util/init 单测 — RR7 slash command 业务逻辑
  *
- * v1.10: defaultPrefix / buildInstanceName / isValidPrefix / initSerenity
+ * v1.10: defaultPrefix / buildCccName / isValidPrefix / initSerenity
  *
  * initSerenity 涉及真实 git 操作（git init / git add / git commit），
  * 所以用例在 mkdtemp 创建的临时 git repo 里跑，测完 rm -rf 清理。
@@ -13,7 +13,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  buildInstanceName,
+  buildCccName,
   defaultPrefix,
   initSerenity,
   isValidPrefix,
@@ -22,7 +22,7 @@ import {
 import { writeSerenityFile } from '../src/util/serenity-file.js';
 import {
   InitGitCommitError,
-  InvalidInstanceNameError,
+  InvalidCccNameError,
   NotInGitRepoError,
 } from '../src/errors.js';
 
@@ -78,13 +78,13 @@ describe('defaultPrefix', () => {
   });
 });
 
-describe('buildInstanceName', () => {
+describe('buildCccName', () => {
   it('xx → xx-serenity', () => {
-    expect(buildInstanceName('xx')).toBe('xx-serenity');
+    expect(buildCccName('xx')).toBe('xx-serenity');
   });
 
   it('my-cool → my-cool-serenity', () => {
-    expect(buildInstanceName('my-cool')).toBe('my-cool-serenity');
+    expect(buildCccName('my-cool')).toBe('my-cool-serenity');
   });
 
   it('SERENITY_SUFFIX = "-serenity"', () => {
@@ -159,10 +159,10 @@ describe('initSerenity', () => {
     }
   });
 
-  it('invalid prefix → throws InvalidInstanceNameError', async () => {
+  it('invalid prefix → throws InvalidCccNameError', async () => {
     const tmp = setupGitRepo();
     try {
-      await expect(initSerenity(tmp, 'MyProject')).rejects.toThrow(InvalidInstanceNameError);
+      await expect(initSerenity(tmp, 'MyProject')).rejects.toThrow(InvalidCccNameError);
       expect(fileExists(tmp, '.serenity')).toBe(false);
     } finally {
       cleanup(tmp);

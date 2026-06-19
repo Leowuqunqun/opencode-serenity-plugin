@@ -20,7 +20,7 @@ function makeState(overrides: Partial<SerenityState> = {}): SerenityState {
   return Object.freeze({
     activated: true,
     cwdRoot: '/repo',
-    instanceName: 'home-serenity',
+    cccName: 'home-serenity',
     skillPath: '/repo/.opencode/skills/home-serenity/SKILL.md',
     skillContent: '# Mock SKILL.md\n\nThis is the test skill content.',
     ...overrides,
@@ -134,7 +134,7 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     expect(block).toContain('File access');
     expect(block).toContain('RR5');
     expect(block).toContain('msm_exec');
-    expect(block).toContain('bash may be disabled');
+    expect(block).toContain('bash is high-risk fallback; use msm_exec by default — D19');
     expect(block).toContain('inherits ALL constraints');
     expect(block).toContain('no bypass');
     expect(block).toContain('ssh-connect');
@@ -166,6 +166,6 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     await hook({ sessionID: 'sess-c1' } as any, output);
     expect(output.context.length).toBeGreaterThan(0);
     expect(output.context[0]).toContain('cwdRoot=/repo');
-    expect(output.context[0]).toContain('instanceName=home-serenity');
+    expect(output.context[0]).toContain('cccName=home-serenity');
   });
 });

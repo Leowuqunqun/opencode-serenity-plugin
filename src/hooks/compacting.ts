@@ -40,7 +40,7 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
       '=== Serenity Constraints ===',
       `Root: ${state.cwdRoot}`,
       '  • File access → read/edit/write/grep/glob limited to root (RR5)',
-      '  • Shell → use msm_exec (bash may be disabled)',
+      '  • Shell → use msm_exec (bash is high-risk fallback; use msm_exec by default — D19)',
       '  • Subagent → inherits ALL constraints (no bypass)',
       '  • SSH → use ssh-connect (not raw ssh)',
       '  • Multi-step → session-tool create first',
@@ -67,7 +67,7 @@ const sessionCompactingImpl: NonNullable<Hooks['experimental.session.compacting'
 
   const state = getState();
   output.context.push(
-    `[serenity-state] cwdRoot=${state.cwdRoot}; instanceName=${state.instanceName}; skillPath=${state.skillPath}`,
+    `[serenity-state] cwdRoot=${state.cwdRoot}; cccName=${state.cccName}; skillPath=${state.skillPath}`,
   );
 };
 
@@ -98,11 +98,11 @@ const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
   }
 
   const state = getState();
-  if (!state.activated || !state.instanceName) return;
+  if (!state.activated || !state.cccName) return;
 
   const context = [
     `=== Serenity System Context ===`,
-    `Instance: ${state.instanceName}`,
+    `CCC: ${state.cccName}`,
     `Root: ${state.cwdRoot}`,
     ``,
     `WARNING: Subagents inherit ALL serenity constraints.`,
@@ -111,7 +111,7 @@ const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
     `Constraints that also apply to subagents:`,
     `  - File access (read/edit/write/grep/glob) is LIMITED to the serenity root.`,
     `    Paths outside ${state.cwdRoot} will be REJECTED.`,
-    `  - The \`bash\` tool may be DISABLED. Prefer serenity tools.`,
+    `  - bash is high-risk fallback; use msm_exec by default (D19).`,
     `  - For shell commands, use msm_exec with an appropriate MSM.`,
     ``,
     `If the primary agent is blocked by a constraint, the subagent will be blocked too.`,

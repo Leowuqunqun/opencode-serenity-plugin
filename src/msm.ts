@@ -42,16 +42,16 @@ const VERSION: string = pkg.version;
  *  - 数组格式：[...]
  * 返回统一 MechEntry[]
  */
-export function loadMechRegistryFrom(cwdRoot: string, instanceName: string): MechEntry[] {
-  return loadRegistryFile(cwdRoot, instanceName).entries;
+export function loadMechRegistryFrom(cwdRoot: string, cccName: string): MechEntry[] {
+  return loadRegistryFile(cwdRoot, cccName).entries;
 }
 
-function registryFilePath(cwdRoot: string, instanceName: string): string {
-  return join(cwdRoot, '.opencode', 'skills', instanceName, 'references', 'mech-registry.json');
+function registryFilePath(cwdRoot: string, cccName: string): string {
+  return join(cwdRoot, '.opencode', 'skills', cccName, 'references', 'mech-registry.json');
 }
 
-export function loadRegistryFile(cwdRoot: string, instanceName: string): RegistryFile {
-  const path = registryFilePath(cwdRoot, instanceName);
+export function loadRegistryFile(cwdRoot: string, cccName: string): RegistryFile {
+  const path = registryFilePath(cwdRoot, cccName);
   try {
     const raw = readFileSync(path, 'utf8');
     const parsed = JSON.parse(raw);
@@ -89,8 +89,8 @@ export function loadRegistryFile(cwdRoot: string, instanceName: string): Registr
   }
 }
 
-export function writeRegistryFile(cwdRoot: string, instanceName: string, file: RegistryFile): void {
-  const path = registryFilePath(cwdRoot, instanceName);
+export function writeRegistryFile(cwdRoot: string, cccName: string, file: RegistryFile): void {
+  const path = registryFilePath(cwdRoot, cccName);
   const payload = file.isV1Wrapped
     ? {
         version: file.version ?? 1,
@@ -104,7 +104,7 @@ export function writeRegistryFile(cwdRoot: string, instanceName: string, file: R
 function loadMechRegistry(): MechEntry[] {
   const state = getState();
   if (!state.activated) return [];
-  return loadMechRegistryFrom(state.cwdRoot, state.instanceName);
+  return loadMechRegistryFrom(state.cwdRoot, state.cccName);
 }
 
 /** 查找 MSM（严格相等 + 路径必须在 cwdRoot 内） */
@@ -119,7 +119,7 @@ function findMsm(name: string, registry: MechEntry[]): MechEntry {
 /* ===== msm_list tool ===== */
 export const msmListTool: ToolDefinition = tool({
   description:
-    '[PRIMARY] List all available MSM (Mech & Semi-Mech) tools in the current serenity instance. ' +
+    '[PRIMARY] List all available MSM (Mech & Semi-Mech) tools in the current cognitive container (CCC). ' +
     '**This is the FIRST tool to call for any shell/exec operation** — bash, read (path arguments), ' +
     'and most plugin tools are intentionally limited. ' +
     'Each MSM is a deterministic, audited operation registered in `mech-registry.json`. ' +
@@ -133,7 +133,7 @@ export const msmListTool: ToolDefinition = tool({
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       log.warn('msm', 'msm_list: plugin not active', { reason });
-      return `serenity plugin is not active: ${reason}`;
+      return `CCC is not active: ${reason}`;
     }
     const registry = loadMechRegistry();
     log.info('msm', 'msm_list result', { count: registry.length, cwdRoot: getState().cwdRoot });
@@ -232,7 +232,7 @@ async function registerMsmInner(input: RegisterInput): Promise<string> {
   const state = getState();
 
   // 1. 读 registry（含 schema 信息）
-  const file = loadRegistryFile(state.cwdRoot, state.instanceName);
+  const file = loadRegistryFile(state.cwdRoot, state.cccName);
 
   // 2. 查重
   if (file.entries.some((e) => e.name === input.name)) {
@@ -255,7 +255,7 @@ async function registerMsmInner(input: RegisterInput): Promise<string> {
   const newEntry: MechEntry = {
     name: input.name,
     path: input.path,
-    skill: state.instanceName,
+    skill: state.cccName,
     category: input.category,
     description: input.description,
     usage,
@@ -270,11 +270,11 @@ async function registerMsmInner(input: RegisterInput): Promise<string> {
 
   // 6. 写回（保留 schema）
   file.entries.push(newEntry);
-  writeRegistryFile(state.cwdRoot, state.instanceName, file);
+  writeRegistryFile(state.cwdRoot, state.cccName, file);
   log.info('msm', 'msm_admin register wrote registry', { name: input.name, absPath });
 
   // 7. 自动 commit
-  const relRegistry = `.opencode/skills/${state.instanceName}/references/mech-registry.json`;
+  const relRegistry = `.opencode/skills/${state.cccName}/references/mech-registry.json`;
   try {
     gitAddAndCommit(state.cwdRoot, relRegistry, `chore(msm): register ${input.name}`);
   } catch (err) {
@@ -291,17 +291,17 @@ async function deregisterMsmInner(input: DeregisterInput): Promise<string> {
   log.info('msm', 'msm_admin deregister called', { name: input.name });
   const state = getState();
 
-  const file = loadRegistryFile(state.cwdRoot, state.instanceName);
+  const file = loadRegistryFile(state.cwdRoot, state.cccName);
   const idx = file.entries.findIndex((e) => e.name === input.name);
   if (idx === -1) {
     throw new MsmNotInRegistryError(input.name);
   }
 
   const removed = file.entries.splice(idx, 1)[0]!;
-  writeRegistryFile(state.cwdRoot, state.instanceName, file);
+  writeRegistryFile(state.cwdRoot, state.cccName, file);
   log.info('msm', 'msm_admin deregister wrote registry', { name: input.name, path: removed.path });
 
-  const relRegistry = `.opencode/skills/${state.instanceName}/references/mech-registry.json`;
+  const relRegistry = `.opencode/skills/${state.cccName}/references/mech-registry.json`;
   try {
     gitAddAndCommit(state.cwdRoot, relRegistry, `chore(msm): deregister ${input.name}`);
   } catch (err) {

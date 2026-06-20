@@ -53,12 +53,11 @@
  * - tui plugin 负责"通知用户"（激活提示 + 自安装 + RR7 初始化入口）
  */
 
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import type { TuiPlugin } from '@opencode-ai/plugin/tui';
 import {
-  defaultPrefix,
   isValidPrefix,
 } from './util/init.js';
 import { initWizard, type InitResult } from './init/init-wizard.js';
@@ -189,14 +188,10 @@ const Tui: TuiPlugin = async (api) => {
           return;
         }
 
-        const prefill = defaultPrefix(basename(cwd));
-
-        // 只问 CCC Name — 其余 (description/remote/scope) 留到 Phase 2 访谈
         dialog.replace(() =>
           api.ui.DialogPrompt({
             title: 'CCC Name',
             placeholder: 'kebab-case (e.g. home, work)',
-            value: prefill,
             onConfirm: async (value) => {
               const prefix = value.trim();
               if (!isValidPrefix(prefix)) {

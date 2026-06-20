@@ -53,7 +53,7 @@ export const sessionTool: ToolDefinition = tool({
     desc: z
       .string()
       .optional()
-      .describe('Short description for create subcommand (kebab-case, max 5 words)'),
+      .describe('Short description for create subcommand (any language, max 5 words)'),
     type: z
       .enum(['item', 'project'])
       .optional()

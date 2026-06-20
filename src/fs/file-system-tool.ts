@@ -241,10 +241,10 @@ export const fileSystemTool: ToolDefinition = tool({
 
     // ── list（增强：返回 JSON 元数据）──
     if (sub === 'list') {
-      if (!input.path) throw new FileSystemError('file-system list: requires a path argument');
-      const absPath = input.path.startsWith('/')
-        ? input.path
-        : resolveRootPath(root, input.path);
+      const relPath = input.path || '.';
+      const absPath = relPath.startsWith('/')
+        ? relPath
+        : resolveRootPath(root, relPath);
 
       if (!existsSync(absPath)) {
         throw new FileSystemError(`file-system list: path "${absPath}" does not exist`);
@@ -412,10 +412,10 @@ export const fileSystemTool: ToolDefinition = tool({
 
     // ── tree (recursive directory listing) ──
     if (sub === 'tree') {
-      if (!input.path) throw new FileSystemError('file-system tree: requires a path argument');
-      const absPath = input.path.startsWith('/')
-        ? input.path
-        : resolveRootPath(root, input.path);
+      const relPath = input.path || '.';
+      const absPath = relPath.startsWith('/')
+        ? relPath
+        : resolveRootPath(root, relPath);
 
       if (!existsSync(absPath)) {
         throw new FileSystemError(`file-system tree: path "${absPath}" does not exist`);

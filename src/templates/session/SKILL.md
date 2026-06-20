@@ -12,6 +12,30 @@
 $ {{prefix}}-serenity/AGENT_SESSIONS/
 ```
 
+## 核心规则（硬约束）
+
+以下三条为 ACC 强制规则，违反的 session 将被 `health` 检测为 ghost/drift：
+
+### 1. 编码规则
+
+每个 session 必须在目录名中包含 `S###` 编码（3 位数字，零填充，如 `S001`, `S042`）。
+
+`session-tool create` 自动分配编码 — 从现有最大值 + 1。
+
+目录名格式：`YYYY-MM-DD--S###--<short-description>`
+
+### 2. 创建 = 初始化 SESSION.md
+
+`session-tool create` 创建 session 目录的**同时**写入 `SESSION.md` 模板。
+
+Agent 在创建 session 后应立即补充目标和初始决策，不可留空。
+
+### 3. 文件归属
+
+session 的所有产物（记录、设计稿、数据）**必须**在该 session 目录内，不可散落在 `AGENT_SESSIONS/` 顶层。
+
+例外：`_project-links.md` 是 project 模式的索引文件，允许存在于 `AGENT_SESSIONS/` 顶层。
+
 ## 核心原则
 
 - **自由容器**：会话目录可以包含任何文件（SESSION.md、设计草案、原始数据、示意图）

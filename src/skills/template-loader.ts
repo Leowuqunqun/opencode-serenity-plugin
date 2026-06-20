@@ -131,7 +131,6 @@ export function loadTemplate(
   function collectFiles(dir: string, relativeDir: string): void {
     const entries = readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.name === 'manifest.yaml') continue; // 跳过 manifest
       const fullPath = join(dir, entry.name);
       const relPath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
 

@@ -188,8 +188,7 @@ describe('TUI plugin entry', () => {
     expect(api.ui.DialogPrompt).toHaveBeenCalled();
     expect(props.title).toBe('CCC Name');
     expect(props.placeholder).toContain('kebab-case');
-    // basename('/tmp/My Cool App') = 'My Cool App' → defaultPrefix = 'my-cool-app'
-    expect(props.value).toBe('my-cool-app');
+    expect(props.value).toBeUndefined();
   });
 
   it('onConfirm(valid prefix) → initWizard + dialog.clear + toast success', async () => {

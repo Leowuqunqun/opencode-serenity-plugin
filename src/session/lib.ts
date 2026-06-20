@@ -166,11 +166,12 @@ export interface CreateSessionOptions {
 export function createSession(opts: CreateSessionOptions): string {
   const { sessionsDir, desc, type, goal, dryRun } = opts;
 
-  // Validate desc format
-  if (!/^[a-z][a-z0-9-]{0,49}$/.test(desc)) {
-    throw new SessionError(
-      `Invalid description "${desc}": must be kebab-case (lowercase a-z, 0-9, dashes; max 50 chars, no leading digit or dash)`,
-    );
+  // Validate desc — allow any non-empty string (Chinese, spaces, etc.)
+  if (!desc || desc.length === 0) {
+    throw new SessionError('description cannot be empty');
+  }
+  if (desc.length > 200) {
+    throw new SessionError(`description too long: ${desc.length} chars (max 200)`);
   }
 
   // 生成日期前缀

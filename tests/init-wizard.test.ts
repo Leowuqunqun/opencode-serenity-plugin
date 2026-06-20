@@ -84,7 +84,7 @@ describe('init-wizard — non-interactive mode', () => {
     expect(branch).toBe('main');
   });
 
-  it('creates opencode.json as minimal valid config', async () => {
+  it('creates opencode.json with clean primary agent', async () => {
     const target = join(root, 'test-ccc2');
     const result = await initWizard({
       targetPath: target,
@@ -97,7 +97,15 @@ describe('init-wizard — non-interactive mode', () => {
     expect(result.success).toBe(true);
 
     const ocJson = JSON.parse(readFileSync(join(target, 'opencode.json'), 'utf8'));
-    expect(ocJson).toEqual({});
+    expect(ocJson['$schema']).toBe('https://opencode.ai/config.json');
+    expect(ocJson.default_agent).toBe('test-serenity');
+    expect(ocJson.permission).toEqual({ read: 'allow', edit: 'allow', write: 'allow' });
+    expect(ocJson.agent['test-serenity']).toEqual({
+      mode: 'primary',
+      description: 'A test CCC with desc',
+      permission: {},
+    });
+    expect(ocJson.plugin).toEqual(['@shgroup/opencode-serenity-plugin@latest']);
   });
 
   it('creates mech-registry.json with 3 preset MSMs', async () => {
@@ -142,7 +150,7 @@ describe('init-wizard — non-interactive mode', () => {
     expect(content).toContain('协作协议');
   });
 
-  it('creates Phase 2 prompt file', async () => {
+  it('creates Phase 2 prompt file with 5 questions', async () => {
     const target = join(root, 'test-ccc5');
     await initWizard({
       targetPath: target,
@@ -156,11 +164,17 @@ describe('init-wizard — non-interactive mode', () => {
     const content = readFileSync(promptPath, 'utf8');
 
     expect(content).toContain('Phase 2 initialization');
+    expect(content).toContain('5 questions');
     expect(content).toContain('Question 1');
-    expect(content).toContain('Sub-projects');
-    expect(content).toContain('Collaboration style');
+    expect(content).toContain('Git remote');
+    expect(content).toContain('Question 2');
+    expect(content).toContain('What does this CCC manage');
+    expect(content).toContain('Question 3');
+    expect(content).toContain('Formality level');
+    expect(content).toContain('Question 4');
     expect(content).toContain('Language preference');
-    expect(content).toContain('Remote services');
+    expect(content).toContain('Question 5');
+    expect(content).toContain('Extra skills');
   });
 
   it('creates 3 standard skill directories', async () => {

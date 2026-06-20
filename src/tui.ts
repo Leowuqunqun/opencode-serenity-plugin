@@ -53,19 +53,16 @@
  * - tui plugin 负责"通知用户"（激活提示 + 自安装 + RR7 初始化入口）
  */
 
-import { basename } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import type { TuiPlugin } from '@opencode-ai/plugin/tui';
 import {
   defaultPrefix,
-  initSerenity,
   isValidPrefix,
 } from './util/init.js';
+import { initWizard, type InitResult } from './init/init-wizard.js';
 import { ensureGlobalTuiPluginRegistration } from './util/tui-install.js';
-import {
-  InvalidCccNameError,
-  InitGitCommitError,
-} from './errors.js';
 import { log } from './util/log.js';
 import { findSerenityRootSafe, readSerenityCccName } from './fs/resolve-path.js';
 import { setBashDisabled, isBashDisabled } from './bash-toggle.js';
@@ -94,7 +91,6 @@ const Tui: TuiPlugin = async (api) => {
     const name = readSerenityCccName(root);
     serenityInstance = name;
     // 验证 SKILL.md 存在（RR2 同级检测）
-    const { existsSync } = await import('node:fs');
     const { resolve } = await import('node:path');
     const skillPath = name
       ? resolve(root, '.opencode', 'skills', name, 'SKILL.md')
@@ -151,14 +147,23 @@ const Tui: TuiPlugin = async (api) => {
     });
   }
 
-  // C: v1.10 RR7 — /serenity-init slash command
-  //    走 api.command.register（v1 SDK 的 legacy slash 入口，TS 类型仍支持）
-  //    返回值是 disposer（不存，plugin 卸载时 TUI 框架负责清理）
-  api.command?.register(() => [
+  // C: D1 Init — /serenity-init slash command（完整 CCC 初始化向导）
+  //    DialogPrompt 链：prefix → description → remote → scope → initWizard（D1 全量）
+  api.command?.register(() => {
+    const pluginRoot = (() => {
+      try {
+        const pluginFile = fileURLToPath(import.meta.url);
+        return dirname(dirname(pluginFile)); // dist/tui.js → dist/ → pluginRoot
+      } catch {
+        return process.cwd(); // fallback
+      }
+    })();
+
+    return [
     {
-      title: 'serenity: init cwd',
+      title: 'serenity: init CCC',
       value: 'serenity-init',
-      description: 'Create /.serenity and git-commit (requires restart)',
+      description: 'Initialize this directory as a full CCC (skills + git + agent)',
       slash: { name: 'serenity-init' },
       onSelect: (dialog) => {
         if (!dialog) {
@@ -172,69 +177,128 @@ const Tui: TuiPlugin = async (api) => {
         }
 
         const cwd = api.state.path.directory;
+
+        // 已有 CCC 则拒绝
+        if (existsSync(join(cwd, '.serenity'))) {
+          const name = readSerenityCccName(cwd) || '(unknown)';
+          api.ui.toast({
+            title: 'serenity',
+            message: `Already a CCC: ${name}. Delete .serenity first to re-init.`,
+            variant: 'info',
+            duration: 5000,
+          });
+          return;
+        }
+
         const prefill = defaultPrefix(basename(cwd));
 
+        // Step 1 — prefix
         dialog.replace(() =>
           api.ui.DialogPrompt({
-            title: 'Initialize serenity',
-            placeholder: 'kebab-case prefix (e.g. xx, tg)',
+            title: 'CCC Name',
+            placeholder: 'kebab-case (e.g. home, work)',
             value: prefill,
             onConfirm: async (value) => {
               const prefix = value.trim();
               if (!isValidPrefix(prefix)) {
                 api.ui.toast({
-                  title: 'Error',
-                  message:
-                    `Invalid prefix "${prefix}"; ` +
-                    `must be kebab-case (lowercase a-z, 0-9, dashes; no leading or trailing dash)`,
+                  title: 'Invalid prefix',
+                  message: 'Use lowercase a-z, 0-9, dashes; no leading/trailing dash',
                   variant: 'error',
                   duration: 5000,
                 });
-                return; // dialog 保持开启，让用户改完重试
+                return;
               }
-              try {
-                const result = await initSerenity(cwd, prefix);
-                dialog.clear();
-                if (result.kind === 'created') {
-                  const msg = result.gitInited
-                    ? `Git repo auto-created. Initialized ${result.name}; restart opencode to complete`
-                    : `Initialized ${result.name}; please restart opencode`;
-                  api.ui.toast({
-                    title: 'serenity',
-                    message: msg,
-                    variant: 'success',
-                    duration: 6000,
-                  });
-                } else {
-                  api.ui.toast({
-                    title: 'serenity',
-                    message: `Already initialized as ${result.name}`,
-                    variant: 'info',
-                    duration: 5000,
-                  });
-                }
-              } catch (err) {
-                dialog.clear();
-                let msg: string;
-                if (err instanceof InitGitCommitError) {
-                  msg = `git add+commit failed (rolled back): ${err.message}`;
-                } else if (err instanceof InvalidCccNameError) {
-                  msg = err.message;
-                } else {
-                  msg = err instanceof Error ? err.message : String(err);
-                }
-                api.ui.toast({ title: 'Error', message: msg, variant: 'error', duration: 5000 });
-                log.warn('serenity-init', 'init failed', { err: msg });
-              }
+
+              // Step 2 — description
+              dialog.replace(() =>
+                api.ui.DialogPrompt({
+                  title: 'Description',
+                  placeholder: 'One sentence: what does this CCC manage?',
+                  onConfirm: async (value) => {
+                    const description = value.trim() || 'A concrete cognitive container (CCC)';
+
+                    // Step 3 — remote (optional)
+                    dialog.replace(() =>
+                      api.ui.DialogPrompt({
+                        title: 'Git Remote',
+                        placeholder: 'git@github.com:user/repo.git — or empty to skip',
+                        onConfirm: async (value) => {
+                          const remote = value.trim();
+
+                          // Step 4 — scope
+                          dialog.replace(() =>
+                            api.ui.DialogPrompt({
+                              title: 'Scope',
+                              placeholder: 'solo (just you) or team',
+                              value: 'solo',
+                              onConfirm: async (value) => {
+                                const scope = value.trim() || 'solo';
+                                dialog.clear();
+
+                                try {
+                                  const result: InitResult = await initWizard({
+                                    targetPath: cwd,
+                                    prefix,
+                                    description,
+                                    remote,
+                                    scope,
+                                    pluginRoot,
+                                    nonInteractive: true,
+                                  });
+
+                                  if (result.success) {
+                                    const pushed = result.gitPushed ? ' + pushed' : '';
+                                    api.ui.toast({
+                                      title: 'CCC Created',
+                                      message:
+                                        `${result.cccName} initialized${pushed}. ` +
+                                        'Restart opencode to enter Phase 2.',
+                                      variant: 'success',
+                                      duration: 8000,
+                                    });
+                                  } else {
+                                    api.ui.toast({
+                                      title: 'Init Failed',
+                                      message: result.message,
+                                      variant: 'error',
+                                      duration: 6000,
+                                    });
+                                  }
+                                } catch (err) {
+                                  api.ui.toast({
+                                    title: 'Init Error',
+                                    message: err instanceof Error ? err.message : String(err),
+                                    variant: 'error',
+                                    duration: 6000,
+                                  });
+                                  log.warn('serenity-init', 'initWizard threw', { err: String(err) });
+                                }
+                              },
+                              onCancel: () => {
+                                dialog.clear();
+                                api.ui.toast({ title: 'serenity', message: 'Cancelled', variant: 'info', duration: 3000 });
+                              },
+                            }),
+                          );
+                        },
+                        onCancel: () => {
+                          dialog.clear();
+                          api.ui.toast({ title: 'serenity', message: 'Cancelled', variant: 'info', duration: 3000 });
+                        },
+                      }),
+                    );
+                  },
+                  onCancel: () => {
+                    dialog.clear();
+                    api.ui.toast({ title: 'serenity', message: 'Cancelled', variant: 'info', duration: 3000 });
+                  },
+                }),
+              );
             },
             onCancel: () => {
               dialog.clear();
-              api.ui.toast({
-                title: 'serenity',
-                message: 'Cancelled',
-                variant: 'info',
-                duration: 5000,
-              });
+              api.ui.toast({ title: 'serenity', message: 'Cancelled', variant: 'info', duration: 3000 });
             },
           }),
         );
@@ -288,7 +352,8 @@ const Tui: TuiPlugin = async (api) => {
         });
       },
     },
-  ]);
+  ];
+});
 };
 
 export default {

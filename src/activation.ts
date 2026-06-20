@@ -8,7 +8,7 @@
  *     - 成功：启动 Phase 2 fire-and-forget
  *   Phase 2 异步（后台 IO）：
  *     - RR1 读 /.serenity → 失败：state.error
- *     - RR2 验证 SKILL.md 存在 → 失败：state.error
+ *     - RR2 验证 SKILL.md → 缺失：降级（plugin 激活但 system prompt 不注入）
  *     - 成功：setState + mark ready
  *
  * 关键设计：tools/hooks 通过 `ensureReady()` 阻塞等待 Phase 2 完成。
@@ -90,25 +90,24 @@ async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<vo
     throw new Error(`RR1: ${detail}`);
   }
 
-  // RR2 — 验证 SKILL.md
-  let skillPath: string;
+  // RR2 — 验证 SKILL.md（v0.4.1: 降级为非致命——仅在存在时注入，缺失时不阻断激活）
+  let skillPath: string | null = null;
+  let skillContent: string | null = null;
   try {
     skillPath = buildSkillPath(cwdRoot, cccName);
     validateSkillExists(skillPath, cwdRoot, cccName);
+    // RR2.5 — 读 SKILL.md 全文（用于 system.transform 注入）
+    try {
+      skillContent = readFileSync(skillPath, 'utf8');
+      log.debug('phase2', 'SKILL.md loaded', { bytes: skillContent.length, skillPath });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      log.warn('phase2', 'SKILL.md read failed; will skip system.transform injection', { detail, skillPath });
+    }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(`RR2: ${detail}`);
-  }
-
-  // RR2.5 — 读 SKILL.md 全文（用于 system.transform 注入）
-  // 失败：降级为 null（plugin 仍工作，只是不注 SKILL.md）
-  let skillContent: string | null = null;
-  try {
-    skillContent = readFileSync(skillPath, 'utf8');
-    log.debug('phase2', 'SKILL.md loaded', { bytes: skillContent.length, skillPath });
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    log.warn('phase2', 'SKILL.md read failed; will skip system.transform injection', { detail, skillPath });
+    log.warn('phase2', 'SKILL.md not found; plugin activates but without skill injection', { detail, cwdRoot, cccName });
+    // 不 throw——plugin 继续激活（工具/hooks 仍可用，只是 system prompt 不注入）
   }
 
   // Phase 2 骨架检测 — SKILL.md 含骨架标记 → 需要 Agent 深度访谈

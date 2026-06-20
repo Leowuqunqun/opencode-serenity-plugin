@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { tryActivateSync } from '../src/activation.js';
-import { isActive, resetState, ensureReady } from '../src/state.js';
+import { isActive, resetState, ensureReady, getState } from '../src/state.js';
 import type { PluginInput } from '@opencode-ai/plugin';
 
 /** 构造一个完整的"serenity 工作仓"：git repo + /.serenity + skill 目录 */
@@ -94,7 +94,7 @@ describe('activation.tryActivateSync (v0.1 two-phase init)', () => {
     rmSync(tmp, { recursive: true });
   });
 
-  it('失败：/.serenity 存在但 SKILL.md 缺失（RR2 异步失败）', async () => {
+  it('v0.4.1: SKILL.md 缺失 → 不阻断激活（RR2 降级为非致命）', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'serenity-noskill-'));
     execFileSync('git', ['init', '-b', 'main'], { cwd: tmp, stdio: 'ignore' });
     execFileSync('git', ['config', 'user.email', 'test@test'], { cwd: tmp, stdio: 'ignore' });
@@ -102,7 +102,9 @@ describe('activation.tryActivateSync (v0.1 two-phase init)', () => {
     writeFileSync(join(tmp, '.serenity'), 'home-serenity');
     const result = tryActivateSync(fakeInput(tmp));
     expect(result.ok).toBe(true);
-    await expect(waitForReady()).rejects.toThrow(/RR2/);
+    await expect(waitForReady()).resolves.toBeUndefined();
+    expect(getState().activated).toBe(true);
+    expect(getState().skillPath).toBeNull();
     rmSync(tmp, { recursive: true });
   });
 });

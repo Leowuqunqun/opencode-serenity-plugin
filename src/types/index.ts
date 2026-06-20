@@ -16,8 +16,8 @@ export type SerenityState = {
   cwdRoot: string;
   /** CCC 名（从 /.serenity 文件内容读取）*/
   cccName: string;
-  /** SKILL.md 绝对路径（.opencode/skills/<cccName>/SKILL.md）*/
-  skillPath: string;
+  /** SKILL.md 绝对路径（.opencode/skills/<cccName>/SKILL.md；缺失时为 null — v0.4.1 RR2 降级）*/
+  skillPath: string | null;
   /** SKILL.md 全文（phase2 读取，用于 system.transform 注入到 system prompt）*/
   skillContent: string | null;
   /** Phase 2 初始化是否待进行（SKILL.md 含骨架标记 → true；Agent 完成访谈后外部清） */
@@ -33,7 +33,7 @@ export const INACTIVE_STATE: Readonly<SerenityState> = Object.freeze({
   activated: false,
   cwdRoot: '',
   cccName: '',
-  skillPath: '',
+  skillPath: null,
   skillContent: null,
   needsPhase2: false,
   phase2Prompt: null,

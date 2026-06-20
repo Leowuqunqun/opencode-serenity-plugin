@@ -101,8 +101,11 @@ const Tui: TuiPlugin = async (api) => {
     if (skillPath && existsSync(skillPath)) {
       serenityStatus = `✓ Serenity Activated${name ? ` (${name})` : ''}`;
       serenityVariant = 'success';
+    } else if (name) {
+      serenityStatus = `△ Serenity (${name}) — no SKILL.md`;
+      serenityVariant = 'info';
     } else {
-      serenityStatus = `⚠ Serenity Error${name ? ` (${name})` : ''}`;
+      serenityStatus = `⚠ Serenity Error`;
       serenityVariant = 'error';
     }
   } else {

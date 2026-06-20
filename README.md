@@ -398,7 +398,7 @@ msm_admin register --name my-deploy --path .opencode/scripts/my-deploy.ts \
 | Hook | 做什么 | 触发时机 |
 |------|--------|---------|
 | Path Isolation (P3) | 读写/编辑/grep 全部限定在 `.serenity` 所在目录 | 每次 Agent 调用文件工具前 |
-| Bash降级 (D19) | 禁止裸 `bash`——Agent 必须优先用 `msm_exec` | 每次 Agent 试图调 bash 时 |
+| Bash 开关 (D19) | `msm_exec` 优先——通过 `/serenity-bash-off` 和 `/serenity-bash-on` 控制，`/serenity-bash-status` 查询状态。**建议根据使用情况开关**：日常开发走 MSM，需要灵活操作时临时开启 | 每次 Agent 试图调 bash 时 |
 | Subagent 继承 | 子 agent 自动继承所有约束（路径、bash、SSH） | 每次 Agent 启动 subagent 时 |
 | System Prompt 注入 | 自动向 Agent 注入"你在一个 CCC 中"的上下文 | 每次对话开始时 |
 
@@ -449,4 +449,6 @@ pnpm install      # 安装到本地 ~/.config/opencode/
 
 ---
 
-> **版本**: v0.4.3 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16
+> **版本**: v0.4.4 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16
+>
+> **平台要求**: Serenity 在 OpenCode CLI（终端版）、Linux 桌面和 macOS 上完成测试验证。**Windows 未经测试，不保证正常使用。**

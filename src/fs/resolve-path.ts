@@ -9,7 +9,7 @@
  * 供 file-system-tool.ts 消费，也可被其他模块复用。
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve, relative, dirname, normalize } from 'node:path';
 
 /**
@@ -25,7 +25,7 @@ export function findSerenityRoot(cwd: string): string {
   // 向上遍历到根
   while (true) {
     const marker = resolve(current, '.serenity');
-    if (existsSync(marker)) {
+    if (existsSync(marker) && statSync(marker).isFile()) {
       return current;
     }
     // 到达根目录

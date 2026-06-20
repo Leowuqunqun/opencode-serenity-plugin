@@ -147,8 +147,7 @@ const Tui: TuiPlugin = async (api) => {
     });
   }
 
-  // C: D1 Init — /serenity-init slash command（完整 CCC 初始化向导）
-  //    DialogPrompt 链：prefix → description → remote → scope → initWizard（D1 全量）
+  // C: D1 Init — /serenity-init slash command（只需 CCC Name，其余 Phase 2 访谈补全）
   api.command?.register(() => {
     const pluginRoot = (() => {
       try {
@@ -192,7 +191,7 @@ const Tui: TuiPlugin = async (api) => {
 
         const prefill = defaultPrefix(basename(cwd));
 
-        // Step 1 — prefix
+        // 只问 CCC Name — 其余 (description/remote/scope) 留到 Phase 2 访谈
         dialog.replace(() =>
           api.ui.DialogPrompt({
             title: 'CCC Name',
@@ -209,92 +208,46 @@ const Tui: TuiPlugin = async (api) => {
                 });
                 return;
               }
+              dialog.clear();
 
-              // Step 2 — description
-              dialog.replace(() =>
-                api.ui.DialogPrompt({
-                  title: 'Description',
-                  placeholder: 'One sentence: what does this CCC manage?',
-                  onConfirm: async (value) => {
-                    const description = value.trim() || 'A concrete cognitive container (CCC)';
+              try {
+                const result: InitResult = await initWizard({
+                  targetPath: cwd,
+                  prefix,
+                  description: '',
+                  remote: '',
+                  scope: 'solo',
+                  pluginRoot,
+                  nonInteractive: true,
+                });
 
-                    // Step 3 — remote (optional)
-                    dialog.replace(() =>
-                      api.ui.DialogPrompt({
-                        title: 'Git Remote',
-                        placeholder: 'git@github.com:user/repo.git — or empty to skip',
-                        onConfirm: async (value) => {
-                          const remote = value.trim();
-
-                          // Step 4 — scope
-                          dialog.replace(() =>
-                            api.ui.DialogPrompt({
-                              title: 'Scope',
-                              placeholder: 'solo (just you) or team',
-                              value: 'solo',
-                              onConfirm: async (value) => {
-                                const scope = value.trim() || 'solo';
-                                dialog.clear();
-
-                                try {
-                                  const result: InitResult = await initWizard({
-                                    targetPath: cwd,
-                                    prefix,
-                                    description,
-                                    remote,
-                                    scope,
-                                    pluginRoot,
-                                    nonInteractive: true,
-                                  });
-
-                                  if (result.success) {
-                                    const pushed = result.gitPushed ? ' + pushed' : '';
-                                    api.ui.toast({
-                                      title: 'CCC Created',
-                                      message:
-                                        `${result.cccName} initialized${pushed}. ` +
-                                        'Restart opencode to enter Phase 2.',
-                                      variant: 'success',
-                                      duration: 8000,
-                                    });
-                                  } else {
-                                    api.ui.toast({
-                                      title: 'Init Failed',
-                                      message: result.message,
-                                      variant: 'error',
-                                      duration: 6000,
-                                    });
-                                  }
-                                } catch (err) {
-                                  api.ui.toast({
-                                    title: 'Init Error',
-                                    message: err instanceof Error ? err.message : String(err),
-                                    variant: 'error',
-                                    duration: 6000,
-                                  });
-                                  log.warn('serenity-init', 'initWizard threw', { err: String(err) });
-                                }
-                              },
-                              onCancel: () => {
-                                dialog.clear();
-                                api.ui.toast({ title: 'serenity', message: 'Cancelled', variant: 'info', duration: 3000 });
-                              },
-                            }),
-                          );
-                        },
-                        onCancel: () => {
-                          dialog.clear();
-                          api.ui.toast({ title: 'serenity', message: 'Cancelled', variant: 'info', duration: 3000 });
-                        },
-                      }),
-                    );
-                  },
-                  onCancel: () => {
-                    dialog.clear();
-                    api.ui.toast({ title: 'serenity', message: 'Cancelled', variant: 'info', duration: 3000 });
-                  },
-                }),
-              );
+                if (result.success) {
+                  const pushed = result.gitPushed ? ' + pushed' : '';
+                  api.ui.toast({
+                    title: 'CCC Created',
+                    message:
+                      `${result.cccName} initialized${pushed}. ` +
+                      'Restart opencode to enter Phase 2.',
+                    variant: 'success',
+                    duration: 8000,
+                  });
+                } else {
+                  api.ui.toast({
+                    title: 'Init Failed',
+                    message: result.message,
+                    variant: 'error',
+                    duration: 6000,
+                  });
+                }
+              } catch (err) {
+                api.ui.toast({
+                  title: 'Init Error',
+                  message: err instanceof Error ? err.message : String(err),
+                  variant: 'error',
+                  duration: 6000,
+                });
+                log.warn('serenity-init', 'initWizard threw', { err: String(err) });
+              }
             },
             onCancel: () => {
               dialog.clear();

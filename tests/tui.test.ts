@@ -17,12 +17,11 @@
  * 1. 形状：default 是对象，含 id（string）和 tui（function）
  * 2. 行为：调用 tui(api) 应当不抛错，且调用了 toast
  * 3. 行为：调用 tui(api) 应当注册 /serenity-init slash command
- * 4. onSelect(dialog) → opens Step 1 DialogPrompt (CCC Name) with prefill
- * 5. Step 1 onConfirm(valid) → advances to Step 2 (Description)
- * 6. Full 4-step chain → initWizard (D1) + dialog.clear + toast success
- * 7. Step 1 onConfirm(invalid prefix) → toast error, dialog not clear
- * 8. Step 1 onCancel → dialog.clear + toast "Cancelled"
- * 9. dialog=undefined → toast error, no throw
+ * 4. onSelect(dialog) → opens DialogPrompt (CCC Name) with prefill
+ * 5. onConfirm(valid prefix) → initWizard (D1) + dialog.clear + toast success
+ * 6. onConfirm(invalid prefix) → toast error, dialog not clear
+ * 7. onCancel → dialog.clear + toast "Cancelled"
+ * 8. dialog=undefined → toast error, no throw
  * 9. v1.10.1：plugin "dormant"（mock 掉 self-install）→ slash command 仍注册
  * 10. v1.10.1：self-install 返回 changed → toast 提示 "restart opencode"
  * 11. v1.15：loaded toast title 包含 "opencode-serenity-plugin v" + 版本号
@@ -177,7 +176,7 @@ describe('TUI plugin entry', () => {
     expect(typeof cmd.onSelect).toBe('function');
   });
 
-  it('onSelect opens Step 1 DialogPrompt (CCC Name) with prefill', async () => {
+  it('onSelect opens DialogPrompt (CCC Name) with prefill', async () => {
     const api = makeMockApi('/tmp/My Cool App');
     const dialog: MockDialogStack = {
       replace: vi.fn(),
@@ -193,41 +192,15 @@ describe('TUI plugin entry', () => {
     expect(props.value).toBe('my-cool-app');
   });
 
-  it('full 4-step chain → initWizard + dialog.clear + toast success', async () => {
+  it('onConfirm(valid prefix) → initWizard + dialog.clear + toast success', async () => {
     const tmp = setupGitRepo();
     try {
       const api = makeMockApi(tmp);
       const dialog: MockDialogStack = { replace: vi.fn(), clear: vi.fn(), setSize: vi.fn() };
 
-      // Step 1 — CCC Name
-      const step1 = await openDialogFromSelect(api, dialog);
-      expect(step1.title).toBe('CCC Name');
-      await step1.onConfirm!('xx');
-
-      // Step 2 — Description
-      expect(dialog.replace).toHaveBeenCalledTimes(2); // onSelect + Step 1 onConfirm
-      // dialog.replace is called with a render fn; call it to trigger DialogPrompt
-      const renderFn2 = dialog.replace.mock.calls[1][0] as () => unknown;
-      renderFn2();
-      const step2 = api.ui.DialogPrompt.mock.calls[1][0] as MockDialogPromptProps;
-      expect(step2.title).toBe('Description');
-      await step2.onConfirm!('test ccc');
-
-      // Step 3 — Git Remote
-      expect(dialog.replace).toHaveBeenCalledTimes(3);
-      const renderFn3 = dialog.replace.mock.calls[2][0] as () => unknown;
-      renderFn3();
-      const step3 = api.ui.DialogPrompt.mock.calls[2][0] as MockDialogPromptProps;
-      expect(step3.title).toBe('Git Remote');
-      await step3.onConfirm!('');
-
-      // Step 4 — Scope
-      expect(dialog.replace).toHaveBeenCalledTimes(4);
-      const renderFn4 = dialog.replace.mock.calls[3][0] as () => unknown;
-      renderFn4();
-      const step4 = api.ui.DialogPrompt.mock.calls[3][0] as MockDialogPromptProps;
-      expect(step4.title).toBe('Scope');
-      await step4.onConfirm!('solo');
+      const props = await openDialogFromSelect(api, dialog);
+      expect(props.title).toBe('CCC Name');
+      await props.onConfirm!('xx');
 
       // After initWizard
       expect(dialog.clear).toHaveBeenCalled();
@@ -243,7 +216,7 @@ describe('TUI plugin entry', () => {
     }
   });
 
-  it('Step 1 onCancel closes dialog + toasts "Cancelled"', async () => {
+  it('onCancel closes dialog + toasts "Cancelled"', async () => {
     const api = makeMockApi();
     const dialog: MockDialogStack = { replace: vi.fn(), clear: vi.fn(), setSize: vi.fn() };
     const props = await openDialogFromSelect(api, dialog);
@@ -255,14 +228,12 @@ describe('TUI plugin entry', () => {
     expect(cancelToast).toBeTruthy();
   });
 
-  it('Step 1 onConfirm(invalid prefix) toast error, does not advance', async () => {
+  it('onConfirm(invalid prefix) toast error, dialog not clear', async () => {
     const api = makeMockApi();
     const dialog: MockDialogStack = { replace: vi.fn(), clear: vi.fn(), setSize: vi.fn() };
     const props = await openDialogFromSelect(api, dialog);
     await props.onConfirm!('MyProject');
     expect(dialog.clear).not.toHaveBeenCalled();
-    // Should show error toast, not advance to Step 2
-    expect(dialog.replace).toHaveBeenCalledTimes(1); // only onSelect, not step advance
     const errorToast = api.ui.toast.mock.calls.find(
       (c) => (c[0] as { variant?: string }).variant === 'error',
     );

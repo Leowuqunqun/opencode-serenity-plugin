@@ -9,8 +9,8 @@
  * 注意：bash override (RR3) 已于 2026-06-08 移除。
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import { z } from 'zod';
 import { log } from './util/log.js';
@@ -288,6 +288,107 @@ async function registerMsmInner(input: RegisterInput): Promise<string> {
 
 type DeregisterInput = { name: string };
 
+/* ==== action=check: DC-M1~M4 品质检查 ==== */
+
+interface MsmCheckIssue {
+  check: string;
+  msm: string;
+  path: string;
+  detail: string;
+}
+
+function scanScripts(cwdRoot: string): Array<{ name: string; path: string; skill: string }> {
+  const results: Array<{ name: string; path: string; skill: string }> = [];
+  const skillsDir = join(cwdRoot, '.opencode', 'skills');
+  if (!existsSync(skillsDir)) return results;
+
+  for (const skill of readdirSync(skillsDir, { withFileTypes: true })) {
+    if (!skill.isDirectory() || skill.name.startsWith('.')) continue;
+    const scriptsDir = join(skillsDir, skill.name, 'scripts');
+    if (!existsSync(scriptsDir)) continue;
+
+    for (const entry of readdirSync(scriptsDir, { withFileTypes: true })) {
+      if (!entry.isFile() || entry.name === '.gitkeep') continue;
+      if (entry.name.endsWith('.test.ts') || entry.name.endsWith('.spec.ts')) continue;
+      const ext = entry.name.match(/\.(ts|js|mjs)$/)?.[0];
+      if (!ext) continue;
+      results.push({ name: entry.name.slice(0, -ext.length), path: join(scriptsDir, entry.name), skill: skill.name });
+    }
+  }
+  return results;
+}
+
+function checkMsmInner(): string {
+  const state = getState();
+  const cwdRoot = state.cwdRoot;
+
+  const scripts = scanScripts(cwdRoot);
+  const registry = loadMechRegistryFrom(cwdRoot, state.cccName);
+  const registeredNames = new Set(registry.map((e) => e.name));
+  const registryByPath = new Map<string, MechEntry>();
+  for (const e of registry) {
+    registryByPath.set(resolve(cwdRoot, e.path), e);
+  }
+  const issues: MsmCheckIssue[] = [];
+
+  for (const s of scripts) {
+    // DC-M1: 测试文件
+    const testCandidates = [
+      join(dirname(s.path), `${s.name}.test.ts`),
+      join(dirname(s.path), `${s.name}.spec.ts`),
+    ];
+    if (!testCandidates.some((c) => existsSync(c))) {
+      issues.push({ check: 'M1', msm: s.name, path: s.path, detail: '缺少单元测试文件' });
+    }
+
+    // DC-M2: main() CLI 守卫
+    try {
+      const content = readFileSync(s.path, 'utf-8');
+      const hasMain = /\bfunction\s+main\s*\(/.test(content);
+      const hasGuard = /isMain|require\.main\s*===|import\.meta\.url/.test(content);
+      if (!hasMain && !hasGuard) {
+        issues.push({ check: 'M2', msm: s.name, path: s.path, detail: '缺少 main() CLI 守卫（直接 import 可能触发副作用）' });
+      }
+    } catch {
+      // skip unreadable
+    }
+
+    // DC-M3: 已注册
+    if (!registeredNames.has(s.name)) {
+      issues.push({ check: 'M3', msm: s.name, path: s.path, detail: '未在 mech-registry.json 注册' });
+    }
+
+    // DC-M4: 路径参数标记
+    const entry = registryByPath.get(s.path);
+    if (entry && entry.flags) {
+      for (const f of entry.flags) {
+        if (!('name' in f && 'type' in f)) continue;
+        const fname = f.name.toLowerCase();
+        const hasPathHint = fname.includes('path') || fname.includes('file') || fname.includes('dir');
+        if (hasPathHint && f.type !== 'path') {
+          issues.push({ check: 'M4', msm: s.name, path: s.path, detail: `flag "${f.name}" 疑似路径参数但未标记 type:"path"` });
+        }
+      }
+    }
+  }
+
+  // DC-M3 反向: 注册表中脚本缺失
+  for (const entry of registry) {
+    const abs = resolve(cwdRoot, entry.path);
+    if (!existsSync(abs)) {
+      issues.push({ check: 'M3', msm: entry.name, path: entry.path, detail: 'mech-registry.json 引用但脚本文件不存在' });
+    }
+  }
+
+  if (issues.length === 0) return `MSM quality check: ALL ${scripts.length} MSM(s) passed (M1-M4).`;
+
+  const lines = [
+    `MSM quality check: ${scripts.length} MSM(s), ${issues.length} issue(s)`,
+    ...issues.map((i) => `  [${i.check}] ${i.msm} — ${i.detail}`),
+  ];
+  return lines.join('\n');
+}
+
 /** 内部 deregister 实现（v1.17 从 msmDeregisterTool 抽出） */
 async function deregisterMsmInner(input: DeregisterInput): Promise<string> {
   log.info('msm', 'msm_admin deregister called', { name: input.name });
@@ -315,26 +416,27 @@ async function deregisterMsmInner(input: DeregisterInput): Promise<string> {
 
 export const msmAdminTool: ToolDefinition = tool({
   description:
-    'Register or deregister an MSM (Mech/Semi-Mech) in mech-registry.json. ' +
+    'Register, deregister, get the MSM development guide, or run quality checks. ' +
     '**v1.17**: replaces the old msm_register + msm_deregister tools with a single tool + action enum. ' +
-    'Auto-commits the registry change as "chore(msm): register <name>" or "chore(msm): deregister <name>".',
+    'Auto-commits the registry change as "chore(msm): register <name>" or "chore(msm): deregister <name>". ' +
+    'Use action=guide to get the MSM development handbook (script conventions, testing, registration). ' +
+    'Use action=check to run DC-M1~M4 quality checks on all MSM scripts.',
   args: {
     action: z
-      .enum(['register', 'deregister'])
-      .describe('operation to perform: register (add MSM to registry) or deregister (remove from registry)'),
+      .enum(['register', 'deregister', 'guide', 'check'])
+      .describe('operation: register (add MSM), deregister (remove), guide (show development handbook), check (run DC-M1~M4 quality checks)'),
     name: z
       .string()
-      .min(1)
-      .describe('unique MSM name (kebab-case recommended); for both register and deregister'),
-    // register-specific (required when action=register, ignored otherwise)
+      .optional()
+      .describe('unique MSM name (kebab-case recommended); for register and deregister'),
     path: z
       .string()
       .optional()
-      .describe('[register] script path, relative to cwd root (e.g. ".opencode/skills/home-serenity/scripts/foo.ts"). Required for register.'),
+      .describe('[register] script path, relative to cwd root. Required for register.'),
     description: z
       .string()
       .optional()
-      .describe('[register] one-line description of what the MSM does. Required for register.'),
+      .describe('[register] one-line description. Required for register.'),
     category: z
       .enum(['mech', 'semi-mech'])
       .optional()
@@ -350,7 +452,7 @@ export const msmAdminTool: ToolDefinition = tool({
         }),
       )
       .optional()
-      .describe('[register] flag schema; type:"path" enables v0.1-2 path-escape guard. Defaults to [] when omitted.'),
+      .describe('[register] flag schema; type:"path" enables path-escape guard. Defaults to [] when omitted.'),
     usage: z
       .string()
       .optional()
@@ -358,11 +460,40 @@ export const msmAdminTool: ToolDefinition = tool({
   },
   execute: async (input) => {
     await ensureReady();
+    if (input.action === 'guide') {
+      const state = getState();
+      const guidePath = join(state.cwdRoot, 'docs', 'msm-development-guide.md');
+      try {
+        return readFileSync(guidePath, 'utf8');
+      } catch {
+        // fallback: embedded compact guide
+        return [
+          '=== MSM Development Handbook (compact) ===',
+          'Full guide not found at docs/msm-development-guide.md.',
+          '',
+          'Directory: skill-name/scripts/',
+          '  ├── my-msm.ts        ← implementation',
+          '  └── my-msm.test.ts   ← unit test (mandatory, checked by SQC DC-M1)',
+          '',
+          'Script requirements:',
+          '  • main() + require.main === module guard (prevents vitest trigger)',
+          '  • stdout = business output, stderr = errors',
+          '  • Path args → use type="path" or valueHint with path/file/dir',
+          '',
+          'Register: msm_admin register --name <name> --path <path>',
+          '  --description "<desc>" --category mech|semi-mech',
+          '',
+          'SQC checks: DC-M1 (test file exists), DC-M2 (main guard), DC-M3 (registered), DC-M4 (path flags)',
+        ].join('\n');
+      }
+    }
+    if (input.action === 'check') {
+      return checkMsmInner();
+    }
     if (input.action === 'register') {
-      if (!input.path || !input.description || !input.category) {
+      if (!input.name || !input.path || !input.description || !input.category) {
         throw new Error(
-          'msm_admin: action=register requires path, description, category. ' +
-          'deregister only needs name.',
+          'msm_admin: action=register requires name, path, description, category. '
         );
       }
       return await registerMsmInner({
@@ -373,6 +504,9 @@ export const msmAdminTool: ToolDefinition = tool({
         flags: input.flags ?? [],
         usage: input.usage,
       });
+    }
+    if (!input.name) {
+      throw new Error('msm_admin: action=deregister requires name');
     }
     return await deregisterMsmInner({ name: input.name });
   },

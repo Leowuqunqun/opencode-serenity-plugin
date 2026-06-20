@@ -206,7 +206,7 @@ describe('msm_admin action=register (v1.17 — 合并自 v1.1 msm_register)', ()
           } as any,
           fakeCtx(cwd),
         ),
-      ).rejects.toThrow(/requires path, description, category/);
+      ).rejects.toThrow(/requires name, path, description, category/);
 
       // 缺 description
       await expect(
@@ -219,7 +219,7 @@ describe('msm_admin action=register (v1.17 — 合并自 v1.1 msm_register)', ()
           } as any,
           fakeCtx(cwd),
         ),
-      ).rejects.toThrow(/requires path, description, category/);
+      ).rejects.toThrow(/requires name, path, description, category/);
 
       // 缺 category
       await expect(
@@ -232,7 +232,7 @@ describe('msm_admin action=register (v1.17 — 合并自 v1.1 msm_register)', ()
           } as any,
           fakeCtx(cwd),
         ),
-      ).rejects.toThrow(/requires path, description, category/);
+      ).rejects.toThrow(/requires name, path, description, category/);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

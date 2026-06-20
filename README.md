@@ -351,7 +351,7 @@ Git 自动 `init → commit → push`（如果你提供了 remote URL）。
 |------|------|
 | `msm_list` | 查询当前容器有哪些可执行操作（含描述、flag schema） |
 | `msm_exec` | 安全执行已注册的操作。**替代裸 bash**。路径逃逸自动阻断 |
-| `msm_admin` | 为容器注册新操作。自动 git commit |
+| `msm_admin` | 注册/注销操作、开发手册、MSM 品质检查（`check`）。自动 git commit |
 
 Agent 在 CCC 中可以直接注册自定义 MSM：
 
@@ -412,7 +412,7 @@ Phase 1 自动安装 3 个标准技能（含可执行 MSM 脚本）：
 |------|--------|---------|
 | `compass` | 方向判断——3 通道快速评估新任务是否具备推进条件 | `compass-tool validate` / `judge` |
 | `session` | 会话追踪——补充 ACC 内置 `session` 工具的容器级操作 | `session-tool reindex`（为历史会话补充 S### ID） |
-| `sqc` | 品质循环——按 DC（设计检查）规则扫描所有 skill 质量 | `sqc-tool check` / `report` / `pipeline` |
+| `sqc` | 品质循环——按 DC（设计检查）规则扫描所有 skill 质量 | `sqc-tool check` / `report` / `pipeline`；MSM 品质检查用 `msm_admin check` |
 
 后续你可以用 `msm_admin` 注册更多 MSM，安装更多技能模板。
 
@@ -449,6 +449,6 @@ pnpm install      # 安装到本地 ~/.config/opencode/
 
 ---
 
-> **版本**: v0.4.4 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16
+> **版本**: v0.4.5 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16
 >
 > **平台要求**: Serenity 在 OpenCode CLI（终端版）、Linux 桌面和 macOS 上完成测试验证。**Windows 未经测试，不保证正常使用。**

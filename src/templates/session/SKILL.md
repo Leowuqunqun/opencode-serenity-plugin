@@ -1,3 +1,8 @@
+---
+name: {{prefix}}-session
+description: AGENT_SESSIONS 工作会话追踪 — 全周期记录探索/分析/实施类工作的目标、决策、进度与结果
+---
+
 # Skill: {{prefix}}-session — 工作会话追踪
 
 > AGENT_SESSIONS 全生命周期管理

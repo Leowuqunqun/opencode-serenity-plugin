@@ -2,8 +2,3 @@ name: sqc
 eal: meta
 description: "sqc skill for {{prefix}}-serenity"
 version: 0.2.0
-msm:
-  - name: sqc-tool
-    path: .opencode/skills/{{prefix}}-sqc/scripts/sqc-tool.ts
-    description: "SQC 5-phase pipeline orchestration"
-    category: semi-mech

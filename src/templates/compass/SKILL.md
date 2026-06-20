@@ -1,3 +1,8 @@
+---
+name: {{prefix}}-compass
+description: 方向判断 — 3 通道信号评估，判定是否具备推进条件
+---
+
 # Skill: {{prefix}}-compass — 方向判断
 
 > 方向信号层：对新需求或探索方向产生观察，不评分不推荐不闭合。

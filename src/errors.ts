@@ -22,7 +22,7 @@ export class SerenityError extends Error {
 /** RR1 违反：cwd 不在 git repo 内 */
 export class NotInGitRepoError extends SerenityError {
   constructor(cwd: string) {
-    super(`cwd "${cwd}" is not inside a git repository; serenity plugin requires RR6 (cwd must be in a git repo)`);
+    super(`cwd "${cwd}" is not inside a git repository; serenity plugin requires RR6 (cwd must be in a git repo). Run \`git init\` in this directory first, or use \`/serenity-init\` to set up a complete CCC.`);
     this.name = 'NotInGitRepoError';
   }
 }

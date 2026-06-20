@@ -168,7 +168,7 @@ describe('init-wizard — non-interactive mode', () => {
     expect(content).toContain('EAP mode');
     expect(content).toContain('collaborative interview');
     expect(content).toContain('Topic 1');
-    expect(content).toContain('Identity, description');
+    expect(content).toContain('What is this CCC for');
     expect(content).toContain('solo');
     expect(content).toContain('Topic 2');
     expect(content).toContain('Git remote');

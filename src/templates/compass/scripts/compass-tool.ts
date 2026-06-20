@@ -593,7 +593,7 @@ try {
     "internal",
     `未预期的异常: ${e.message}`,
     { stack: e.stack },
-    "请向 Agent 报告此 bug",
+    `请向 Agent 报告此 bug（附带错误: ${e.message}）`,
     e,
   );
   emitError(fallback);

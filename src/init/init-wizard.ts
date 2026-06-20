@@ -117,14 +117,15 @@ async function collectInfo(prefill: string): Promise<CollectedInfo> {
 
   const remote = await askQuestion(
     '\n  [Optional] Git remote URL for version control?\n'
-    + '    (e.g. git@github.com:user/my-serenity.git — repo must be empty)\n'
+    + '    (e.g. git@github.com:user/my-serenity.git — new or empty repo recommended)\n'
     + '  > ',
   );
 
   const scope = await askQuestion(
     '\n  How many people will use this CCC?\n'
-    + '    solo  = just you\n'
-    + '    team  = multiple people\n'
+    + '    solo = just you\n'
+    + '    pair = you + one collaborator\n'
+    + '    team = multiple people\n'
     + '  > ',
     'solo',
   );
@@ -319,8 +320,9 @@ function generatePhase2Prompt(prefix: string): string {
     `## Your Task`,
     '',
     `Conduct a **collaborative interview**, not a questionnaire. Use EAP methodology`,
-    `throughout. When the user gives a vague answer, probe. When they say "I don't know",`,
-    `determine if it's a genuine gap or just not knowing how to express it.`,
+    `throughout. When the user gives a vague answer, probe. When they say "I don't know"`,
+    `or "没想好", accept it — the agent will work with what's available and help analyze`,
+    `rather than forcing the user to invent answers they don't have yet.`,
     `Then write the completed root SKILL.md at \`.opencode/skills/${cccName}/SKILL.md\`.`,
     '',
     `### EAP Interview Method`,
@@ -334,11 +336,11 @@ function generatePhase2Prompt(prefix: string): string {
     '',
     `### Interview Topics`,
     '',
-    `#### Topic 1 — Identity, description & scope`,
+    `#### Topic 1 — What is this CCC for? (purpose + team size)`,
     `"What does this CCC exist to do? Who is it for?"`,
     `EAP probes:`,
     `  • One-sentence description — what does it manage? (the SKILL.md \`description\` field)`,
-    `  • Scope — solo (just you) or team (shared with others)?`,
+    `  • Scope — solo (just you), pair (you + one collaborator), or team (shared with many)?`,
     `  • What entities does it manage? (projects? devices? knowledge? people?)`,
     `  • What's the boundary? (what is it NOT for?)`,
     `  • What stage is it at? (idea → building → operating → maintaining)`,
@@ -347,7 +349,7 @@ function generatePhase2Prompt(prefix: string): string {
     '',
     `#### Topic 2 — Git remote`,
     `"Git remote configured? Want one?"`,
-    `→ If not: note \`(local only)\`.`,
+    `→ If not: note \`(local only)\`. No remote is fine — can add later with \`git remote add\`.`,
     `→ If yes: setup via cc-git.`,
     '',
     `#### Topic 3 — Sub-projects / task routing`,
@@ -556,7 +558,7 @@ export async function initWizard(opts: InitOptions): Promise<InitResult> {
     `  Phase 1 ✅  — CCC skeleton created.`,
     `  Phase 2 ⏳  — Restart OpenCode and open ${targetPath}.`,
     `     Type anything — your first message will be intercepted`,
-    `     and the Agent will guide you through a 5-question interview`,
+    `     and the Agent will guide you through a collaborative interview`,
     `     to complete the root skill configuration.`,
     templatesMissing ? '  (Some skill templates not found — run `opencode-serenity-plugin install-skill <name>` to add them later)' : '',
   ].filter(Boolean).join('\n');

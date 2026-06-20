@@ -47,7 +47,7 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
       '',
       `This agent is running inside a Cognitive Container (CCC) —`,
       `a workspace managed by the ACC (Abstract Cognitive Container)`,
-      `plugin. The ACC provides 8 built-in tools (msm_list, msm_exec,`,
+      `plugin. The ACC provides built-in tools (msm_list, msm_exec,`,
       `msm_admin, cc-fs, session, cc-ck, eap, neat), path isolation (P3),`,
       `and session tracking. Additional MSMs may be registered in this CCC.`,
       '',

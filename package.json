@@ -23,7 +23,7 @@
   ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && cp -r src/templates dist/templates",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

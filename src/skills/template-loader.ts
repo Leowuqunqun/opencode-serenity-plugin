@@ -55,10 +55,14 @@ export function defaultPlaceholders(prefix: string): Placeholders {
 // ── 模板发现 ──
 
 /**
- * 返回 plugin 内置模板的 src/templates/ 目录路径。
- * 开发模式：相对于 bin/ 脚本的安装路径。
+ * 返回 plugin 内置模板目录路径。
+ * 优先 dist/templates/（npm 发布版），回退 src/templates/（开发模式）。
  */
 export function getTemplatesDir(pluginRoot: string): string {
+  const distPath = join(pluginRoot, 'dist', 'templates');
+  if (existsSync(distPath)) {
+    return distPath;
+  }
   return join(pluginRoot, 'src', 'templates');
 }
 

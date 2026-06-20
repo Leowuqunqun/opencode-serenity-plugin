@@ -39,7 +39,7 @@ export const sessionTool: ToolDefinition = tool({
       .describe(
         'Operation to perform:\n' +
         '  list    — List all sessions with status summary\n' +
-        '  show    — View session details (accepts S### or directory name)\n' +
+        '  show    — View session details (accepts S###, directory name, or fuzzy keyword)\n' +
         '  create  — Create a new session (--type=item|project --desc <desc>)\n' +
         '  health  — Health check: stale/stalled/drift/ghost\n' +
         '  qa      — Fact-check a session: verify SESSION.md claims against reality\n' +
@@ -49,7 +49,7 @@ export const sessionTool: ToolDefinition = tool({
     name: z
       .string()
       .optional()
-      .describe('Session identifier for show/archive subcommands (e.g. "S001" or directory name)'),
+      .describe('Session identifier for show/archive subcommands (e.g. "S001", directory name, or fuzzy keyword)'),
     desc: z
       .string()
       .optional()

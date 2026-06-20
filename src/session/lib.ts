@@ -115,6 +115,18 @@ function findSession(sessionsDir: string, name: string): SessionEntry | null {
   });
   if (byId) return byId;
 
+  // 模糊匹配：在目录名字段中做子串匹配（case-insensitive）
+  const lower = name.toLowerCase();
+  const fuzzyMatches = all.filter((s) => s.dirName.toLowerCase().includes(lower));
+  if (fuzzyMatches.length === 1) return fuzzyMatches[0] ?? null;
+  if (fuzzyMatches.length > 1) {
+    throw new SessionError(
+      `Found ${fuzzyMatches.length} sessions matching "${name}": ` +
+      fuzzyMatches.map((s) => s.dirName).join(', ') +
+      '. Use a more specific query.',
+    );
+  }
+
   return null;
 }
 

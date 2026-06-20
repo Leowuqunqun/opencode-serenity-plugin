@@ -84,7 +84,7 @@ describe('init-wizard — non-interactive mode', () => {
     expect(branch).toBe('main');
   });
 
-  it('creates opencode.json with write permissions', async () => {
+  it('creates opencode.json as minimal valid config', async () => {
     const target = join(root, 'test-ccc2');
     const result = await initWizard({
       targetPath: target,
@@ -97,10 +97,7 @@ describe('init-wizard — non-interactive mode', () => {
     expect(result.success).toBe(true);
 
     const ocJson = JSON.parse(readFileSync(join(target, 'opencode.json'), 'utf8'));
-    expect(ocJson.permissions.read).toBe('allow');
-    expect(ocJson.permissions.edit).toBe('allow');
-    expect(ocJson.permissions.write).toBe('allow');
-    expect(ocJson.description).toBe('A test CCC with desc');
+    expect(ocJson).toEqual({});
   });
 
   it('creates mech-registry.json with 3 preset MSMs', async () => {

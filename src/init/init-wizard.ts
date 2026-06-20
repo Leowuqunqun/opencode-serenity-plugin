@@ -172,17 +172,10 @@ function buildSkeleton(
         '',
       ].join('\n'),
     },
-    // opencode.json — write 全开（配合 P3 权限二分）
+    // opencode.json — 最小有效配置（CCC 元数据通过 .serenity + SKILL.md 表达）
     {
       path: 'opencode.json',
-      content: JSON.stringify({
-        permissions: {
-          read: 'allow',
-          edit: 'allow',
-          write: 'allow',
-        },
-        description,
-      }, null, 2) + '\n',
+      content: JSON.stringify({}, null, 2) + '\n',
     },
     // 根 skill 骨架（等待 Phase 2 Agent 完善）
     // 格式对齐 docs/ccc-init-flow-design.md §7.3

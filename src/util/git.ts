@@ -7,6 +7,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { resolve as resolvePath } from 'node:path';
 import { NotInGitRepoError } from '../errors.js';
 
 /**
@@ -40,14 +41,12 @@ export function tryFindGitRoot(cwd: string): string | null {
 
 /**
  * 判断 childPath 是否在 parentPath 内（路径前缀比较）
- * - 规范化路径（resolve）
- * - 用 path.relative 算相对路径
- * - 相对路径不以 '..' 开头 = 在内部
+ * - 先 resolve 展开 `..`/`.` 等相对成分
+ * - 用规范化后的绝对路径做前缀比较
  */
 export function isPathInside(parentPath: string, childPath: string): boolean {
-  const parent = parentPath.replace(/\/+$/, '');
-  const child = childPath.startsWith('/') ? childPath : `/${childPath}`;
-  // 简单前缀比较（已规范化的绝对路径）
+  const parent = resolvePath(parentPath).replace(/\/+$/, '');
+  const child = resolvePath(childPath);
   if (parent === '/') return child.startsWith('/');
   return child === parent || child.startsWith(parent + '/');
 }

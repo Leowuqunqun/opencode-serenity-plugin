@@ -576,7 +576,9 @@ export function qaSession(sessionsDir: string, name: string): string {
     }
 
     if (fileRefs.length > 0) {
-      const missing = fileRefs.filter((ref) => !existsSync(join(session.path, ref)));
+      // 产出物路径相对于项目根（sessionsDir 的父目录），而非会话目录
+      const projectRoot = join(sessionsDir, '..');
+      const missing = fileRefs.filter((ref) => !existsSync(join(projectRoot, ref)));
       if (missing.length > 0 && completedTasks > 0) {
         issues.push({
           severity: 'warning',

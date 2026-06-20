@@ -71,28 +71,27 @@ export function extractPathsFromArgs(args: ToolArgs): string[] {
  *  - 'not-exist'：文件不存在（写场景，无法 realpath）
  */
 function classifyPath(value: string, cwdRoot: string): 'inside' | 'outside' | 'symlink' | 'unparseable' | 'not-exist' {
-  if (value.startsWith('/') || /^[a-zA-Z]:[\\\/]/.test(value)) {
-    let abs: string;
+  let abs: string;
+  try {
+    abs = value.startsWith('/') || /^[a-zA-Z]:[\\\/]/.test(value)
+      ? pathResolve(value)
+      : pathResolve(cwdRoot, value);
+  } catch {
+    return 'unparseable';
+  }
+  if (!isPathInside(cwdRoot, abs)) return 'outside';
+  if (existsSync(abs)) {
     try {
-      abs = pathResolve(value);
+      const real = realpathSync(abs);
+      if (real !== abs) return 'symlink';
+      if (!isPathInside(cwdRoot, real)) return 'symlink';
     } catch {
       return 'unparseable';
     }
-    if (!isPathInside(cwdRoot, abs)) return 'outside';
-    if (existsSync(abs)) {
-      try {
-        const real = realpathSync(abs);
-        if (real !== abs) return 'symlink';
-        if (!isPathInside(cwdRoot, real)) return 'symlink';
-      } catch {
-        return 'unparseable';
-      }
-    } else {
-      return 'not-exist';  // 写文件场景合理
-    }
-    return 'inside';
+  } else {
+    return 'not-exist';  // 写文件场景合理
   }
-  return 'inside'; // 相对路径由 msm 子进程处理；tool 调用前已是绝对路径
+  return 'inside';
 }
 
 const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (input, _output) => {

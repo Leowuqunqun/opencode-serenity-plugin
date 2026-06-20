@@ -189,7 +189,7 @@ export function tokenizeArgs(args: string): string[] {
  * 行为细节：
  * - 非 path-arg 不校验
  * - token 顺序解析，--flag 后面跟的 token 是 value
- * - = 形式 --flag=value 不校验（罕见）
+ * - = 形式 --flag=value 也校验
  * - 文件不存在（写文件场景）→ 通过
  * - symlink 防御
  */
@@ -203,14 +203,17 @@ export function validatePathArgsFromTokens(
 
   for (let i = 0; i < tokens.length; i++) {
     const tok = tokens[i]!;
-    // 匹配 --flag
-    const m = /^--([\w-]+)$/.exec(tok);
+    // 匹配 --flag 或 --flag=value
+    const m = /^--([\w-]+)(?:=(.*))?$/.exec(tok);
     if (!m) continue;
     const flagName = m[1]!;
     if (!pathArgNames.has(flagName)) continue;
-    // 取下一个 token 作为 value
-    const value = tokens[i + 1];
-    if (value === undefined || value.startsWith('--')) continue;
+    // 取值：--flag=value 行内取，否则取下个 token
+    let value: string | undefined = m[2];
+    if (value === undefined) {
+      value = tokens[i + 1];
+      if (value === undefined || value.startsWith('--')) continue;
+    }
     if (typeof value !== 'string' || value.trim() === '') continue;
 
     const abs = resolvePath(cwdRoot, value);

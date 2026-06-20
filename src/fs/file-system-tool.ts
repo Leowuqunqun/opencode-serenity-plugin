@@ -425,6 +425,10 @@ export const fileSystemTool: ToolDefinition = tool({
       const filesOnly = input['files-only'] ?? false;
       const dirsOnly = input['dirs-only'] ?? false;
 
+      if (filesOnly && dirsOnly) {
+        throw new FileSystemError('file-system tree: files-only and dirs-only are mutually exclusive');
+      }
+
       function filterTree(entries: any[], keepType: string): any[] {
         return entries.filter(e => {
           if (e.type === keepType) {

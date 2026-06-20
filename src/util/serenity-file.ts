@@ -9,7 +9,7 @@
 
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { SerenityFileEmptyError, SerenityFileNotFoundError } from '../errors.js';
+import { SerenityFileEmptyError, SerenityFileNotFoundError, InvalidCccNameError } from '../errors.js';
 
 export const SERENITY_FILENAME = '.serenity';
 
@@ -32,6 +32,10 @@ export function readSerenityFile(cwdRoot: string): string {
   const name = content.trim();
   if (name === '') {
     throw new SerenityFileEmptyError(path);
+  }
+  // 验证 CCC 名称为 kebab-case（与 isValidCccName 一致）
+  if (!/^[a-z][a-z0-9-]*$/.test(name)) {
+    throw new InvalidCccNameError(name);
   }
   return name;
 }

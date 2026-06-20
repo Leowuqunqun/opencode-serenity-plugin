@@ -19,10 +19,8 @@
 
 type Level = 'info' | 'warn' | 'error' | 'debug';
 
-function logFn(level: Level, tag: string, msg: string, data?: Record<string, unknown>): void {
-  const ts = new Date().toISOString();
-  const dataStr = data ? ' ' + JSON.stringify(data) : '';
-  console.error(`[serenity:${level}:${tag}] ${ts} ${msg}${dataStr}`);
+function logFn(_level: Level, _tag: string, _msg: string, _data?: Record<string, unknown>): void {
+  // no-op for release
 }
 
 export const log = {

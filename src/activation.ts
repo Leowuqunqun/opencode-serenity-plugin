@@ -107,6 +107,7 @@ async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<vo
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     log.warn('phase2', 'SKILL.md not found; plugin activates but without skill injection', { detail, cwdRoot, cccName });
+    skillPath = null;
     // 不 throw——plugin 继续激活（工具/hooks 仍可用，只是 system prompt 不注入）
   }
 

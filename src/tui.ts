@@ -89,6 +89,7 @@ const Tui: TuiPlugin = async (api) => {
   let serenityInstance: string | null = null;  // CCC name
 
   const root = findSerenityRootSafe(cwd);
+  log.info('tui-d6', 'status check', { cwd, root: root || null });
   if (root) {
     const name = readSerenityCccName(root);
     serenityInstance = name;

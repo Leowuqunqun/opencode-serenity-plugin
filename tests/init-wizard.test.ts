@@ -150,7 +150,7 @@ describe('init-wizard — non-interactive mode', () => {
     expect(content).toContain('协作协议');
   });
 
-  it('creates Phase 2 prompt file with 5 questions', async () => {
+  it('creates Phase 2 prompt file with EAP-driven interview', async () => {
     const target = join(root, 'test-ccc5');
     await initWizard({
       targetPath: target,
@@ -164,17 +164,20 @@ describe('init-wizard — non-interactive mode', () => {
     const content = readFileSync(promptPath, 'utf8');
 
     expect(content).toContain('Phase 2 initialization');
-    expect(content).toContain('5 questions');
-    expect(content).toContain('Question 1');
+    expect(content).toContain('Load EAP');
+    expect(content).toContain('EAP mode');
+    expect(content).toContain('collaborative interview');
+    expect(content).toContain('Topic 1');
+    expect(content).toContain('Core identity');
+    expect(content).toContain('Topic 2');
     expect(content).toContain('Git remote');
-    expect(content).toContain('Question 2');
-    expect(content).toContain('What does this CCC manage');
-    expect(content).toContain('Question 3');
-    expect(content).toContain('Formality level');
-    expect(content).toContain('Question 4');
-    expect(content).toContain('Language preference');
-    expect(content).toContain('Question 5');
-    expect(content).toContain('Extra skills');
+    expect(content).toContain('Topic 3');
+    expect(content).toContain('task routing');
+    expect(content).toContain('Topic 4');
+    expect(content).toContain('Collaboration style');
+    expect(content).toContain('Topic 5');
+    expect(content).toContain('Extra capabilities');
+    expect(content).toContain('phase2-interview-record.md');
   });
 
   it('creates 3 standard skill directories', async () => {

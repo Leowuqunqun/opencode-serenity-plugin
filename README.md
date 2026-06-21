@@ -2,6 +2,24 @@
 
 > **不是安全沙箱——是认知容器。**
 
+[English](./README.en.md) | 中文
+
+---
+
+> ⚠️ **插件安全性说明**
+>
+> 本插件（ACC — Abstract Cognitive Container）仅在包含 `.serenity` 标记文件的目录（即 CCC — Concrete Cognitive Container）中**完全激活**。
+>
+> 在普通项目目录中启动 OpenCode，本插件**不影响任何 OpenCode 原本功能**：
+>
+> - 不注入系统提示（System Prompt）
+> - 不安装路径隔离守卫
+> - 不控制 bash 开关
+> - 不提供 msm/cc-fs/cc-git/session 等容器工具（工具已注册但无容器上下文，不生效）
+> - 不修改 OpenCode 的任何原有行为
+>
+> 你可以放心全局安装。只有当你**主动进入一个 CCC 目录**时，宁静号的能力才被激活。
+
 ---
 
 ## 什么是宁静号

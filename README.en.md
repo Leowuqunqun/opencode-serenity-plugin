@@ -22,6 +22,36 @@
 
 ---
 
+## Why Serenity
+
+There's a ship in the movie *Serenity*. Not big, not new, but reliable. It flies through the universe—it can't know every planet, but it has its own cabins and its own course. The crew doesn't know what's in every cargo hold, but when they need something, they can always get it.
+
+That's how CCC works: not omniscience, but accessibility. Information piles up, keeps changing, no one can master it all—but a ship doesn't need to master the whole universe. Flying well on its own course is enough.
+
+---
+
+EAP is my own idea. The core question is simple: problems can be subdivided infinitely—which level should you work at?
+
+You never know how many layers lie beneath. Grinding through layer by layer is the slowest approach. The fastest is to go straight to the top: set up the framework, then let instances follow.
+
+ACC is that framework. CCC is the instance. Blueprint and ship.
+
+---
+
+But ACC wasn't designed first. It emerged from practice.
+
+I run three CCCs. One at work, managing two R&D teams—requirements, architecture, conventions, deployment. One on my personal dev machine, managing my own projects. One at home, managing servers, network, plus finances and todos.
+
+Over time I noticed they all share the same skeleton. Extract that skeleton, and you get ACC. It's not blueprint-first-then-ship—it's several ships first, then the blueprint.
+
+---
+
+Later I read *Metaphors We Live By*, which confirmed the direction. Metaphor isn't rhetoric—it's how we understand the world.
+
+> <https://github.com/tellmewhattodo>
+
+---
+
 ## What is Serenity
 
 Serenity is a **Cognitive Infrastructure** — not a coding assistant, not a project management system, not an AI Agent platform.

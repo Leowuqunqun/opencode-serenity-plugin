@@ -21,6 +21,7 @@
  *   - .serenity 文件本身受保护不可删除
  */
 
+import { execFileSync } from 'node:child_process';
 import {
   existsSync, statSync, readdirSync,
   mkdirSync, unlinkSync, rmdirSync, rmSync,
@@ -28,6 +29,7 @@ import {
   type Stats,
 } from 'node:fs';
 import { resolve, dirname, normalize } from 'node:path';
+import { platform } from 'node:os';
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import { z } from 'zod';
 import { FileSystemError } from '../errors.js';
@@ -118,6 +120,7 @@ function assertNotProtected(root: string, absPath: string, targetLabel: string):
 const SUBCOMMANDS = [
   'root', 'resolve', 'exists', 'list', 'relative',
   'mkdir', 'rm', 'mv', 'cp', 'touch', 'tree', 'append',
+  'reveal',
 ] as const;
 
 export const fileSystemTool: ToolDefinition = tool({
@@ -142,7 +145,8 @@ export const fileSystemTool: ToolDefinition = tool({
         '  cp       — Copy a file or directory\n' +
         '  touch    — Create empty file or update timestamp\n' +
         '  tree     — Recursive directory listing, tree-like output as JSON\n' +
-        '  append   — Append content to a file (like shell >>)',
+        '  append   — Append content to a file (like shell >>)\n' +
+        '  reveal   — Open a path in the OS file manager (xdg-open on Linux, Finder on macOS)',
       ),
     path: z
       .string()
@@ -468,6 +472,40 @@ export const fileSystemTool: ToolDefinition = tool({
       }
 
       return JSON.stringify({ path: absPath, entries, maxDepth }, null, 2);
+    }
+
+    // ── reveal (open path in OS file manager) ──
+    if (sub === 'reveal') {
+      if (!input.path) throw new FileSystemError('file-system reveal: requires a path argument');
+      const absPath = input.path.startsWith('/')
+        ? input.path
+        : resolveRootPath(root, input.path);
+
+      if (!existsSync(absPath)) {
+        throw new FileSystemError(`file-system reveal: path "${absPath}" does not exist`);
+      }
+
+      const os = platform();
+      try {
+        if (os === 'darwin') {
+          // macOS: open Finder with the item selected
+          execFileSync('open', ['-R', absPath], { timeout: 10000 });
+        } else if (os === 'linux') {
+          // Linux: reveal the parent directory in default file manager
+          // For files: open containing dir; for dirs: open the dir itself
+          const revealPath = statSync(absPath).isDirectory() ? absPath : dirname(absPath);
+          execFileSync('xdg-open', [revealPath], { timeout: 10000 });
+        } else if (os === 'win32') {
+          // Windows: open Explorer with the item selected
+          execFileSync('explorer', ['/select,', absPath], { timeout: 10000 });
+        } else {
+          throw new FileSystemError(`file-system reveal: unsupported platform "${os}"`);
+        }
+        return `revealed in file manager: ${input.path}`;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new FileSystemError(`file-system reveal: failed to open "${input.path}": ${msg}`);
+      }
     }
 
     // ── append (append content to file) ──

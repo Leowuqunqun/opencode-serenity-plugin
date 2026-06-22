@@ -19,6 +19,7 @@
 import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady, clearPhase2Flag } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
+import { getActiveSession } from '../session/active-state.js';
 import pkg from '../../package.json' with { type: 'json' };
 
 const VERSION: string = pkg.version;
@@ -128,9 +129,16 @@ const sessionCompactingImpl: NonNullable<Hooks['experimental.session.compacting'
   }
 
   const state = getState();
-  output.context.push(
-    `[serenity-state] cwdRoot=${state.cwdRoot}; cccName=${state.cccName}; skillPath=${state.skillPath}`,
-  );
+  const serenityCtx = `[serenity-state] cwdRoot=${state.cwdRoot}; cccName=${state.cccName}; skillPath=${state.skillPath}`;
+  output.context.push(serenityCtx);
+
+  // 注入当前 OpenCode 会话的活跃 session 上下文（in-memory，不落盘）
+  const active = getActiveSession(_input.sessionID);
+  if (active) {
+    output.context.push(
+      `[active-session] id=${active.sessionId}; dir=${active.dirName}; path=${active.mdPath}`,
+    );
+  }
 };
 
 /**

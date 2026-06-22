@@ -25,12 +25,14 @@ import {
   showSession,
   useSession,
   closeSession,
+  resolveSessionInfo,
   healthCheck,
   createSession,
   archiveSessions,
   sessionSummary,
   qaSession,
 } from './lib.js';
+import { setActiveSession, removeActiveSession } from './active-state.js';
 
 export const sessionTool: ToolDefinition = tool({
   description:
@@ -128,6 +130,8 @@ export const sessionTool: ToolDefinition = tool({
       if (!input.name) {
         throw new SessionError('session-tool use: requires --name (S### or directory name)');
       }
+      const info = resolveSessionInfo(sessionsDir, input.name);
+      setActiveSession(ctx.sessionID, { sessionId: info.sessionId, dirName: info.dirName, mdPath: info.mdPath });
       return useSession(sessionsDir, input.name);
     }
 
@@ -135,6 +139,7 @@ export const sessionTool: ToolDefinition = tool({
       if (!input.name) {
         throw new SessionError('session-tool close: requires --name (S### or directory name)');
       }
+      removeActiveSession(ctx.sessionID);
       return closeSession(sessionsDir, input.name, input.confirm ?? false);
     }
 

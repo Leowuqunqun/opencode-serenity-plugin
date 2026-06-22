@@ -372,6 +372,26 @@ export function archiveSessions(opts: ArchiveOptions): string {
   return `Archived ${count} session(s) → _archived/`;
 }
 
+export interface SessionInfo {
+  dirName: string;
+  sessionId: string;
+  mdPath: string;
+}
+
+/** 根据名称查找会话,返回结构化信息（供 session-tool.ts 管理活跃状态用） */
+export function resolveSessionInfo(sessionsDir: string, name: string): SessionInfo {
+  const session = findSession(sessionsDir, name);
+  if (!session) {
+    throw new SessionError(`Session not found: "${name}". Use "list" to see available sessions.`);
+  }
+  const idMatch = session.dirName.match(/S(\d{3,})/);
+  return {
+    dirName: session.dirName,
+    sessionId: idMatch ? idMatch[0] : basename(session.dirName),
+    mdPath: join(session.path, SESSION_MD),
+  };
+}
+
 /** use 子命令 — 激活会话作为当前工作上下文 */
 export function useSession(sessionsDir: string, name: string): string {
   const session = findSession(sessionsDir, name);

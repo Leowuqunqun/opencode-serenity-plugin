@@ -1,14 +1,16 @@
 #!/usr/bin/env npx tsx
 /**
- * session-tool.ts — 会话索引重建工具（ACC session 补充）
+ * session-tool.ts — CCC session 扩展模板（ACC session 补充）
  *
- * 本文件是完整 session-tool.ts 的 reindex-only 精简版。
- * 仅保留 reindex 子命令及其依赖的扫描/分析基础设施。
+ * ACC 的 session 工具提供标准 8 子命令。本 MSM 在 ACC 基础上扩展：
+ *   1. reindex — 会话 ID 重建（原 session-reindex 功能）
+ *   2. create-transform 钩子 — create 后修改 SESSION.md 内容
  *
- * 类别：Mech（纯机械）
+ * 类别：Semi-Mech（可包含 LLM 决策）
  *
  * 用法：
  *   npx tsx session-tool.ts reindex [--dry-run]
+ *   npx tsx session-tool.ts --hook=create-transform --session-dir=<path>
  *
  * 退出码（参见 msm-writing-standards.md §5.3 命名空间）：
  *   0 — 成功
@@ -33,6 +35,7 @@
  *
  * 软状态消息（stdout，**非错误**）：
  *   - reindex: "所有会话已有 ID，无需 reindex" — 软消息，exit 0
+ *   - create-transform: "hook create-transform: SESSION.md transformed" — 软消息，exit 0
  */
 
 import {
@@ -104,7 +107,7 @@ function rejectProtocolFlags(args: string[]): void {
         `业务 msm 不接受 flag: ${arg}`,
         {
           arg,
-          validSubcommands: ["reindex"],
+          validSubcommands: ["reindex", "--hook"],
         },
         "v0.2: --json/--format/--log/--help/-h 由 msm_exec 拦截",
       );
@@ -116,7 +119,7 @@ function rejectProtocolFlags(args: string[]): void {
         `业务 msm 不接受缩写 flag: ${arg}`,
         {
           arg,
-          validSubcommands: ["reindex"],
+          validSubcommands: ["reindex", "--hook"],
         },
         "v0.2 §10.4: 业务 flag 必须 --全名（禁止 -d / -h / -j 等缩写）",
       );
@@ -615,14 +618,50 @@ function cmdReindex(cccRoot: string, subArgs: string[]): void {
 
 function printUsage(): void {
   console.log(`
-session-tool — 会话索引重建工具（ACC session 补充）
+session-tool — CCC session 扩展模板（ACC session 补充）
+
+子命令:
+  reindex              会话 ID 重建
+  --hook=<name>        后处理钩子 (create-transform)
 
 用法:
   npx tsx session-tool.ts reindex [--dry-run]
+  npx tsx session-tool.ts --hook=create-transform --session-dir=<path>
 
-reindex 参数:
+参数:
   --dry-run             预览
+  --hook=<name>         钩子名
+  --session-dir=<path>  会话目录路径
 `);
+}
+
+// ── 钩子与参数工具函数 ──
+
+/** 从 args 中提取 --key=value */
+function getFlagValue(args: string[], prefix: string): string | null {
+  for (const arg of args) {
+    if (arg.startsWith(prefix + "=")) return arg.slice(prefix.length + 1);
+  }
+  return null;
+}
+
+/** create-transform 钩子：创建后修改 SESSION.md */
+function hookCreateTransform(sessionDir: string): void {
+  const mdPath = join(sessionDir, "SESSION.md");
+  if (!existsSync(mdPath)) {
+    console.log("hook create-transform: SESSION.md not found, skipped");
+    return;
+  }
+  // 示例：在 SESSION.md 末尾追加一行 "扩展来源: CCC hook"
+  // CCC 可在此处替换为任意自定义逻辑，如替换模板、调外部 API 等
+  const existing = readFileSync(mdPath, "utf8");
+  const extra = "\n\n> 扩展来源: CCC session-tool MSM — create-transform hook\n";
+  if (existing.includes(extra.trim())) {
+    console.log("hook create-transform: already applied, skipped");
+    return;
+  }
+  appendFileSync(mdPath, extra, "utf8");
+  console.log("hook create-transform: SESSION.md transformed");
 }
 
 // ===================================================================
@@ -638,6 +677,29 @@ function main(): void {
   }
 
   rejectProtocolFlags(args);
+
+  // ---- 钩子调度（由 ACC session create 触发） ----
+  const hookName = getFlagValue(args, "--hook");
+  if (hookName) {
+    const sessionDir = getFlagValue(args, "--session-dir");
+    if (!sessionDir) {
+      throw new MsmError(
+        "PARAMETER_MISSING",
+        "user",
+        "hook 需要 --session-dir=<path>",
+        { hook: hookName },
+        "例: --hook=create-transform --session-dir=/path/to/session",
+      );
+    }
+    switch (hookName) {
+      case "create-transform":
+        hookCreateTransform(sessionDir);
+        return;
+      default:
+        console.log(`unknown hook "${hookName}", skipped`);
+        return;
+    }
+  }
 
   const subcommand = args[0];
   const subArgs = args.slice(1);
@@ -656,9 +718,9 @@ function main(): void {
         `未知子命令: "${subcommand}"`,
         {
           subcommand,
-          validSubcommands: ["reindex"],
+          validSubcommands: ["reindex", "--hook"],
         },
-        "用法: session-tool reindex [--dry-run]",
+        "用法: session-tool reindex [--dry-run] 或 session-tool --hook=create-transform --session-dir=<path>",
       );
   }
 }

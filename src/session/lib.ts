@@ -169,18 +169,24 @@ export function showSession(sessionsDir: string, name: string): string {
   return `# ${session.dirName}\n\n${content}`;
 }
 
-/** create 子命令 */
+/** create 子命令 — 只有 item 模式，无 project */
 export interface CreateSessionOptions {
   sessionsDir: string;
   root: string;
   desc: string;
-  type: 'item' | 'project';
   goal?: string;
   dryRun: boolean;
 }
 
-export function createSession(opts: CreateSessionOptions): string {
-  const { sessionsDir, desc, type, goal, dryRun } = opts;
+export interface CreateSessionResult {
+  message: string;
+  dirName: string;
+  sessionPath: string;
+  sessionId: string;
+}
+
+export function createSession(opts: CreateSessionOptions): CreateSessionResult {
+  const { sessionsDir, desc, goal, dryRun } = opts;
 
   // Validate desc — allow any non-empty string (Chinese, spaces, etc.)
   if (!desc || desc.length === 0) {
@@ -190,28 +196,9 @@ export function createSession(opts: CreateSessionOptions): string {
     throw new SessionError(`description too long: ${desc.length} chars (max 200)`);
   }
 
-  // 生成日期前缀
   const now = new Date();
   const datePrefix = now.toISOString().slice(0, 10); // YYYY-MM-DD
 
-  if (type === 'project') {
-    if (dryRun) {
-      return `[dry-run] Would create project session: "${desc}" (no directory, record in _project-links.md)`;
-    }
-    // project 模式: 不创建目录，在 _project-links.md 追加记录
-    const linksPath = join(sessionsDir, '_project-links.md');
-    const linkEntry = `- [${datePrefix}] ${desc}${goal ? ` — ${goal}` : ''}`;
-    if (existsSync(linksPath)) {
-      const existing = readFileSync(linksPath, 'utf8');
-      if (existing.includes(linkEntry)) {
-        return `Project link already exists: "${desc}"`;
-      }
-    }
-    writeFileSync(linksPath, (existsSync(linksPath) ? readFileSync(linksPath, 'utf8') + '\n' : '') + linkEntry + '\n', 'utf8');
-    return `Project session "${desc}" registered in _project-links.md`;
-  }
-
-  // item 模式: 创建目录 + SESSION.md
   // 分配 S### ID — 从现有最大值 + 1
   const sessions = readAllSessions(sessionsDir);
   const idPattern = /--S(\d{3,})--/;
@@ -235,7 +222,12 @@ export function createSession(opts: CreateSessionOptions): string {
   }
 
   if (dryRun) {
-    return `[dry-run] Would create: ${dirName}/\n  type=item\n  goal=${goal ?? '(none)'}`;
+    return {
+      message: `[dry-run] Would create: ${dirName}/\n  goal=${goal ?? '(none)'}`,
+      dirName,
+      sessionPath,
+      sessionId: `S${nextId}`,
+    };
   }
 
   // 创建目录
@@ -246,7 +238,12 @@ export function createSession(opts: CreateSessionOptions): string {
 
   writeFileSync(join(sessionPath, SESSION_MD), sessionMd, 'utf8');
 
-  return `Created: ${dirName}/ (S${nextId})`;
+  return {
+    message: `Created: ${dirName}/ (S${nextId})`,
+    dirName,
+    sessionPath,
+    sessionId: `S${nextId}`,
+  };
 }
 
 /** health 子命令 */

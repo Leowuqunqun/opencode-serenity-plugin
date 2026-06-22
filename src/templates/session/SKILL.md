@@ -25,21 +25,19 @@ $ {{prefix}}-serenity/AGENT_SESSIONS/
 
 每个 session 必须在目录名中包含 `S###` 编码（3 位数字，零填充，如 `S001`, `S042`）。
 
-`session-tool create` 自动分配编码 — 从现有最大值 + 1。
+`session create` 自动分配编码 — 从现有最大值 + 1。
 
 目录名格式：`YYYY-MM-DD--S###--<short-description>`
 
 ### 2. 创建 = 初始化 SESSION.md
 
-`session-tool create` 创建 session 目录的**同时**写入 `SESSION.md` 模板。
+`session create` 创建 session 目录的**同时**写入 `SESSION.md` 模板。
 
 Agent 在创建 session 后应立即补充目标和初始决策，不可留空。
 
 ### 3. 文件归属
 
 session 的所有产物（记录、设计稿、数据）**必须**在该 session 目录内，不可散落在 `AGENT_SESSIONS/` 顶层。
-
-例外：`_project-links.md` 是 project 模式的索引文件，允许存在于 `AGENT_SESSIONS/` 顶层。
 
 ## 核心原则
 
@@ -77,11 +75,18 @@ session 的所有产物（记录、设计稿、数据）**必须**在该 session
 
 | 工具 | 用途 |
 |------|------|
-| `session-tool list` | 列出所有会话 |
-| `session-tool show <id>` | 查看会话详情 |
-| `session-tool create` | 创建会话（item/project 双模式） |
-| `session-tool health` | 健康检查（stale/stalled/drift/ghost） |
-| `session-tool archive` | 归档已关闭会话 |
-| `session-tool summary` | 全局仪表盘 |
+| `session list` | 列出所有会话 |
+| `session show <id>` | 查看会话详情 |
+| `session create` | 创建会话（--desc <desc> [--goal <goal>]） |
+| `session health` | 健康检查（stale/stalled/drift/ghost） |
+| `session archive` | 归档已关闭会话 |
+| `session summary` | 全局仪表盘 |
+| `msm_exec session-tool <subcommand>` | 扩展子命令（如 reindex） |
 
 所有路径通过 `file-system root` 动态解析。
+
+## 扩展 ACC 会话能力
+
+本 CCC 可以通过注册 `session-tool` MSM 来扩展 ACC 的 `session` 工具。
+
+详见 `session hook-develop-guide`（ACC session 工具的内置扩展指南）。

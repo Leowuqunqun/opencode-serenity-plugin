@@ -49,7 +49,7 @@ export const sessionTool: ToolDefinition = tool({
         '  list    — List all sessions with status summary (active/in-progress first)\n' +
         '  show    — View session details (accepts S###, directory name, or fuzzy keyword)\n' +
         '  create  — Create a new session (--type=item|project --desc <desc>)\n' +
-        '  use     — Activate a session as current context (--name S###). Only active sessions can be used.\n' +
+        '  use     — Activate a session as current context (--name S###). Closed sessions can be re-opened; archived sessions cannot.\n' +
         '  close   — Close a session (requires --name + --confirm flag). Cannot be undone.\n' +
         '  health  — Health check: stale/stalled/drift/ghost\n' +
         '  qa      — Fact-check a session: verify SESSION.md claims against reality\n' +

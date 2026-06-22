@@ -399,13 +399,6 @@ export function useSession(sessionsDir: string, name: string): string {
     throw new SessionError(`Session not found: "${name}". Use "list" to see available sessions.`);
   }
 
-  if (session.status.completed) {
-    throw new SessionError(
-      `Session "${session.dirName}" is completed and cannot be activated. ` +
-      'Only active (in-progress) sessions can be used with "session use".',
-    );
-  }
-
   const mdPath = join(session.path, SESSION_MD);
   if (!existsSync(mdPath)) {
     throw new SessionError(`Session "${session.dirName}" has no SESSION.md — nothing to load.`);

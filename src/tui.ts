@@ -259,10 +259,10 @@ const Tui: TuiPlugin = async (api) => {
       description: 'Enable bash tool (default)',
       slash: { name: 'serenity-bash-on' },
       onSelect: () => {
-        setBashDisabled(false);
+        setBashDisabled(false, root ?? undefined);
         api.ui.toast({
           title: 'Bash',
-          message: 'bash is now enabled',
+          message: root ? 'bash is now enabled (CCC-root marker removed)' : 'bash is now enabled',
           variant: 'success',
           duration: 3000,
         });
@@ -275,10 +275,10 @@ const Tui: TuiPlugin = async (api) => {
       description: 'Disable bash tool (silent reject via plugin hook)',
       slash: { name: 'serenity-bash-off' },
       onSelect: () => {
-        setBashDisabled(true);
+        setBashDisabled(true, root ?? undefined);
         api.ui.toast({
           title: 'Bash',
-          message: 'bash is now disabled (silent reject)',
+          message: root ? 'bash is now disabled (CCC-root marker created)' : 'bash is now disabled',
           variant: 'warning',
           duration: 3000,
         });
@@ -291,10 +291,18 @@ const Tui: TuiPlugin = async (api) => {
       description: 'Show current bash toggle status',
       slash: { name: 'serenity-bash-status' },
       onSelect: () => {
-        const disabled = isBashDisabled();
+        const disabled = isBashDisabled(root ?? undefined);
+        const envNote = process.env.SERENITY_BASH_DISABLED
+          ? ` (env: SERENITY_BASH_DISABLED=${process.env.SERENITY_BASH_DISABLED})`
+          : '';
+        const markerNote = root && disabled
+          ? ' [CCC-root marker active]'
+          : '';
         api.ui.toast({
           title: 'Bash Status',
-          message: disabled ? 'bash is DISABLED (silent reject)' : 'bash is enabled',
+          message: disabled
+            ? `bash is DISABLED${envNote}${markerNote}`
+            : 'bash is ENABLED',
           variant: disabled ? 'warning' : 'success',
           duration: 5000,
         });

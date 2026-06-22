@@ -170,6 +170,54 @@ describe('cc-git tool — log', () => {
   });
 });
 
+describe('cc-git tool — pull', () => {
+  let root: string;
+
+  beforeEach(() => { root = createSerenityInstance(); });
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('throws when no remote configured', async () => {
+    await expect(
+      callGit({ subcommand: 'pull' }, root),
+    ).rejects.toThrow('no remote configured');
+  });
+
+  it('pulls successfully from remote (fast-forward)', async () => {
+    // Simulate "remote ahead" by using a bare repo:
+    const barePath = mkdtempSync(join(tmpdir(), 'cc-git-pull-remote-'));
+    execFileSync('git', ['init', '--bare'], { cwd: barePath, stdio: 'ignore' });
+    execFileSync('git', ['remote', 'add', 'origin', barePath], { cwd: root, stdio: 'ignore' });
+    execFileSync('git', ['push', '--set-upstream', 'origin', 'main'], { cwd: root, stdio: 'ignore' });
+
+    // Second repo advances the remote
+    const clonePath = mkdtempSync(join(tmpdir(), 'cc-git-pull-clone-'));
+    execFileSync('git', ['clone', barePath, clonePath], { stdio: 'ignore' });
+    writeFileSync(join(clonePath, 'ahead-file.txt'), 'ahead');
+    execFileSync('git', ['add', '-A'], { cwd: clonePath, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'ahead commit'], { cwd: clonePath, stdio: 'ignore' });
+    execFileSync('git', ['push'], { cwd: clonePath, stdio: 'ignore' });
+
+    const result = await callGit({ subcommand: 'pull' }, root);
+    expect(result).toBeTruthy();
+    expect(result).not.toMatch(/^\[REJECTED\]/);
+
+    rmSync(barePath, { recursive: true, force: true });
+    rmSync(clonePath, { recursive: true, force: true });
+  });
+
+  it('already up to date', async () => {
+    const barePath = mkdtempSync(join(tmpdir(), 'cc-git-pull-remote2-'));
+    execFileSync('git', ['init', '--bare'], { cwd: barePath, stdio: 'ignore' });
+    execFileSync('git', ['remote', 'add', 'origin', barePath], { cwd: root, stdio: 'ignore' });
+    execFileSync('git', ['push', 'origin', 'main'], { cwd: root, stdio: 'ignore' });
+
+    const result = await callGit({ subcommand: 'pull' }, root);
+    expect(result).toContain('Already up to date');
+
+    rmSync(barePath, { recursive: true, force: true });
+  });
+});
+
 describe('cc-git tool — edge cases', () => {
   it('throws when not in a CCC (no .serenity)', async () => {
     const root = mkdtempSync(join(tmpdir(), 'cc-git-no-ccc-'));

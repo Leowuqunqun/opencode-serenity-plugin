@@ -66,8 +66,7 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
       '  • File access → read/edit/write/grep/glob limited to root (RR5)',
       '  • Shell → use msm_exec (bash is high-risk fallback; use msm_exec by default — D19)',
       '  • Subagent → inherits ALL constraints (no bypass)',
-      '  • SSH → use ssh-connect (not raw ssh)',
-      '  • Multi-step → session create first',
+      '  • Session-first: propose existing or new session; wait for user to say "使用" or "use" to confirm before starting work',
       '',
     ].join('\n');
     output.system.push(block);

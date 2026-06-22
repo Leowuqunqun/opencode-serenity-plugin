@@ -51,7 +51,6 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     expect(output.system[1]).toContain('File access');
     expect(output.system[1]).toContain('RR5');
     expect(output.system[1]).toContain('msm_exec');
-    expect(output.system[1]).toContain('ssh-connect');
     expect(output.system[1]).toContain('session');
     // index 2: SKILL.md
     expect(output.system[2]).toBe('# Mock SKILL.md\n\nThis is the test skill content.');
@@ -122,7 +121,7 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     expect(outputB.system[2]).toContain('Mock SKILL.md');
   });
 
-  it('constraints block 包含全部 5 条约束条目', async () => {
+  it('constraints block 包含全部约束条目', async () => {
     setState(makeState());
     markReady();
     const hooks = createCompactingHooks();
@@ -141,7 +140,6 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     expect(block).toContain('bash is high-risk fallback; use msm_exec by default — D19');
     expect(block).toContain('inherits ALL constraints');
     expect(block).toContain('no bypass');
-    expect(block).toContain('ssh-connect');
     expect(block).toContain('session');
   });
 

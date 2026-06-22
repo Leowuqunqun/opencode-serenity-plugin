@@ -2,17 +2,18 @@
  * cc-git-tool.ts — CCC git 管理工具（ACC 内置 tool）
  *
  * 提供无 bash 依赖的 git 操作，覆盖最频繁的无风险操作。
- * pull/merge/rebase/conflict resolution 不 Mech 化 — Agent 协调 + bash 人工决策。
+ * merge/rebase/conflict resolution 不 Mech 化 — Agent 协调 + bash 人工决策。
  *
  * 子命令：
  *   status  — git status --porcelain（返回 JSON）
  *   commit  — git add -A && git commit -m <msg>
  *   push    — git push origin <current-branch>
  *   log     — git log --oneline [-n <count>]
+ *   pull    — git pull --ff-only（安全 fast-forward；有分歧时输出 [REJECTED] + 操作建议）
  *
  * 冲突约定（设计文档 §8.4）：
- *   - push 被 non-fast-forward 拒绝时输出 [REJECTED] + 操作建议
- *   - push 成功时输出简洁摘要
+ *   - push/pull 被 non-fast-forward 拒绝时输出 [REJECTED] + 操作建议
+ *   - push/pull 成功时输出简洁摘要
  */
 
 import { execFileSync } from 'node:child_process';
@@ -23,7 +24,7 @@ import pkg from '../../package.json' with { type: 'json' };
 
 const VERSION = pkg.version;
 
-const SUBCOMMANDS = ['status', 'commit', 'push', 'log'] as const;
+const SUBCOMMANDS = ['status', 'commit', 'push', 'log', 'pull'] as const;
 
 // ── 内部 helper ──
 
@@ -65,7 +66,8 @@ export const ccGitTool: ToolDefinition = tool({
   description:
     `Serenity git utility (v${VERSION}). ` +
     `Git operations for the CCC (Concrete Cognitive Container). ` +
-    `Subcommands: status (porcelain status), commit (git add -A + commit), push (push to origin), log (oneline history). ` +
+    `Subcommands: status (porcelain status), commit (git add -A + commit), push (push to origin), log (oneline history), ` +
+    `pull (pull --ff-only). ` +
     `Use this for git operations when bash is not available. ` +
     `Conflict resolution is NOT automated — use bash for merges and rebases.`,
   args: {
@@ -75,7 +77,8 @@ export const ccGitTool: ToolDefinition = tool({
         'Operation: status (git status --porcelain), ' +
         'commit (git add -A + commit -m <msg>), ' +
         'push (git push origin HEAD), ' +
-        'log (git log --oneline)',
+        'log (git log --oneline), ' +
+        'pull (git pull --ff-only)',
       ),
     message: z
       .string()
@@ -185,6 +188,59 @@ export const ccGitTool: ToolDefinition = tool({
 
       // Other errors
       throw new Error(`cc-git push failed:\n${stderr}`);
+    }
+
+    // ── pull ──
+    if (sub === 'pull') {
+      if (!hasRemote(root)) {
+        throw new Error(
+          'cc-git pull: no remote configured. Add one with:\n' +
+          '  git remote add origin <url>',
+        );
+      }
+
+      const branch = getCurrentBranch(root);
+
+      // git pull = git fetch + git merge FETCH_HEAD
+      // 用 FETCH_HEAD 而非 origin/<branch>，避免 remote-tracking ref 未更新
+      const fetchResult = execGit(['fetch', 'origin', branch], root);
+      if (fetchResult.stderr) {
+        return `[WARN] fetch had stderr:\n${fetchResult.stderr}`;
+      }
+
+      // 检查是否已 up-to-date：rev-list --count HEAD..FETCH_HEAD
+      const revResult = execGit(['rev-list', '--count', 'HEAD..FETCH_HEAD'], root);
+      if (revResult.stderr) {
+        return `[WARN] cannot check ahead count:\n${revResult.stderr}`;
+      }
+      if (revResult.stdout === '0' || revResult.stdout === '') {
+        return 'Already up to date.';
+      }
+
+      // git merge --ff-only FETCH_HEAD
+      const mergeResult = execGit(['merge', '--ff-only', 'FETCH_HEAD'], root);
+      if (!mergeResult.stderr) {
+        const msg = mergeResult.stdout || 'Pulled successfully.';
+        return msg.endsWith('\n') ? msg.trimEnd() : msg;
+      }
+
+      if (
+        mergeResult.stderr.includes('non-fast-forward') ||
+        mergeResult.stderr.includes('Not possible to fast-forward') ||
+        mergeResult.stderr.includes('rejected') ||
+        mergeResult.stderr.includes('could not be applied')
+      ) {
+        return `[REJECTED] Pull from origin/${branch} was rejected (non-fast-forward).
+
+远程有新的提交，本地的历史与远程产生了分歧（非快进）。操作建议：
+  1. 查看差异: cc-git log HEAD..origin/${branch}
+  2. 用 bash 手动合并: git merge origin/${branch}
+  3. 或用 rebase: git rebase origin/${branch}
+  4. 有冲突则手动解决后: git add <file> && git commit
+  5. 推送: cc-git push`;
+      }
+
+      throw new Error(`cc-git pull failed:\n${mergeResult.stderr}`);
     }
 
     // ── log ──

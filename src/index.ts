@@ -63,7 +63,7 @@ const plugin: Plugin = async (input) => {
       cc_ck: cccStatusTool, // v0.3 D18: CCC 三原则状态检查
       eap: eapTool,        // v0.3: EAP 认知质量框架 (渐进式披露)
       neat: neatTool,      // v0.3: Neat 设计协作协议 (渐进式披露)
-      cc_git: ccGitTool,   // v0.4: CCC git 管理工具 (status/commit/push/log)
+      cc_git: ccGitTool,   // v0.4: CCC git 管理工具 (status/commit/push/log/pull)
     },
     ...createPermissionGuards(),
     ...createCompactingHooks(),

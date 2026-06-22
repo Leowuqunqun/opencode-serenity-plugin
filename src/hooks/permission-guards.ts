@@ -136,8 +136,8 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
     }
   }
 
-  // bash toggle: 静默拒绝（文件 IPC，TUI slash command 控制）
-  if (input.tool === 'bash' && isBashDisabled()) {
+  // bash toggle: 多源级联（环境变量 > CCC-root 标记 > /tmp 运行时 > 默认启用）
+  if (input.tool === 'bash' && isBashDisabled(state.cwdRoot)) {
     throw new Error(
       `bash is disabled by user, use msm instead`,
     );

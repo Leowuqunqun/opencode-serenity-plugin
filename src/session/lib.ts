@@ -84,14 +84,18 @@ function readSessionEntry(dirPath: string): SessionEntry | null {
   }
 }
 
-/** 读取 AGENT_SESSIONS 中所有会话 */
+/** 读取 AGENT_SESSIONS 中所有会话，活跃（未完成）排前 */
 function readAllSessions(sessionsDir: string): SessionEntry[] {
   try {
     return readdirSync(sessionsDir, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => readSessionEntry(join(sessionsDir, e.name)))
       .filter((s): s is SessionEntry => s !== null)
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+      .sort((a, b) => {
+        if (!a.status.completed && b.status.completed) return -1;
+        if (a.status.completed && !b.status.completed) return 1;
+        return b.mtime.getTime() - a.mtime.getTime();
+      });
   } catch {
     return [];
   }
@@ -139,9 +143,16 @@ export function listSessions(sessionsDir: string): string {
     return '(no sessions in AGENT_SESSIONS/)';
   }
 
+  // 读取当前活跃会话标记
+  let activeId: string | null = null;
+  try {
+    activeId = readFileSync(join(sessionsDir, '.current'), 'utf8').trim();
+  } catch {}
+
   const lines = sessions.map((s) => {
     const age = Math.floor((Date.now() - s.mtime.getTime()) / 86400000);
-    const status = s.status.completed ? '✓' : '○';
+    const isActive = activeId && s.dirName.includes(activeId);
+    const status = s.status.completed ? '✓' : isActive ? '▶' : '○';
     const sessionId = s.dirName;
     return `${status} ${sessionId} (${age}d ago)`;
   });
@@ -375,6 +386,13 @@ export function useSession(sessionsDir: string, name: string): string {
     throw new SessionError(`Session not found: "${name}". Use "list" to see available sessions.`);
   }
 
+  if (session.status.completed) {
+    throw new SessionError(
+      `Session "${session.dirName}" is completed and cannot be activated. ` +
+      'Only active (in-progress) sessions can be used with "session use".',
+    );
+  }
+
   const mdPath = join(session.path, SESSION_MD);
   if (!existsSync(mdPath)) {
     throw new SessionError(`Session "${session.dirName}" has no SESSION.md — nothing to load.`);
@@ -400,6 +418,63 @@ export function useSession(sessionsDir: string, name: string): string {
     `  After advancing work, update the "进度记录" (progress) section in SESSION.md.`,
     `───────────────────────────────────────────────────────────────`,
   ].join('\n');
+}
+
+/** close 子命令 — 关闭会话，需要 --confirm 确认 */
+export function closeSession(sessionsDir: string, name: string, confirm: boolean): string {
+  if (!confirm) {
+    return (
+      `⚠ Close requires explicit confirmation.\n` +
+      `  Re-run with --confirm to confirm closing this session.`
+    );
+  }
+
+  const session = findSession(sessionsDir, name);
+  if (!session) {
+    throw new SessionError(`Session not found: "${name}". Use "list" to see available sessions.`);
+  }
+
+  if (session.status.completed) {
+    return `Session "${session.dirName}" is already completed.`;
+  }
+
+  const mdPath = join(session.path, SESSION_MD);
+  if (!existsSync(mdPath)) {
+    throw new SessionError(`Session "${session.dirName}" has no SESSION.md — nothing to close.`);
+  }
+
+  let content = readFileSync(mdPath, 'utf8');
+
+  // Mark status as completed
+  content = content.replace(
+    /## 状态\n\n- \[ \] 进行中/,
+    '## 状态\n\n- [x] 已完成\n- [x] 已关闭',
+  );
+
+  // Add close date to progress section
+  const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  if (!content.includes('-- 关闭')) {
+    content = content.replace(
+      /(## 进度记录\n)/,
+      `$1- ${now} — 关闭\n`,
+    );
+  }
+
+  writeFileSync(mdPath, content, 'utf8');
+
+  // Clear .current marker if this was the active session
+  const idMatch = session.dirName.match(/S(\d{3,})/);
+  if (idMatch) {
+    const currentPath = join(sessionsDir, '.current');
+    try {
+      const currentId = readFileSync(currentPath, 'utf8').trim();
+      if (currentId === idMatch[0]) {
+        writeFileSync(currentPath, '', 'utf8');
+      }
+    } catch {}
+  }
+
+  return `Session "${session.dirName}" closed and marked as completed.`;
 }
 
 /** summary 子命令 */

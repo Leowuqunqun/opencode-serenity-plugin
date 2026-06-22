@@ -5,10 +5,11 @@
  * 路径基于 file-system root（.serenity 向上遍历）动态解析。
  *
  * 子命令：
- *   list     — 列出 AGENT_SESSIONS/ 中的会话
+ *   list     — 列出 AGENT_SESSIONS/ 中的会话（活跃排前，▶ 标当前会话）
  *   show     — 查看指定会话详情
  *   create   — 创建会话（item / project 双模式）
- *   use      — 激活会话为当前上下文，注入 SESSION.md 信息并提示 LLM 回归
+ *   use      — 激活会话为当前上下文（仅活跃会话可用）
+ *   close    — 关闭会话（需要 --confirm 确认）
  *   health   — 健康检查（stale/stalled/drift/ghost）
  *   archive  — 归档已关闭的超期会话
  *   summary  — 全局仪表盘
@@ -23,6 +24,7 @@ import {
   listSessions,
   showSession,
   useSession,
+  closeSession,
   healthCheck,
   createSession,
   archiveSessions,
@@ -33,18 +35,20 @@ import {
 export const sessionTool: ToolDefinition = tool({
   description:
     'Session lifecycle management for cognitive containers (CCC). ' +
-    'Manages AGENT_SESSIONS/ directory: list, show, create, health, qa, archive, summary, use. ' +
+    'Manages AGENT_SESSIONS/ directory: list, show, create, use, close, health, qa, archive, summary. ' +
     'Use `use` to activate a session as current context — it injects session goals and progress as LLM context. ' +
+    'Close requires --confirm flag (must be true) to prevent accidental session closure. ' +
     'CCCs should register `session-tool` MSM that wraps `session` for domain-specific extensions.',
   args: {
     subcommand: z
-      .enum(['list', 'show', 'create', 'use', 'health', 'qa', 'archive', 'summary'])
+      .enum(['list', 'show', 'create', 'use', 'close', 'health', 'qa', 'archive', 'summary'])
       .describe(
         'Operation to perform:\n' +
-        '  list    — List all sessions with status summary\n' +
+        '  list    — List all sessions with status summary (active first, ▶ marks current)\n' +
         '  show    — View session details (accepts S###, directory name, or fuzzy keyword)\n' +
         '  create  — Create a new session (--type=item|project --desc <desc>)\n' +
-        '  use     — Activate a session as current context (--name S###). Injects SESSION.md into LLM context with directive to refer back.\n' +
+        '  use     — Activate a session as current context (--name S###). Only active sessions can be used.\n' +
+        '  close   — Close a session (requires --name + --confirm flag). Cannot be undone.\n' +
         '  health  — Health check: stale/stalled/drift/ghost\n' +
         '  qa      — Fact-check a session: verify SESSION.md claims against reality\n' +
         '  archive — Archive completed sessions past their grace period\n' +
@@ -53,7 +57,17 @@ export const sessionTool: ToolDefinition = tool({
     name: z
       .string()
       .optional()
-      .describe('Session identifier for show/archive subcommands (e.g. "S001", directory name, or fuzzy keyword)'),
+      .describe('Session identifier for show/use/close/archive subcommands (e.g. "S001", directory name, or fuzzy keyword)'),
+    confirm: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Must be true for close subcommand — prevents accidental session closure'),
+    'dry-run': z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Preview changes without actually modifying files'),
     desc: z
       .string()
       .optional()
@@ -67,11 +81,6 @@ export const sessionTool: ToolDefinition = tool({
       .string()
       .optional()
       .describe('Optional one-sentence goal for the session'),
-    'dry-run': z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe('Preview changes without actually modifying files'),
   },
   execute: async (input, ctx) => {
     const cwd = ctx.directory;
@@ -120,6 +129,13 @@ export const sessionTool: ToolDefinition = tool({
         throw new SessionError('session-tool use: requires --name (S### or directory name)');
       }
       return useSession(sessionsDir, input.name);
+    }
+
+    if (sub === 'close') {
+      if (!input.name) {
+        throw new SessionError('session-tool close: requires --name (S### or directory name)');
+      }
+      return closeSession(sessionsDir, input.name, input.confirm ?? false);
     }
 
     if (sub === 'health') {

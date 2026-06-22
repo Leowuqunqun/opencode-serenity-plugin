@@ -36,7 +36,7 @@ export const sessionTool: ToolDefinition = tool({
   description:
     'Session lifecycle management for cognitive containers (CCC). ' +
     'Manages AGENT_SESSIONS/ directory: list, show, create, use, close, health, qa, archive, summary. ' +
-    'Use `use` to activate a session as current context — it injects session goals and progress as LLM context. ' +
+    'Use `use` to activate a session as current context for this conversation — it injects session info as LLM context. ' +
     'Close requires --confirm flag (must be true) to prevent accidental session closure. ' +
     'CCCs should register `session-tool` MSM that wraps `session` for domain-specific extensions.',
   args: {
@@ -44,7 +44,7 @@ export const sessionTool: ToolDefinition = tool({
       .enum(['list', 'show', 'create', 'use', 'close', 'health', 'qa', 'archive', 'summary'])
       .describe(
         'Operation to perform:\n' +
-        '  list    — List all sessions with status summary (active first, ▶ marks current)\n' +
+        '  list    — List all sessions with status summary (active/in-progress first)\n' +
         '  show    — View session details (accepts S###, directory name, or fuzzy keyword)\n' +
         '  create  — Create a new session (--type=item|project --desc <desc>)\n' +
         '  use     — Activate a session as current context (--name S###). Only active sessions can be used.\n' +

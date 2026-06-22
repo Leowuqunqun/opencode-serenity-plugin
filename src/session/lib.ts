@@ -143,16 +143,9 @@ export function listSessions(sessionsDir: string): string {
     return '(no sessions in AGENT_SESSIONS/)';
   }
 
-  // 读取当前活跃会话标记
-  let activeId: string | null = null;
-  try {
-    activeId = readFileSync(join(sessionsDir, '.current'), 'utf8').trim();
-  } catch {}
-
   const lines = sessions.map((s) => {
     const age = Math.floor((Date.now() - s.mtime.getTime()) / 86400000);
-    const isActive = activeId && s.dirName.includes(activeId);
-    const status = s.status.completed ? '✓' : isActive ? '▶' : '○';
+    const status = s.status.completed ? '✓' : '○';
     const sessionId = s.dirName;
     return `${status} ${sessionId} (${age}d ago)`;
   });
@@ -253,10 +246,7 @@ export function createSession(opts: CreateSessionOptions): string {
 
   writeFileSync(join(sessionPath, SESSION_MD), sessionMd, 'utf8');
 
-  // 自动将新创建的会话设为当前活跃会话
-  writeFileSync(join(sessionsDir, '.current'), `S${nextId}`, 'utf8');
-
-  return `Created and activated: ${dirName}/ (S${nextId})`;
+  return `Created: ${dirName}/ (S${nextId})`;
 }
 
 /** health 子命令 */
@@ -401,13 +391,10 @@ export function useSession(sessionsDir: string, name: string): string {
     throw new SessionError(`Session "${session.dirName}" has no SESSION.md — nothing to load.`);
   }
 
-  // 提取 S### ID 作为标记
+  // 提取 S### ID 用于输出提示
   const idMatch = session.dirName.match(/S(\d{3,})/);
   const sessionId = idMatch ? idMatch[0] : basename(session.dirName);
   const dirName = session.dirName;
-
-  // 写入 .current 标记文件（供钩子或其他工具感知当前激活会话）
-  writeFileSync(join(sessionsDir, '.current'), sessionId, 'utf8');
 
   return [
     `───────────────────────────────────────────────────────────────`,
@@ -464,18 +451,6 @@ export function closeSession(sessionsDir: string, name: string, confirm: boolean
   }
 
   writeFileSync(mdPath, content, 'utf8');
-
-  // Clear .current marker if this was the active session
-  const idMatch = session.dirName.match(/S(\d{3,})/);
-  if (idMatch) {
-    const currentPath = join(sessionsDir, '.current');
-    try {
-      const currentId = readFileSync(currentPath, 'utf8').trim();
-      if (currentId === idMatch[0]) {
-        writeFileSync(currentPath, '', 'utf8');
-      }
-    } catch {}
-  }
 
   return `Session "${session.dirName}" closed and marked as completed.`;
 }

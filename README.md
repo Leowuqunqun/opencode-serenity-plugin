@@ -22,7 +22,278 @@
 
 ---
 
-## 为什么叫 Serenity
+## 1. 实体定义
+
+### 1.1 实体清单
+
+本系统由 **5 个核心实体** 构成。以下按抽象层级从高到低定义。
+
+#### 实体 A — ACC（Abstract Cognitive Container）
+
+| 属性 | 值 |
+|------|-----|
+| **定义** | 认知容器的蓝图定义层。它声明"一个认知容器应该具备哪些工具、约束和生命周期规则"。 |
+| **类型** | OpenCode 插件（npm 包 `@shgroup/opencode-serenity-plugin`） |
+| **存在形式** | 安装至 `~/.config/opencode/plugins/` 的 JavaScript 代码 |
+| **激活条件** | OpenCode 启动时自动加载。**完全激活**需要当前工作目录包含 `.serenity` 文件。无 `.serenity` 时所有 hook 静默、所有工具注册但惰性（lazy）。 |
+| **去激活条件** | 进入无 `.serenity` 的目录。 |
+| **拥有者** | 插件作者（`@tellmewhattodo`）维护。用户通过 `npm update` 升级。 |
+| **生命周期** | 安装 → 升级 → 卸载。全局唯一实例。 |
+| **依赖** | Node ≥ 20, OpenCode ≥ 1.16 |
+
+#### 实体 B — CCC（Concrete Cognitive Container）
+
+| 属性 | 值 |
+|------|-----|
+| **定义** | ACC 的一个运行时实例。它是 Agent 与人类在特定领域（项目、运维、实验）中协作的**边界化工作区**。 |
+| **类型** | 目录（由 `.serenity` 标记文件标识的目录树） |
+| **存在形式** | 文件系统中的一个目录，包含 `.serenity`、`.opencode/skills/`、`AGENT_SESSIONS/`、`docs/`、`opencode.json` |
+| **激活条件** | OpenCode 的当前工作目录是 CCC 的根目录（即包含 `.serenity` 的目录）。 |
+| **去激活条件** | OpenCode 切换到其他目录。 |
+| **创建方式** | `npx opencode-serenity-plugin init <path>` 或 OpenCode 中 `/serenity-init` 命令。 |
+| **拥有者** | 用户。用户创建、命名、配置、删除 CCC。 |
+| **生命周期** | Phase 1 骨架创建 → Phase 2 Agent 驱动访谈 → 持续使用 → 可选归档。 |
+| **依赖** | 依赖 ACC 插件安装在前。ACC : CCC = 1:N。 |
+
+**涉及范围**:
+
+| 范围 | 包含 |
+|------|------|
+| **范围内** | CCC 根目录及所有子目录。Agent 心智模型（root skill）。AGENT_SESSIONS/ 中的会话记录。.opencode/skills/ 中的技能文档。.opencode/scripts/ 中的 MSM。opencode.json。 |
+| **范围外** | CCC 根目录之外的任何文件。宿主系统的全局配置（除 opencode 自身）。其他 CCC 目录内的文件。 |
+
+#### 实体 C — Skill
+
+| 属性 | 值 |
+|------|-----|
+| **定义** | 面向 Agent 的结构化领域知识封装。它告诉 Agent"在这个领域有哪些实体、规则、操作和边界"。 |
+| **类型** | 目录（位于 `.opencode/skills/<skill-name>/`） |
+| **必要成分** | `SKILL.md` — 描述存在理由、触发条件、使用方式。可选：`references/`（参考数据）、`scripts/`（MSM 可执行操作）。 |
+| **激活条件** | CCC 启动时，Agent 自动加载 `.opencode/skills/` 下所有已安装的 SKILL.md 内容到系统提示。 |
+| **创建方式** | 用户要求 Agent 从 SESSION.md 提炼，或手动编写。Phase 1 预装 3 个标准技能（compass、session、sqc）。 |
+| **拥有者** | 用户创建和管理。Agent 只在用户指示下操作技能文件。 |
+| **依赖** | 依赖 CCC 存在。Skill : CCC = N:1。 |
+| **与 MSM 的关系** | Skill 持有 MSM。一个 skill 可以有 0 到多个 MSM 脚本（位于 `scripts/` 子目录）。 |
+
+#### 实体 D — MSM（Mech & Semi-Mech）
+
+| 属性 | 值 |
+|------|-----|
+| **定义** | 由某个 skill 持有的可执行操作单元。它是 skill 中确定性操作的封装——将常规操作转化为可审计、可编排的接口。 |
+| **类型** | 脚本文件（`.ts`、`.js`、`.py`、`.sh`），注册于 `mech-registry.json` |
+| **子类型** | **Mech** — 纯 TypeScript 脚本，零 LLM 推理。**Semi-Mech** — TypeScript 框架 + LLM 决策点。 |
+| **执行方式** | Agent 通过 `msm_exec <name>` 调用。用户不可直接执行（无 bin 入口）。 |
+| **注册方式** | `msm_admin register --name <name> --path <path> --description <desc> --category mech|semi-mech` |
+| **激活条件** | MSM 已注册到 `mech-registry.json`。 |
+| **拥有者** | Skill 持有者（用户）。MSM : Skill = N:1。 |
+| **安全机制** | 所有路径参数自动校验目录逃逸（path-escape guard）。所有调用自动记录到会话日志。 |
+| **示例** | `compass-tool validate/judge`（semi-mech，属于 compass skill）、`cc-fs`（mech）、`ssh-connect`（mech） |
+
+#### 实体 E — Session（工作会话）
+
+| 属性 | 值 |
+|------|-----|
+| **定义** | 一次多步工作的全周期记录。包含目标、关键决策、进度、产出物和未解决问题。 |
+| **类型** | 目录（位于 `AGENT_SESSIONS/<YYYY-MM-DD--<desc>>/`），包含 `SESSION.md` |
+| **创建方式** | Agent 通过 `session create` 工具自动创建。每次开始多步工作前应创建会话。 |
+| **生命周期** | active（进行中）→ closed（已完成）→ archived（归档） |
+| **标识符** | 自动分配 S### ID（如 S001、S002） |
+| **拥有者** | Agent 按 `session` 工具规范记录。用户阅读和审查。 |
+| **依赖** | 依赖 CCC 存在。Session : CCC = N:1。 |
+
+### 1.2 实体关系图
+
+```
+ACC (1) ──声明──> CCC (N)
+  │                   │
+  │                   ├── 包含 Skill (N) ──持有──> MSM (N)
+  │                   │
+  │                   ├── 包含 Session (N)
+  │                   │
+  │                   └── 约束 Agent (1)
+  │
+  └── 提供工具 ──> cc-fs, cc-git, msm_list/exec/admin, session, cc-ck, eap, neat
+```
+
+| 关系 | 方向 | 基数 | 依赖 |
+|------|------|------|------|
+| ACC 声明 CCC | ACC → CCC | 1:N | CCC 必须先安装 ACC |
+| CCC 包含 Skill | CCC → Skill | 1:N | Skill 必须先有 CCC 目录 |
+| Skill 持有 MSM | Skill → MSM | 1:N | MSM 必须先有 skill 目录 |
+| CCC 包含 Session | CCC → Session | 1:N | Session 必须先有 CCC |
+| ACC 约束 Agent | ACC → Agent | 1:N | Agent 运行在 CCC 内时受约束 |
+
+---
+
+## 2. 激活模型
+
+### 2.1 激活判定
+
+```
+OpenCode 启动
+  │
+  ├── 当前目录有 .serenity？
+  │     ├── 是 → CCC 完全激活
+  │     │       ├── Hook: Path Isolation (P3) 激活
+  │     │       ├── Hook: Bash Toggle (D19) 激活
+  │     │       ├── Hook: Subagent Inheritance 激活
+  │     │       ├── Hook: System Prompt Injection 激活
+  │     │       ├── 所有工具变为活跃（可操作）
+  │     │       └── 技能 SKILL.md 注入 Agent 系统提示
+  │     │
+  │     └── 否 → 插件静默
+  │               ├── Hook: 全部不激活
+  │               ├── 工具: 已注册但惰性（调用时返回"无 CCC 上下文"）
+  │               └── 对 OpenCode 原生行为零修改
+```
+
+### 2.2 Hook 激活矩阵
+
+| Hook | 触发时机 | CCC 内有 .serenity | CCC 外 |
+|------|---------|-------------------|--------|
+| **Path Isolation (P3)** | 每次 Agent 调用文件工具前 | 读写限定在 `.serenity` 所在目录 | 不激活 |
+| **Bash Toggle (D19)** | 每次 Agent 调 bash 时 | `msm_exec` 优先。通过 `/serenity-bash-off`/`/serenity-bash-on` 控制 | 不激活 |
+| **Subagent Inheritance** | 每次启动 subagent 时 | Subagent 自动继承路径/bash/SSH 约束 | 不激活 |
+| **System Prompt Injection** | 每次对话开始 | 注入"你在一个 CCC 中"上下文 | 不激活 |
+
+---
+
+## 3. 工具系统
+
+### 3.1 工具清单
+
+共 **9 个工具**。安装后 Agent 可直接使用，无需写代码。
+
+| 工具 | 分类 | 子命令 | 用途 |
+|------|------|--------|------|
+| `msm_list` | 查询 | — | 查询当前 CCC 有哪些可执行 MSM（含描述、flag schema） |
+| `msm_exec` | 执行 | — | 安全执行注册 MSM。路径逃逸自动阻断。**替代裸 bash** |
+| `msm_admin` | 管理 | `register`、`deregister`、`guide`、`check` | MSM 注册/注销、开发手册、MSM 品质检查。自动 git commit |
+| `cc-fs` | 文件 | `root`、`resolve`、`exists`、`list`、`tree`、`relative`、`mkdir`、`rm`、`mv`、`cp`、`touch`、`append` | 12 种文件操作，全部限定在 CCC 根目录内。路径逃逸自动阻断 |
+| `cc-git` | Git | `status`、`commit`、`push`、`log`、`pull` | Git 高频操作。push 被 non-fast-forward 拒绝时自动输出建议。冲突解决走 bash |
+| `session` | 会话 | `list`、`show`、`create`、`use`、`close`、`health`、`qa`、`archive`、`summary` | 会话全生命周期管理。自动分配 S### ID、stale 检测、事实核对 |
+| `cc-ck` | 健康 | 无参数 | CCC 三原则健康检查：P1（.serenity 存在）、P2（git 管理）、P3（opencode.json 存在）。返回 pass/fail 报告 |
+| `eap` | 认知质量 | 无参数 | EAP 理论框架渐进式披露。定义认知质量标准（E↑ / R↓ / S↑），指导 Agent 的思考结构 |
+| `neat` | 协作 | 无参数 | Neat 设计协作协议方法论。小步对齐、显式决策、文档驱动 |
+
+### 3.2 工具的 CCC 依赖
+
+所有 9 个工具遵循同一规则：
+- **CCC 内调用**：正常执行，全部能力可用。
+- **CCC 外调用**：工具已注册但调用时返回"当前不在 CCC 上下文中，工具不生效"。
+
+---
+
+## 4. 预装技能
+
+Phase 1 骨架创建时自动安装 3 个标准技能，每个包含可执行 MSM：
+
+| 技能 | 目录 | 存在理由 | MSM 工具 |
+|------|------|---------|---------|
+| **compass** | `.opencode/skills/compass/` | 方向判断——3 通道快速评估新任务是否具备推进条件。防止在不可行任务上浪费认知资源。 | `compass-tool validate`（验证信号报告）、`compass-tool judge`（综合判断） |
+| **session** | `.opencode/skills/session/` | 会话追踪——补充 ACC 内置 session 工具的容器级操作。为历史会话补充 S### ID 索引。 | `session-tool reindex`（为缺少 ID 的历史会话目录分配 S### ID） |
+| **sqc** | `.opencode/skills/sqc/` | 品质循环——按 DC（设计检查）规则扫描所有 skill 的质量。防止信息熵增（引用断裂、孤儿技能、模板合规）。 | `sqc-tool check`、`sqc-tool report`、`sqc-tool pipeline`、`msm_admin check`（MSM 品质检查） |
+
+---
+
+## 5. 双阶段初始化（D1）
+
+### 5.1 Phase 1 — 骨架创建
+
+**输入**：用户提供容器名（如 `my-project`）、可选描述。
+
+**输出**：以下目录结构在指定路径自动生成。
+
+```
+my-project-serenity/
+├── .serenity                    ← 文件类型：容器标记。存在即声明"此目录是 CCC 边界"。
+├── .gitignore
+├── opencode.json                ← 文件类型：OpenCode Agent 配置。声明干净 primary agent。
+├── AGENT_SESSIONS/              ← 目录类型：工作会话存储。每个多步工作自动生成 SESSION.md。
+├── docs/                        ← 目录类型：设计方案文档存储。
+└── .opencode/
+    ├── skills/
+    │   ├── my-project-serenity/ ← 根技能。Phase 2 由 Agent 驱动访谈后完善其 SKILL.md。
+    │   ├── compass/             ← 预装技能（见第 4 节）
+    │   ├── session/             ← 预装技能
+    │   └── sqc/                 ← 预装技能
+    └── references/
+```
+
+**自动操作**：Git `init → commit → push`（如用户提供 remote URL）。
+
+### 5.2 Phase 2 — Agent 驱动访谈
+
+**触发条件**：Phase 1 完成后，用户首次在 CCC 目录中启动 OpenCode 并输入任何消息。
+
+**流程**：Agent 拦截首条消息，不直接回答。进入 EAP 协作访谈模式，依次覆盖以下话题：
+
+| 话题 | 问题 | Agent 输出 |
+|------|------|-----------|
+| 1 — Purpose | 这个容器管理什么？一句话目的。团队规模（solo/team）。 | 记录 purpose 和 scope 到根 SKILL.md |
+| 2 — Git remote | 是否设置 Git remote？ | 如提供 URL，调用 `cc-git` 设置 remote |
+| 3 — Work items | 容器追踪哪些具体工作项？ | 记录 work item 清单到知识库 |
+| 4 — Collaboration style | 协作风格（casual/structured）？ | 配置 Agent 的回应风格 |
+| 5 — External services | 需要哪些外部服务或领域技能？ | 记录集成需求到根 skill |
+
+**完成条件**：Agent 写出完整根 `SKILL.md`，commit，push。CCC 完全就绪。
+
+**失败处理**：用户在任何话题说"不确定"，Agent 使用合理默认值继续，将未完成项记录到 `docs/phase2-interview-record.md`。
+
+---
+
+## 6. CCC 生命周期与最佳实践
+
+### 6.1 飞轮模型
+
+```
+具体工作产出决策、约束、领域经验
+  → 自动沉淀在 SESSION.md（零操作成本）
+  → 用户决定：哪些 know-how 值得提炼为 Skill？
+     （提示：工作完成后问 Agent "哪些值得提炼为 skill？"）
+  → 提炼为 SKILL.md 后，下次 Agent 自动加载
+  → 上下文更完整 → 效率更高 → 更多时间做新工作
+  → 飞轮加速
+```
+
+### 6.2 知识分层
+
+| 层 | 名称 | 写入者 | 读取者 | 积累成本 |
+|----|------|--------|--------|---------|
+| **L1 — SESSION** | 默认沉淀层 | Agent（`session create`） | 用户、Agent（追溯时） | 零（自动） |
+| **L2 — SKILL.md** | 选择性提炼层 | 用户要求 Agent 写入 | Agent（每次启动自动加载） | 用户判断决定 |
+| **L3 — MSM** | 操作封装层 | 用户注册 | Agent（通过 `msm_exec` 调用） | 用户注册决定 |
+
+### 6.3 熵控制
+
+**问题**：知识积累自然带来信息熵增——旧知识过时、新知识重复、约束冲突。
+
+**对策**：SQC（品质循环）按 DC 规则定期扫描所有 skill 质量：
+
+- 自动修复可自动化的问题（引用断裂）
+- 标记需人工判断的项（约束冲突、孤儿技能）
+- 推荐节奏：**每周一次 `sqc-tool pipeline`**
+
+### 6.4 Skill 提炼示例
+
+| Skill | 封装内容 | 提炼理由 |
+|-------|---------|---------|
+| **deployment** | CI 命令、环境变量配置、回滚步骤、常见失败原因与修复 | 每次部署重复询问，不如写进 skill 直接可用 |
+| **frontend-patterns** | 团队状态管理库选择、API 调用层组织、错误反馈 UI 标准 | Agent 直接生成符合团队风格的代码，无需逐次纠正 |
+| **code-review** | 数据库迁移兼容性要求、组件边界规则、安全审查清单 | Agent 提交前自我审查，将低级问题扼杀在 commit 前 |
+
+### 6.5 MSM 操作封装示例
+
+| 操作 | MSM 名 | 理由 | 效果 |
+|------|--------|------|------|
+| 部署 | `deploy` | 步骤固定（build → test → tag → push → rollout），手动易出错 | Agent 一行命令完成安全部署，错误自动拦截 |
+| API 测试 | `api-test` | 冒烟测试、契约测试需重复执行 | Agent 随时执行，结果结构化返回 |
+| 代码提交 | `commit` | 特殊 commit 规范（scope 格式、co-author、issue 链接） | Agent 自动遵守规范 |
+| 迁移检查 | `migrate-check` | 上线前必须检查迁移脚本向下兼容性 | Agent 自动分析，标记破坏性变更 |
+
+---
+
+## 7. 为什么叫 Serenity
 
 电影 *Serenity* 里有一艘飞船。不大，不新，但可靠。它在宇宙里飞，不可能知道所有星球，但它有自己的船舱和航道。船员不知道每个货舱装了什么，但需要的时候总能拿到。
 
@@ -30,465 +301,70 @@ CCC 就是这样工作的：不是追求全知，是追求可达。信息堆在�
 
 ---
 
-EAP 是我提出的。核心问题很简单：问题可以无限细分，你站哪一层最有效？
+## 8. 内在哲学：ACC/CCC 模型
 
-你永远不知道下面还有多少层，所以逐层推进是最慢的。最快的办法是直接到顶层，搭好框架，落地实例。
+如果把 Serenity 比作操作系统：
 
-ACC 就是那个框架，CCC 就是实例。蓝图和船的关系。
+- **ACC 是内核**——声明"认知容器应该有什么"（工具、hook、验证规则）。在不同容器间共享。
+- **CCC 是用户态工作区**——包含具体项目的技能、MSM 注册表、会话记录、项目文件。每个 CCC 独立。
 
----
+升级插件（`npm update` + `install`），所有 CCC 自动获得新工具和新 guard——因为 ACC 是共享蓝图，CCC 是独立实例。
 
-但 ACC 不是先想好的。是跑出来的。
+这套模型的理论基础是 **EAP**（Explicit Abstraction Principle）——"The functional value of a thought is proportional to its external reconstructability."（思维的功能价值与其外部可重建性成正比。）Serenity 的每一个设计决策都从这句话推导而来。
 
-我有三个 CCC。一个在公司，管两个研发团队——需求、架构、规范、部署，都在里面。一个在个人开发机，管自己的项目。一个在家里，管服务器、网络，还有财务和待办。
-
-跑着跑着发现它们骨架一样。把骨架单独拿出来，就是 ACC。不是先有蓝图再有船——是先有了几艘船，才画出蓝图。
-
----
-
-后来读到 *Metaphors We Live By*，更确认了这个方向。隐喻不是修辞，是我们理解世界的方式。
-
-> <https://github.com/tellmewhattodo>
+完整 EAP 理论见：<https://github.com/tellmewhattodo/theory-eap>
 
 ---
 
-## 什么是宁静号
+## 9. 快速开始
 
-宁静号（Serenity）是一个**认知基础设施**（Cognitive Infrastructure）——不是一个编码辅助工具，不是一个项目管理系统，也不是一个 AI Agent 平台。
-
-它是 Agent 与人类在认知层面协作的工作空间。
-
-### 它在解决什么问题
-
-当前 AI Coding Agent 的核心困境：Agent 很聪明，但每次对话都是从零开始。它不知道你做过什么决策、积累了哪些知识、遵守什么约束。上下文窗口一关，一切归零。
-
-**宁静号的回答**：不是给 Agent 更大的上下文窗口——而是给它一个**持续积累知识的容器**。
-
-```
-ACC (Abstract Cognitive Container)     ← 本插件（认知容器的蓝图定义层）
-  │  ─ 工具系统（cc-fs, cc-git, session, msm）
-  │  ─ 安全约束（P1/P2/P3 根目录三原则）
-  │  ─ 认知质量框架（EAP + Neat）
-  │  ─ 会话全周期追踪
-  │
-  ├── CCC my-project-serenity/         ← 认知容器实例（运行在项目上）
-  ├── CCC my-ops-serenity/             ← 认知容器实例（运行在运维环境上）
-  └── CCC my-experiment-serenity/      ← 认知容器实例（运行在实验上）
-```
-
-一个 ACC，任意数量的 CCC。每个 CCC 独立、互不干扰、各自积累领域知识。
-
-### 为什么它改变了游戏规则
-
-传统工作流中，Agent 是**编码协作者**（Coding Agent）——你描述需求，它生成代码，但每次对话的认知上下文被模型上下文窗口锁定。
-
-在宁静号中，Agent 与人的协作**上升到了认知层面**（Cognitive-level Collaboration）：
-
-| 维度 | Coding Agent | 宁静号（Serenity） |
-|------|-------------|-------------------|
-| 上下文来源 | 模型上下文窗口（一次性） | **CCC 内持续积累的知识**（会话记录、skill 文档、设计文档、MSM 注册表） |
-| 知识持久化 | 不持久 — 窗口关闭即丢失 | **结构化的外部编码** — 决策记录在 SESSION.md，领域知识编码在 SKILL.md |
-| 模型能力需求 | 依赖模型自身的隐式知识 | **降低** — 领域知识已显式编码，模型只需执行而非记忆 |
-| 产出质量 | 受限于上下文窗口内的信息量 | **大幅提升** — Agent 始终访问完整的领域上下文 |
-| 可追溯性 | 无 | **全周期可追溯** — 每次决策都有记录、理由、产出物 |
-| 协作层级 | 代码层（需求→代码） | **认知层**（目标→决策→结构→产出） |
-
-**核心事实**：使用 ACC 约束产生的 CCC 宁静号，可以在同等工作中以知识的收集和积累降低上下文耗用，从而使得对模型能力要求降低，产出和效率大幅提升。其本质是：相比于 Coding Agent，Agent 与人的协作上升到了认知层面。
-
----
-
-## 快速上手能解决的问题
-
-| 问题 | 宁静号怎么解决 |
-|------|----------------|
-| Agent 误操作外部文件 | 路径硬隔离（P3）——读写只能在这个容器根目录内 |
-| Agent 裸跑危险命令 | `msm_exec` 替代裸 bash（D19）——只执行**已注册**的操作 |
-| 几周后忘了 Agent 做了什么 | `session` 自动记录每次多步工作——目标、决策、产出物 |
-| Agent 的"为什么这样"不可追溯 | EAP 框架驱动每一步决策结构化记录 |
-| 用户表达模糊，Agent 瞎猜 | Phase 2 EAP 驱动访谈——帮用户把模糊想法变显式抽象 |
-
----
-
-## 使用场景
-
-Serenity 不绑定任何领域。容器的**形状**取决于你注册什么 MSM、写什么 SKILL.md：
-
-| 场景 | 容器就是 |
-|------|---------|
-| 开发软件项目（需求 → 设计 → 代码 → 测试） | 受控开发环境 |
-| 管理服务器、网络、NAS、智能家居 | 运维中枢 |
-| 做 AI 实验（跑模型、记录结果、横向对比） | 可复现实验舱 |
-| 处理媒体文件、写文档、做翻译 | 内容工作台 |
-
-Serenity 的**骨架**始终是一样的：边界 + 工具系统 + 会话记录 + 认知质量框架。
-
----
-
-## Quick Start
+### 9.1 安装
 
 ```bash
-# 1. 安装插件
 npm install @shgroup/opencode-serenity-plugin
 npx opencode-serenity-plugin install
-
-# 2. 在任意目录启动 opencode
-
-# 3. 输入 slash command：
-/serenity-init
 ```
 
-TUI 会问你容器名（如 `my-project`）和一句话描述。确认后自动创建完整容器骨架——即刻可用。
+### 9.2 创建 CCC
+
+在任意目录启动 OpenCode，输入 `/serenity-init`。TUI 询问容器名和描述，自动创建完整容器骨架。
+
+或使用 CLI：
 
 ```bash
-# 也可以用 CLI 初始化
 opencode-serenity-plugin init /path/to/my-project \
   --prefix my-project \
   --description "Manages my startup's code, docs, and dev workflow"
 ```
 
----
+### 9.3 完成初始化
 
-## 演示：创建一个 CCC 的全过程
-
-假设你要管理一个 SaaS 初创项目的软件开发。
-
-### Step 1 — 安装并启动
-
-```bash
-npm install @shgroup/opencode-serenity-plugin
-npx opencode-serenity-plugin install
-cd ~/projects/saas-app
-opencode
-```
-
-### Step 2 — 告诉 Serenity 你的名字
-
-输入 `/serenity-init`，TUI 弹出对话框：
-
-```
-┌─────────────────────────────────────────────┐
-│ CCC Name                                     │
-│                                               │
-│ kebab-case — 只用小写字母、数字和连字符       │
-│                                               │
-│ █ saas-platform                    [Create]  │
-└─────────────────────────────────────────────┘
-```
-
-点击 Create，几秒后终端输出：
-
-```
-CCC "saas-platform-serenity" created at ~/projects/saas-app
-  prefix: saas-platform
-  description: A concrete cognitive container (CCC)
-  Pre-installed 3 skill(s): compass, session, sqc
-
-Next steps (two-phase init):
-  Phase 1 ✅  — CCC skeleton created.
-  Phase 2 ⏳  — Restart OpenCode and open ~/projects/saas-app.
-     Type anything — your first message will be intercepted
-     and the Agent will guide you through a collaborative interview
-     to complete the root skill configuration.
-```
-
-### Step 3 — 重启 opencode，进入 Phase 2
-
-你输入：`hi, 帮我设置好这个工作区`
-
-Agent 不会直接回答你——它先进入 EAP 模式，启动协作访谈：
-
-```
-Agent:
-> 你好！我们正在进入 **Phase 2 初始化**。我先用 EAP 框架
-> 帮你把目标从模糊想法变成显式结构。这会让后续所有操作更
-> 准确、更可追溯。
->
-> **Topic 1 — What is this CCC for? (purpose + team size)**
->
-> 这个容器管理什么？一句话告诉我它的目的。
-
-你：
-> 管理我们的 SaaS 平台开发——用户端 Web、后端 API、
-> 部署脚本和产品文档。
-
-Agent:
-> 清楚了。这是 `solo`（仅你）还是 `team`（多人协作）？
-
-你：
-> team，核心团队 3 个人都会用。
-
-Agent:
-> 好。我记录为 scope: team。
->
-> **Topic 2 — Git remote**
->
-> 你想设置 Git remote 还是先本地用着？
-
-你：
-> 设一个。git@github.com:myco/saas-platform-serenity.git
-
-Agent 调 `cc-git` 设置 remote。
-
-你：
-> 其他几个话题我现在还没想好……
-
-Agent:
-> 没问题。剩下的我们先用合理默认值，后续任何时间都可以
-> 通过修改 SKILL.md 来调整。访谈记录我会保存在
-> `docs/phase2-interview-record.md` 里。
-
-Agent 写出完整的 `SKILL.md`，commit，push。CCC 完全就绪。
-```
-
-**这就是 Serenity 的工作方式**——不是你填一张问卷，而是 Agent 帮你**把模糊想法变成显式结构**。你可以在任何时候说"我不确定"，Agent 会接受并推动对话向前，而不是卡在问题上死循环。
+重启 OpenCode，输入任何消息。Agent 自动进入 Phase 2 访谈。访谈完成后 CCC 完全就绪。
 
 ---
 
-## 内在哲学：ACC/CCC 模型
+## 10. 多容器管理
 
-如果把 Serenity 比作操作系统：
-
-- **ACC** 是内核——它定义"认知容器应该有什么"（工具、hook、验证规则）。它在不同容器之间共享。
-- **CCC** 是用户态工作区——它包含一个具体项目的技能、MSM 注册表、会话记录、项目文件。每个 CCC 独立。
-
-升级插件（`npm update` + `install`），所有 CCC 自动获得新工具和新 guard。因为 ACC 是共享蓝图，CCC 是独立实例。
-
-这套模型的理论基础是 **EAP**（Explicit Abstraction Principle）——"思维的功能价值与其外部可重建性成正比"。Serenity 的每一个设计决策都从这句话推导而来。
-
-日常使用时不需要这些术语。记住"Serenity"就够了。
-
----
-
-## 什么是 MSM（Mech & Semi-Mech）
-
-MSM 是**属于某个 skill 的可执行操作单元**。它不是独立工具——每个 MSM 被一个 skill 持有：
-
-```
-skill（领域知识封装）
-  ├── SKILL.md（文档：描述存在意义、触发条件、使用方式）
-  ├── references/（辅助参考）
-  └── scripts/（MSM 脚本：可执行操作）
-           │
-           └── 示例：compass-tool validate/judge
-                （属于 compass skill，验证 3 通道信号报告）
-```
-
-MSM 分两类：
-
-| 类别 | 含义 | 示例 |
-|------|------|------|
-| **Mech** | 纯 TS 脚本，零 LLM 推理 | `cc-fs`、`cc-git`、`ssh-connect` |
-| **Semi-Mech** | TS 框架 + LLM 决策点 | `session-tool qa`、`sqc-tool pipeline` |
-
-MSM 的核心价值：**确定性 + 可审计**。LLM 用 `msm_exec` 调用 MSM，所有路径参数自动校验逃逸、所有操作自动可追溯。
-
----
-
-## CCC 生命周期最佳实践
-
-### 飞轮效应：知识的自然沉淀与选择性提炼
-
-一个 CCC 不是一次性创建的——它在持续使用中自然积累：
-
-```
-具体工作产出决策、约束、领域经验
-  → 自动沉淀在 SESSION.md（零操作成本）
-  → 用户自主决定：哪些 know-how 值得提炼为 Skill？
-     （最方便的方式：工作完成后问 Agent：
-      "哪些 know-how 值得提炼为宁静号的 skill？"）
-  → 提炼为 SKILL.md 后，下次 Agent 自动加载
-  → 上下文更完整 → 效率更高 → 更多时间做新工作
-  → 飞轮加速
-```
-
-**关键设计**：知识积累由用户掌控，而非自动推送。
-
-- SESSION 是**默认沉淀层**——每次多步工作的目标、决策、产出物自动记录在这里，零操作成本
-- Skill 是**选择性提炼层**——只有你确认有价值的结构化知识才提炼为 skill
-- Agent 只做建议，不做决定：你可以随时问"今天的工作有哪些值得提炼"——Agent 会从 SESSION 中提取候选，你来判断
-
-### Skill 实例：全栈工程师如何提炼
-
-假设你是一个 React + Java 全栈开发者。你的项目已经运行了一段时间，你和 Agent 有过几十次协作。以下是一些你可能会从工作中提炼出来的 skill：
-
-| Skill | 它封装了什么 | 你为什么会提炼它 |
-|-------|-------------|----------------|
-| **deployment** | 部署流程的完整知识：用哪些 CI 命令、环境变量怎么配、回滚步骤、常见失败原因和修复方式 | 每次部署都问 Agent 同样的问题，不如写进 skill——下次直接可用 |
-| **frontend-patterns** | 你们团队的 React 约定：用哪个状态管理库、API 调用层怎么组织、错误反馈的 UI 标准 | 新需求来的时候 Agent 直接生成符合团队风格的代码，不再需要每次纠正 |
-| **backend-api** | Java 后端的 API 设计规范：URL 命名风格、统一响应格式、异常处理层级、分页规范 | Agent 生成的 API 代码直接符合团队约定，review 通过率大幅提升 |
-| **code-review** | 你们特别关注的审查点：数据库迁移的兼容性要求、前端组件边界规则、安全审查清单 | Agent 提交代码前自我审查一遍，把低级问题扼杀在 commit 之前 |
-
-每个 Skill = 一份 **SKILL.md**（写给 Agent 看的文档，描述领域知识、规则和场景）+ 可选的 **MSM** 脚本（可执行的操作）。提炼过程很简单：
-
-```
-会话中积累的知识（SESSION.md）
-  → 你问 Agent："哪些值得提炼？"
-  → Agent 从 SESSION 提取候选
-  → 你判断：这个确实重要 → 写成 SKILL.md
-  → 下次 Agent 自动加载，就像团队新成员读了入职文档
-```
-
-### MSM 实例：把常规操作变成可审计的自动化
-
-Skill 封装知识，MSM 封装操作。同一个全栈工程师的项目，可以 MSM 化的操作：
-
-| 操作 | 为什么 MSM 化 | 效果 |
-|------|--------------|------|
-| **部署** (`deploy`) | 部署步骤固定（build → test → tag → push → rollout），但每次手动敲容易出错 | Agent 一行命令完成安全部署，错误自动拦截 |
-| **API 测试** (`api-test`) | 冒烟测试、契约测试、回归测试需要重复执行 | Agent 随时执行，结果结构化返回，CI 之外的补充验证层 |
-| **代码提交** (`commit`) | 项目有特殊的 commit 规范（scope 格式、co-author、issue 链接） | Agent 自动按规范提交，不再出现"fix bug"这类无意义信息 |
-| **数据库迁移检查** (`migrate-check`) | 上线前必须检查迁移脚本的向下兼容性 | Agent 自动分析迁移脚本，标记破坏性变更 |
-
-这些都是 Mech（纯脚本，零 LLM 推理）——一旦注册，Agent 用 `msm_exec deploy` 即可调用，所有路径参数自动校验逃逸，全部操作可审计可追溯。
-
-**更进一步的想象**：当你的项目中部署、测试、提交、lint、发布等所有常规操作都 MSM 化了，这些 MSM 的组合就构成了一个**自然的 Harness**——一个可编排、可观测、可约束的操作层。Agent 不再需要猜测"怎么部署"——它在 Harness 中工作，只调用你授权的操作。
-
-这正是 D19（bash/msm 风险分级）的实践落地：不安全的手动操作逐步被安全的 MSM 取代，不是靠禁令，而是靠提供更好的替代品。
-
-### 用 SQC 控制信息熵增
-
-知识积累会自然带来信息熵增——旧知识过时、新知识重复、约束冲突。SQC（品质循环）定期扫描所有 skill 质量（引用断裂、孤儿技能、模板合规等），自动修复可自动化的问题，标记需人工判断的项。推荐节奏：**每周一次 `sqc-tool pipeline`**。
-
----
-
-## 双阶段初始化（D1）
-
-### Phase 1 — 骨架创建
-
-你给一个名字，Serenity 创建：
-
-```
-my-project-serenity/
-├── .serenity                    ← 容器标记："这里是边界"
-├── .gitignore
-├── opencode.json                ← Agent 配置（clean primary agent）
-├── AGENT_SESSIONS/              ← 每一次多步工作自动生成 SESSION.md
-├── docs/                        ← 设计方案文档
-└── .opencode/
-    ├── skills/
-    │   ├── my-project-serenity/     ← 根技能（Phase 2 由 Agent 完善）
-    │   ├── compass/                 ← 方向判断技能
-    │   ├── session/                 ← 会话追踪技能
-    │   └── sqc/                     ← 品质循环技能
-    └── references/
-```
-
-Git 自动 `init → commit → push`（如果你提供了 remote URL）。
-
-### Phase 2 — Agent 驱动访谈
-
-你输入第一句话，Agent 启动 EAP 协作访谈，覆盖：
-
-- **Topic 1** — What is this CCC for? (purpose + team size)
-- **Topic 2** — Git remote configured?
-- **Topic 3** — What concrete work items will this CCC track?
-- **Topic 4** — Collaboration style (casual or structured?)
-- **Topic 5** — Any external services or domain-specific skills needed?
-
-访谈结束后，Agent 写出完整的根 `SKILL.md`，这个 CCC 就完全就绪了。
-
----
-
-## 9 个内置工具
-
-安装后 Agent 直接获得以下能力，不用写一行代码：
-
-### 核心三角
-
-| 工具 | 用途 |
-|------|------|
-| `msm_list` | 查询当前容器有哪些可执行操作（含描述、flag schema） |
-| `msm_exec` | 安全执行已注册的操作。**替代裸 bash**。路径逃逸自动阻断 |
-| `msm_admin` | 注册/注销操作、开发手册、MSM 品质检查（`check`）。自动 git commit |
-
-Agent 在 CCC 中可以直接注册自定义 MSM：
-
-```
-msm_admin register --name my-deploy --path .opencode/scripts/my-deploy.ts \
-  --description "部署到生产环境" \
-  --category mech
-```
-
-注册后，`my-deploy` 进入 `mech-registry.json`，Agent 可以用 `msm_exec my-deploy` 调用它。
-
-### 文件与容器
-
-| 工具 | 子命令 | 用途 |
-|------|--------|------|
-| `cc-fs` | `root` `resolve` `exists` `list` `tree` `relative` `mkdir` `rm` `mv` `cp` `touch` `append` | 12 个文件操作，全部限定在容器根目录内。路径逃逸自动阻断 |
-
-### Git（无 bash 依赖）
-
-| 工具 | 子命令 | 用途 |
-|------|--------|------|
-| `cc-git` | `status` `commit` `push` `log` | Git 高频操作。push 被 non-fast-forward 拒绝时自动输出操作建议。冲突解决走 bash |
-
-### 会话与健康
-
-| 工具 | 子命令 | 用途 |
-|------|--------|------|
-| `session` | `list` `show` `create` `health` `qa` `archive` `summary` | 会话全生命周期。自动分配 S### ID、snooze 检测、事实核对 |
-| `cc-ck` | （无参数） | CCC 三原则健康检查。P1（.serenity 存在）、P2（git 管理）、P3（opencode.json 存在） |
-
-### 认知质量
-
-| 工具 | 用途 |
-|------|------|
-| `eap` | EAP 理论框架完整内容（渐进式披露）。显式抽象原则——告诉你**怎么想**才能让 Agent 准确执行 |
-| `neat` | Neat 设计协作协议。结构化方法——告诉你**怎么对齐**才能让设计方案不走样 |
-
----
-
-## 4 个安全 Hook（静默运行）
-
-这些 Hook 对用户完全透明，但每一秒都在工作：
-
-| Hook | 做什么 | 触发时机 |
-|------|--------|---------|
-| Path Isolation (P3) | 读写/编辑/grep 全部限定在 `.serenity` 所在目录 | 每次 Agent 调用文件工具前 |
-| Bash 开关 (D19) | `msm_exec` 优先——通过 `/serenity-bash-off` 和 `/serenity-bash-on` 控制，`/serenity-bash-status` 查询状态。**建议根据使用情况开关**：日常开发走 MSM，需要灵活操作时临时开启 | 每次 Agent 试图调 bash 时 |
-| Subagent 继承 | 子 agent 自动继承所有约束（路径、bash、SSH） | 每次 Agent 启动 subagent 时 |
-| System Prompt 注入 | 自动向 Agent 注入"你在一个 CCC 中"的上下文 | 每次对话开始时 |
-
----
-
-## 3 个预装技能
-
-Phase 1 自动安装 3 个标准技能（含可执行 MSM 脚本）：
-
-| 技能 | 做什么 | MSM 工具 |
-|------|--------|---------|
-| `compass` | 方向判断——3 通道快速评估新任务是否具备推进条件 | `compass-tool validate` / `judge` |
-| `session` | 会话追踪——补充 ACC 内置 `session` 工具的容器级操作 | `session-tool reindex`（为历史会话补充 S### ID） |
-| `sqc` | 品质循环——按 DC（设计检查）规则扫描所有 skill 质量 | `sqc-tool check` / `report` / `pipeline`；MSM 品质检查用 `msm_admin check` |
-
-后续你可以用 `msm_admin` 注册更多 MSM，安装更多技能模板。
-
----
-
-## 多容器管理
-
-同一个插件管理所有容器：
+一个插件管理所有容器。每个 CCC 在独立目录中，互不干扰：
 
 ```
 ~/projects/
-├── saas-app/          ← SaaS 开发容器
-├── ops-tools/         ← 运维工具容器
-└── ai-lab/            ← AI 实验容器
+├── saas-app/          ← CCC: SaaS 开发
+├── ops-tools/         ← CCC: 运维工具
+└── ai-lab/            ← CCC: AI 实验
 ```
 
-每个容器的 Agent 只看到自己的 `.serenity` 边界内的文件。互不干扰，各自积累。
+同一 OpenCode 会话中，Agent 只能访问当前工作目录所在 CCC 的文件。
 
 ---
 
-## 开发
+## 11. 开发
 
 ```bash
 git clone git@github.com:tellmewhattodo/opencode-serenity-plugin.git
 cd opencode-serenity-plugin
 pnpm install
 
-# 开发循环
 pnpm typecheck    # TypeScript 类型检查
 pnpm test         # 413+ 测试（vitest）
 pnpm build        # 编译 + 复制模板
@@ -497,6 +373,21 @@ pnpm install      # 安装到本地 ~/.config/opencode/
 
 ---
 
-> **版本**: v0.4.5 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16
+## 12. 使用场景
+
+Serenity 不绑定任何领域。容器的**形状**取决于注册什么 MSM、写什么 SKILL.md：
+
+| 场景 | 容器就是 | 典型 MSM |
+|------|---------|---------|
+| 开发软件项目（需求 → 设计 → 代码 → 测试） | 受控开发环境 | `deploy`、`api-test`、`commit`、`migrate-check` |
+| 管理服务器、网络、NAS、智能家居 | 运维中枢 | `ssh-connect`、`health-check`、`backup` |
+| AI 实验（跑模型、记录结果、对比） | 可复现实验舱 | `train`、`evaluate`、`compare` |
+| 处理媒体文件、写文档、做翻译 | 内容工作台 | `transcribe`、`translate`、`publish` |
+
+---
+
+> **版本**: v0.4.13 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16
 >
 > **平台要求**: Serenity 在 OpenCode CLI（终端版）、Linux 桌面和 macOS 上完成测试验证。**Windows 未经测试，不保证正常使用。**
+>
+> **EAP 理论完整版**: <https://github.com/tellmewhattodo/theory-eap>

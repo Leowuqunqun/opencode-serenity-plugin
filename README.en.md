@@ -22,473 +22,349 @@
 
 ---
 
-## Why Serenity
+## 1. Entity Definitions
 
-There's a ship in the movie *Serenity*. Not big, not new, but reliable. It flies through the universe—it can't know every planet, but it has its own cabins and its own course. The crew doesn't know what's in every cargo hold, but when they need something, they can always get it.
+### 1.1 Entity Inventory
 
-That's how CCC works: not omniscience, but accessibility. Information piles up, keeps changing, no one can master it all—but a ship doesn't need to master the whole universe. Flying well on its own course is enough.
+The system consists of **5 core entities** defined below, from highest abstraction level to lowest.
 
----
+#### Entity A — ACC (Abstract Cognitive Container)
 
-EAP is my own idea. The core question is simple: problems can be subdivided infinitely—which level should you work at?
+| Property | Value |
+|----------|-------|
+| **Definition** | The blueprint layer for a cognitive container. It declares "what tools, constraints, and lifecycle rules a cognitive container should have." |
+| **Type** | OpenCode plugin (npm package `@shgroup/opencode-serenity-plugin`) |
+| **Existence form** | JavaScript code installed at `~/.config/opencode/plugins/` |
+| **Activation condition** | Loaded automatically when OpenCode starts. **Full activation** requires the current working directory to contain `.serenity`. Without `.serenity`, all hooks are silent and all tools are registered but lazy (no-op when called). |
+| **Deactivation condition** | Entering a directory without `.serenity`. |
+| **Owner** | Maintained by plugin author (`@tellmewhattodo`). User upgrades via `npm update`. |
+| **Lifecycle** | Install → upgrade → uninstall. Single global instance. |
+| **Dependencies** | Node ≥ 20, OpenCode ≥ 1.16 |
 
-You never know how many layers lie beneath. Grinding through layer by layer is the slowest approach. The fastest is to go straight to the top: set up the framework, then let instances follow.
+#### Entity B — CCC (Concrete Cognitive Container)
 
-ACC is that framework. CCC is the instance. Blueprint and ship.
+| Property | Value |
+|----------|-------|
+| **Definition** | A runtime instance of the ACC. A bounded workspace where Agents and humans collaborate on a specific domain (project, operations, experiment). |
+| **Type** | Directory tree identified by a `.serenity` marker file |
+| **Existence form** | A filesystem directory containing `.serenity`, `.opencode/skills/`, `AGENT_SESSIONS/`, `docs/`, `opencode.json` |
+| **Activation condition** | OpenCode's current working directory is the CCC root (contains `.serenity`). |
+| **Deactivation condition** | OpenCode switches to a different directory. |
+| **Creation method** | `npx opencode-serenity-plugin init <path>` or `/serenity-init` slash command in OpenCode. |
+| **Owner** | The user. User creates, names, configures, and deletes CCCs. |
+| **Lifecycle** | Phase 1 skeleton creation → Phase 2 Agent-driven interview → continuous use → optional archive. |
+| **Dependencies** | ACC must be installed first. ACC : CCC = 1:N. |
 
----
+**Scope**:
 
-But ACC wasn't designed first. It emerged from practice.
+| Scope | Includes |
+|-------|----------|
+| **In scope** | CCC root directory and all subdirectories. Agent mental model (root skill). Session records in AGENT_SESSIONS/. Skill documents in .opencode/skills/. MSMs in .opencode/scripts/. opencode.json. |
+| **Out of scope** | Any file outside the CCC root directory. Host system global configuration (except opencode itself). Files inside other CCC directories. |
 
-I run three CCCs. One at work, managing two R&D teams—requirements, architecture, conventions, deployment. One on my personal dev machine, managing my own projects. One at home, managing servers, network, plus finances and todos.
+#### Entity C — Skill
 
-Over time I noticed they all share the same skeleton. Extract that skeleton, and you get ACC. It's not blueprint-first-then-ship—it's several ships first, then the blueprint.
+| Property | Value |
+|----------|-------|
+| **Definition** | A structured encapsulation of domain knowledge for the Agent. It tells the Agent "what entities, rules, operations, and boundaries exist in this domain." |
+| **Type** | Directory at `.opencode/skills/<skill-name>/` |
+| **Required components** | `SKILL.md` — describes existence rationale, trigger conditions, and usage. Optional: `references/` (reference data), `scripts/` (MSM executable operations). |
+| **Activation condition** | When CCC starts, Agent automatically loads all installed SKILL.md contents from `.opencode/skills/` into system prompt. |
+| **Creation method** | User asks Agent to distill from SESSION.md, or manual authoring. Phase 1 pre-installs 3 standard skills (compass, session, sqc). |
+| **Owner** | User creates and manages. Agent only operates skill files under user direction. |
+| **Dependencies** | Requires CCC to exist. Skill : CCC = N:1. |
+| **MSM relationship** | Skill holds MSM. A skill can have 0 to N MSM scripts (in `scripts/` subdirectory). |
 
----
+#### Entity D — MSM (Mech & Semi-Mech)
 
-Later I read *Metaphors We Live By*, which confirmed the direction. Metaphor isn't rhetoric—it's how we understand the world.
+| Property | Value |
+|----------|-------|
+| **Definition** | An executable operation unit owned by a skill. It encapsulates deterministic operations within a skill — turning routine operations into auditable, composable interfaces. |
+| **Type** | Script file (`.ts`, `.js`, `.py`, `.sh`), registered in `mech-registry.json` |
+| **Subtypes** | **Mech** — pure TypeScript script, zero LLM inference. **Semi-Mech** — TypeScript framework + LLM decision points. |
+| **Execution method** | Agent calls via `msm_exec <name>`. User cannot execute directly (no bin entry). |
+| **Registration method** | `msm_admin register --name <name> --path <path> --description <desc> --category mech|semi-mech` |
+| **Activation condition** | MSM is registered in `mech-registry.json`. |
+| **Owner** | Skill holder (user). MSM : Skill = N:1. |
+| **Safety mechanism** | All path arguments automatically validated against directory escape (path-escape guard). All calls automatically logged to session records. |
+| **Examples** | `compass-tool validate/judge` (semi-mech, belongs to compass skill), `cc-fs` (mech), `ssh-connect` (mech) |
 
-> <https://github.com/tellmewhattodo>
+#### Entity E — Session (Work Session)
 
----
+| Property | Value |
+|----------|-------|
+| **Definition** | A full lifecycle record of a multi-step work task. Contains goals, key decisions, progress, artifacts, and unresolved issues. |
+| **Type** | Directory at `AGENT_SESSIONS/<YYYY-MM-DD--<desc>>/`, containing `SESSION.md` |
+| **Creation method** | Agent creates automatically via `session create`. Should be created before each multi-step work. |
+| **Lifecycle** | active (in progress) → closed (completed) → archived |
+| **Identifier** | Auto-assigned S### ID (e.g., S001, S002) |
+| **Owner** | Agent records per `session` tool spec. User reads and reviews. |
+| **Dependencies** | Requires CCC to exist. Session : CCC = N:1. |
 
-## What is Serenity
-
-Serenity is a **Cognitive Infrastructure** — not a coding assistant, not a project management system, not an AI Agent platform.
-
-It is a workspace where Agents and humans collaborate at the cognitive level.
-
-### The Problem It Solves
-
-The core dilemma of today's AI Coding Agents: Agents are smart, but every conversation starts from scratch. They don't know what decisions you've made, what knowledge you've accumulated, or what constraints you follow. When the context window closes, everything resets.
-
-**Serenity's answer**: Not a bigger context window — but a **container that continuously accumulates knowledge**.
+### 1.2 Entity Relationship Map
 
 ```
-ACC (Abstract Cognitive Container)     ← This plugin (blueprint layer)
-  │  ─ Tool system (cc-fs, cc-git, session, msm)
-  │  ─ Safety constraints (P1/P2/P3 root principles)
-  │  ─ Cognitive quality framework (EAP + Neat)
-  │  ─ Full session lifecycle tracking
+ACC (1) ──declares──> CCC (N)
+  │                       │
+  │                       ├── contains Skill (N) ──holds──> MSM (N)
+  │                       │
+  │                       ├── contains Session (N)
+  │                       │
+  │                       └── constrains Agent (1)
   │
-  ├── CCC my-project-serenity/         ← Instance running on a project
-  ├── CCC my-ops-serenity/             ← Instance running on ops
-  └── CCC my-experiment-serenity/      ← Instance running on experiments
+  └── provides tools ──> cc-fs, cc-git, msm_list/exec/admin, session, cc-ck, eap, neat
 ```
 
-One ACC, any number of CCCs. Each CCC is independent, non-interfering, and accumulates its own domain knowledge.
-
-### Why It Changes the Game
-
-In the traditional workflow, an Agent is a **Coding Agent** — you describe requirements, it generates code, but each conversation's cognitive context is locked to the model's context window.
-
-With Serenity, Agent-human collaboration **elevates to the cognitive level**:
-
-| Dimension | Coding Agent | Serenity |
-|-----------|-------------|----------|
-| Context source | Model context window (one-shot) | **Persistent knowledge in CCC** (session records, skill docs, design docs, MSM registry) |
-| Knowledge persistence | Non-persistent — lost when window closes | **Structured external encoding** — decisions in SESSION.md, domain knowledge in SKILL.md |
-| Model capability demand | Relies on model's implicit knowledge | **Reduced** — domain knowledge is explicitly encoded, model only executes |
-| Output quality | Limited by context window size | **Significantly improved** — Agent always has full domain context |
-| Traceability | None | **Full lifecycle traceability** — every decision recorded with rationale and artifacts |
-| Collaboration level | Code level (requirement → code) | **Cognitive level** (goal → decision → structure → output) |
-
-**Core fact**: Using an ACC-constrained CCC reduces context consumption through knowledge accumulation, lowering model capability requirements while dramatically improving output quality and efficiency. The essence: Agent-human collaboration elevates from code level to cognitive level.
+| Relationship | Direction | Cardinality | Dependency |
+|-------------|-----------|-------------|------------|
+| ACC declares CCC | ACC → CCC | 1:N | CCC requires ACC installed |
+| CCC contains Skill | CCC → Skill | 1:N | Skill requires CCC directory first |
+| Skill holds MSM | Skill → MSM | 1:N | MSM requires skill directory first |
+| CCC contains Session | CCC → Session | 1:N | Session requires CCC first |
+| ACC constrains Agent | ACC → Agent | 1:N | Agent constrained only when running inside CCC |
 
 ---
 
-## Quick Reference: Problems & Solutions
+## 2. Activation Model
 
-| Problem | How Serenity Solves It |
-|---------|------------------------|
-| Agent accidentally modifies external files | Hard path isolation (P3) — read/write limited to container root |
-| Agent runs dangerous commands | `msm_exec` replaces bare bash (D19) — only **registered** operations execute |
-| Weeks later, forgot what the Agent did | `session` auto-records every multi-step work — goals, decisions, artifacts |
-| Untraceable "why" behind Agent decisions | EAP framework drives structured recording of every decision |
-| Vague user requests, Agent guesses wildly | Phase 2 EAP-driven interview — turns vague ideas into explicit abstractions |
+### 2.1 Activation Decision
+
+```
+OpenCode starts
+  │
+  ├── Current directory has .serenity?
+  │     ├── Yes → CCC fully activated
+  │     │       ├── Hook: Path Isolation (P3) active
+  │     │       ├── Hook: Bash Toggle (D19) active
+  │     │       ├── Hook: Subagent Inheritance active
+  │     │       ├── Hook: System Prompt Injection active
+  │     │       ├── All tools become live (operational)
+  │     │       └── Skill SKILL.md injected into Agent system prompt
+  │     │
+  │     └── No → Plugin silent
+  │               ├── Hooks: all inactive
+  │               ├── Tools: registered but lazy (returns "no CCC context")
+  │               └── Zero modification to OpenCode's native behavior
+```
+
+### 2.2 Hook Activation Matrix
+
+| Hook | Trigger | Inside CCC (.serenity) | Outside CCC |
+|------|---------|------------------------|-------------|
+| **Path Isolation (P3)** | Each Agent file tool call | Read/write confined to `.serenity` directory | Inactive |
+| **Bash Toggle (D19)** | Each Agent bash call | `msm_exec` preferred. Control via `/serenity-bash-off`/`/serenity-bash-on` | Inactive |
+| **Subagent Inheritance** | Each subagent launch | Subagent auto-inherits path/bash/SSH constraints | Inactive |
+| **System Prompt Injection** | Each conversation start | Injects "you are in a CCC" context | Inactive |
 
 ---
 
-## Use Cases
+## 3. Tool System
 
-Serenity is not bound to any domain. A container's **shape** depends on what MSMs you register and what SKILL.md you write:
+### 3.1 Tool Inventory
 
-| Scenario | The Container Becomes |
-|----------|----------------------|
-| Software development (requirements → design → code → test) | Controlled development environment |
-| Server, network, NAS, smart home management | Operations hub |
-| AI experiments (training, results, comparison) | Reproducible experiment chamber |
-| Media processing, documentation, translation | Content workbench |
+**9 tools** in total. Agent gains these immediately after installation, no code to write.
 
-Serenity's **skeleton** is always the same: boundaries + tool system + session recording + cognitive quality framework.
+| Tool | Category | Subcommands | Purpose |
+|------|----------|-------------|---------|
+| `msm_list` | Query | — | Query available MSMs in current CCC (with descriptions and flag schemas) |
+| `msm_exec` | Execute | — | Safely execute registered MSMs. Path escape auto-blocked. **Replaces bare bash** |
+| `msm_admin` | Manage | `register`, `deregister`, `guide`, `check` | MSM registration/deregistration, dev guide, MSM quality check. Auto git commit |
+| `cc-fs` | File | `root`, `resolve`, `exists`, `list`, `tree`, `relative`, `mkdir`, `rm`, `mv`, `cp`, `touch`, `append` | 12 file operations, all confined to CCC root. Path escape auto-blocked |
+| `cc-git` | Git | `status`, `commit`, `push`, `log`, `pull` | High-frequency Git operations. Non-fast-forward push outputs actionable suggestions. Conflict resolution via bash |
+| `session` | Session | `list`, `show`, `create`, `use`, `close`, `health`, `qa`, `archive`, `summary` | Full session lifecycle management. Auto-assigns S### IDs, stale detection, fact verification |
+| `cc-ck` | Health | None | CCC three-principle health check: P1 (.serenity exists), P2 (git-managed), P3 (opencode.json exists). Returns pass/fail report |
+| `eap` | Cognitive quality | None | EAP theory framework (progressive disclosure). Defines cognitive quality metrics (E↑ / R↓ / S↑), guides Agent thinking structure |
+| `neat` | Collaboration | None | Neat design collaboration protocol. Small-step alignment, explicit decisions, document-driven |
+
+### 3.2 Tool CCC Dependency
+
+All 9 tools follow the same rule:
+- **Inside CCC**: Normal execution, full capability available.
+- **Outside CCC**: Tools are registered but return "not in CCC context, tool does not function" when called.
 
 ---
 
-## Quick Start
+## 4. Pre-installed Skills
+
+Phase 1 skeleton creation auto-installs 3 standard skills, each with executable MSMs:
+
+| Skill | Directory | Existence Rationale | MSM Tools |
+|-------|-----------|---------------------|-----------|
+| **compass** | `.opencode/skills/compass/` | Direction assessment — 3-channel fast evaluation of whether a new task is viable. Prevents cognitive resource waste on infeasible tasks. | `compass-tool validate` (validate signal report), `compass-tool judge` (comprehensive judgment) |
+| **session** | `.opencode/skills/session/` | Session tracking — extends ACC's built-in `session` tool with container-level operations. Assigns S### IDs to historical sessions. | `session-tool reindex` (assigns S### IDs to sessions lacking them) |
+| **sqc** | `.opencode/skills/sqc/` | Quality cycle — scans all skill quality against DC (Design Check) rules. Prevents information entropy (broken references, orphan skills, template compliance). | `sqc-tool check`, `sqc-tool report`, `sqc-tool pipeline`, `msm_admin check` (MSM quality check) |
+
+---
+
+## 5. Two-Phase Initialization (D1)
+
+### 5.1 Phase 1 — Skeleton Creation
+
+**Input**: User provides container name (e.g., `my-project`), optional description.
+
+**Output**: The following directory structure is auto-generated at the specified path.
+
+```
+my-project-serenity/
+├── .serenity                    ← File type: container marker. Its existence declares "this directory is the CCC boundary."
+├── .gitignore
+├── opencode.json                ← File type: OpenCode Agent config. Declares a clean primary agent.
+├── AGENT_SESSIONS/              ← Directory type: work session storage. Each multi-step work auto-generates SESSION.md.
+├── docs/                        ← Directory type: design document storage.
+└── .opencode/
+    ├── skills/
+    │   ├── my-project-serenity/ ← Root skill. Phase 2 Agent completes its SKILL.md via collaborative interview.
+    │   ├── compass/             ← Pre-installed skill (see Section 4)
+    │   ├── session/             ← Pre-installed skill
+    │   └── sqc/                 ← Pre-installed skill
+    └── references/
+```
+
+**Auto operations**: Git `init → commit → push` (if user provided a remote URL).
+
+### 5.2 Phase 2 — Agent-Driven Interview
+
+**Trigger condition**: After Phase 1 completion, user's first message when starting OpenCode in the CCC directory.
+
+**Flow**: Agent intercepts the first message, does not answer directly. Enters EAP collaborative interview mode, covering these topics sequentially:
+
+| Topic | Question | Agent Output |
+|-------|----------|-------------|
+| 1 — Purpose | What does this container manage? Purpose in one sentence. Team size (solo/team). | Records purpose and scope into root SKILL.md |
+| 2 — Git remote | Set up Git remote? | Calls `cc-git` to set remote if URL provided |
+| 3 — Work items | What concrete work items will this CCC track? | Records work item list into knowledge base |
+| 4 — Collaboration style | Casual or structured? | Configures Agent response style |
+| 5 — External services | What external services or domain-specific skills needed? | Records integration requirements in root skill |
+
+**Completion condition**: Agent writes complete root `SKILL.md`, commits, pushes. CCC is fully ready.
+
+**Failure handling**: User says "I'm not sure" on any topic — Agent uses sensible defaults and records incomplete items in `docs/phase2-interview-record.md`.
+
+---
+
+## 6. CCC Lifecycle & Best Practices
+
+### 6.1 Flywheel Model
+
+```
+Concrete work produces decisions, constraints, domain experience
+  → Automatically settles in SESSION.md (zero operational cost)
+  → User decides: which know-how is worth distilling into a Skill?
+     (Hint: ask Agent after work "what's worth distilling into a skill?")
+  → Once distilled into SKILL.md, Agent loads it next time automatically
+  → Fuller context → higher efficiency → more time for new work
+  → Flywheel accelerates
+```
+
+### 6.2 Knowledge Layers
+
+| Layer | Name | Writer | Reader | Accumulation Cost |
+|-------|------|--------|--------|-------------------|
+| **L1 — SESSION** | Default sedimentation | Agent (`session create`) | User, Agent (retrospect) | Zero (automatic) |
+| **L2 — SKILL.md** | Selective distillation | Agent (on user request) | Agent (loaded at every startup) | User judgment decision |
+| **L3 — MSM** | Operation encapsulation | User registers | Agent (via `msm_exec`) | User registration decision |
+
+### 6.3 Entropy Control
+
+**Problem**: Knowledge accumulation naturally causes information entropy — outdated knowledge, duplicates, constraint conflicts.
+
+**Countermeasure**: SQC (Quality Cycle) scans all skill quality against DC rules at a regular cadence:
+
+- Auto-fixes automatable issues (broken references)
+- Flags items requiring human judgment (constraint conflicts, orphan skills)
+- Recommended cadence: **`sqc-tool pipeline` weekly**
+
+### 6.4 Skill Distillation Examples
+
+| Skill | Encapsulated Content | Distillation Rationale |
+|-------|----------------------|----------------------|
+| **deployment** | CI commands, env var configuration, rollback steps, common failure causes and fixes | Repeating questions every deployment → write into skill, available next time |
+| **frontend-patterns** | State management library, API call layer organization, error feedback UI standards | Agent generates team-consistent code directly, no per-task corrections |
+| **code-review** | DB migration compatibility requirements, component boundary rules, security checklist | Agent self-reviews before submitting, catches low-level issues before commit |
+
+### 6.5 MSM Operation Encapsulation Examples
+
+| Operation | MSM Name | Rationale | Effect |
+|-----------|----------|-----------|--------|
+| Deploy | `deploy` | Steps are fixed (build → test → tag → push → rollout), manual execution is error-prone | Agent completes safe deployment with one command, errors auto-blocked |
+| API test | `api-test` | Smoke tests, contract tests repeat often | Agent runs anytime, structured result output |
+| Commit | `commit` | Special commit conventions (scope format, co-author, issue links) | Agent conforms automatically |
+| Migration check | `migrate-check` | Must verify backward compatibility before release | Agent auto-analyzes migration scripts, flags breaking changes |
+
+---
+
+## 7. Why Serenity
+
+There's a ship in the movie *Serenity*. Not big, not new, but reliable. It flies through the universe — it can't know every planet, but it has its own cabins and its own course. The crew doesn't know what's in every cargo hold, but when they need something, they can always get it.
+
+That's how CCC works: not omniscience, but accessibility. Information piles up, keeps changing, no one can master it all — but a ship doesn't need to master the whole universe. Flying well on its own course is enough.
+
+---
+
+## 8. Philosophy: The ACC/CCC Model
+
+If Serenity were an operating system:
+
+- **ACC is the kernel** — it declares "what a cognitive container should have" (tools, hooks, validation rules). It's shared across containers.
+- **CCC is the user-space workspace** — it holds a specific project's skills, MSM registry, session records, and project files. Each CCC is independent.
+
+Upgrade the plugin (`npm update` + `install`), and all CCCs automatically gain new tools and guards — because ACC is a shared blueprint, and CCCs are independent instances.
+
+The theoretical foundation is **EAP** (Explicit Abstraction Principle): *"The functional value of a thought is proportional to its external reconstructability."* Every design decision in Serenity derives from this statement.
+
+Full EAP theory: <https://github.com/tellmewhattodo/theory-eap>
+
+---
+
+## 9. Quick Start
+
+### 9.1 Installation
 
 ```bash
-# 1. Install the plugin
 npm install @shgroup/opencode-serenity-plugin
 npx opencode-serenity-plugin install
-
-# 2. Start opencode in any directory
-
-# 3. Enter the slash command:
-/serenity-init
 ```
 
-The TUI asks for a container name (e.g., `my-project`) and a one-line description. It then creates the complete container skeleton — ready to use immediately.
+### 9.2 Create a CCC
+
+Start OpenCode in any directory, enter `/serenity-init`. The TUI prompts for container name and description, then auto-creates the complete container skeleton.
+
+Or use CLI:
 
 ```bash
-# Or initialize via CLI
 opencode-serenity-plugin init /path/to/my-project \
   --prefix my-project \
   --description "Manages my startup's code, docs, and dev workflow"
 ```
 
----
+### 9.3 Complete Initialization
 
-## Demo: Creating a CCC Step by Step
-
-Suppose you want to manage the software development of a SaaS startup.
-
-### Step 1 — Install and Launch
-
-```bash
-npm install @shgroup/opencode-serenity-plugin
-npx opencode-serenity-plugin install
-cd ~/projects/saas-app
-opencode
-```
-
-### Step 2 — Tell Serenity Your Name
-
-Enter `/serenity-init`, and the TUI shows a dialog:
-
-```
-┌─────────────────────────────────────────────┐
-│ CCC Name                                     │
-│                                               │
-│ kebab-case — lowercase letters, digits, hyphens
-│                                               │
-│ █ saas-platform                    [Create]  │
-└─────────────────────────────────────────────┘
-```
-
-Click Create, and seconds later:
-
-```
-CCC "saas-platform-serenity" created at ~/projects/saas-app
-  prefix: saas-platform
-  description: A concrete cognitive container (CCC)
-  Pre-installed 3 skill(s): compass, session, sqc
-
-Next steps (two-phase init):
-  Phase 1 ✅  — CCC skeleton created.
-  Phase 2 ⏳  — Restart OpenCode and open ~/projects/saas-app.
-     Type anything — your first message will be intercepted
-     and the Agent will guide you through a collaborative interview
-     to complete the root skill configuration.
-```
-
-### Step 3 — Restart OpenCode, Enter Phase 2
-
-You type: `hi, set up this workspace for me`
-
-The Agent doesn't answer directly — it enters EAP mode and starts a collaborative interview:
-
-```
-Agent:
-> Hello! We're entering **Phase 2 initialization**. I'll use the EAP
-> framework to turn your goals from vague ideas into explicit structures.
-> This makes every future operation more accurate and traceable.
->
-> **Topic 1 — What is this CCC for? (purpose + team size)**
->
-> What does this container manage? Tell me its purpose in one sentence.
-
-You:
-> Managing our SaaS platform development — web frontend, backend API,
-> deployment scripts, and product docs.
-
-Agent:
-> Got it. Is this `solo` (just you) or `team` (multi-person)?
-
-You:
-> team — core team of 3 will all use it.
-
-Agent:
-> Good. Recording scope: team.
->
-> **Topic 2 — Git remote**
->
-> Do you want to set up a Git remote or work locally for now?
-
-You:
-> Set one up. git@github.com:myco/saas-platform-serenity.git
-
-Agent calls `cc-git` to set the remote.
-
-You:
-> I'm not sure about the other topics yet...
-
-Agent:
-> No problem. I'll use sensible defaults for the rest — you can always
-> adjust by editing SKILL.md later. I'll save the interview record in
-> `docs/phase2-interview-record.md`.
-
-The Agent writes the complete `SKILL.md`, commits, and pushes. The CCC is fully ready.
-```
-
-**This is how Serenity works** — not a questionnaire you fill out, but an Agent that helps you **turn vague ideas into explicit structures**. You can say "I'm not sure" at any point — the Agent accepts it and keeps moving forward, rather than getting stuck in a loop.
+Restart OpenCode, type any message. The Agent automatically enters Phase 2 interview. CCC is fully ready after the interview completes.
 
 ---
 
-## Philosophy: The ACC/CCC Model
+## 10. Multi-Container Management
 
-If Serenity were an operating system:
-
-- **ACC** is the kernel — it defines "what a cognitive container should have" (tools, hooks, validation rules). It's shared across containers.
-- **CCC** is the user-space workspace — it holds a specific project's skills, MSM registry, session records, and project files. Each CCC is independent.
-
-Upgrade the plugin (`npm update` + `install`), and all CCCs automatically gain new tools and guards. Because ACC is a shared blueprint, and CCCs are independent instances.
-
-The theoretical foundation is **EAP** (Explicit Abstraction Principle): *"The functional value of a thought is proportional to its external reconstructability."* Every design decision in Serenity derives from this statement.
-
-You don't need these terms in daily use. "Serenity" is enough.
-
----
-
-## What is MSM (Mech & Semi-Mech)
-
-An MSM is an **executable operation unit owned by a skill**. It's not a standalone tool — each MSM is held by one skill:
-
-```
-skill (domain knowledge encapsulation)
-  ├── SKILL.md (document: existence, trigger conditions, usage)
-  ├── references/ (supporting references)
-  └── scripts/ (MSM scripts: executable operations)
-           │
-           └── Example: compass-tool validate/judge
-                (belongs to compass skill, validates 3-channel signal reports)
-```
-
-Two categories:
-
-| Category | Meaning | Example |
-|----------|---------|---------|
-| **Mech** | Pure TS script, zero LLM inference | `cc-fs`, `cc-git`, `ssh-connect` |
-| **Semi-Mech** | TS framework + LLM decision points | `session-tool qa`, `sqc-tool pipeline` |
-
-Core value: **determinism + auditability**. The LLM uses `msm_exec` to call MSMs — all path arguments are automatically validated for escapes, all operations are automatically traceable.
-
----
-
-## CCC Lifecycle Best Practices
-
-### The Flywheel: Natural Knowledge Accumulation & Selective Distillation
-
-A CCC isn't created once — it grows through continuous use:
-
-```
-Concrete work produces decisions, constraints, domain experience
-  → Automatically settles in SESSION.md (zero cost)
-  → You decide: which know-how is worth distilling into a Skill?
-     (Easiest way: ask the Agent after work:
-      "Which know-how is worth turning into a skill?")
-  → Once distilled into SKILL.md, the Agent loads it next time
-  → Fuller context → higher efficiency → more time for new work
-  → Flywheel accelerates
-```
-
-**Key design**: Knowledge accumulation is user-driven, not auto-pushed.
-
-- SESSION is the **default sedimentation layer** — every multi-step work's goals, decisions, and artifacts are automatically recorded here, zero operational cost
-- Skill is the **selective distillation layer** — only structured knowledge you confirm as valuable gets turned into a skill
-- The Agent only suggests, never decides: ask "what's worth distilling from today's work?" anytime — the Agent extracts candidates from SESSIONs, you decide
-
-### Skill Examples: How a Full-Stack Engineer Distills
-
-Suppose you're a React + Java full-stack developer. Your project has been running for a while, and you've had dozens of collaborations with the Agent. Here are skills you might distill:
-
-| Skill | What It Encapsulates | Why You'd Distill It |
-|-------|---------------------|---------------------|
-| **deployment** | Complete deployment knowledge: CI commands, env vars, rollback steps, common failures and fixes | Asking the Agent the same questions every deployment — put it in a skill, use it next time directly |
-| **frontend-patterns** | Your team's React conventions: state management library, API layer organization, error feedback UI standards | Agent generates team-consistent code for new features without corrections |
-| **backend-api** | Java backend API design: URL naming, unified response format, exception handling hierarchy, pagination conventions | Agent-generated API code follows team conventions — review pass rate increases dramatically |
-| **code-review** | Your team's specific review points: DB migration compatibility, frontend component boundary rules, security checklist | Agent self-reviews before submitting code, catching low-level issues before commit |
-
-Each Skill = a **SKILL.md** (a document for the Agent describing domain knowledge, rules, and scenarios) + optional **MSM** scripts (executable operations). Distillation is simple:
-
-```
-Knowledge accumulated in sessions (SESSION.md)
-  → You ask the Agent: "What's worth distilling?"
-  → Agent extracts candidates from SESSIONs
-  → You judge: this is important → write it as SKILL.md
-  → Next time, the Agent loads it automatically — like onboarding a new team member
-```
-
-### MSM Examples: Turning Routine Operations into Auditable Automation
-
-Skills encapsulate knowledge; MSMs encapsulate operations. For the same full-stack engineer's project, operations that can be MSM-ized:
-
-| Operation | Why MSM-ize | Effect |
-|-----------|-------------|--------|
-| **Deploy** (`deploy`) | Steps are fixed (build → test → tag → push → rollout), but manual execution is error-prone | Agent completes safe deployment with one command, errors automatically blocked |
-| **API test** (`api-test`) | Smoke tests, contract tests, regression tests repeat often | Agent runs them anytime, results returned structurally — a validation layer beyond CI |
-| **Commit** (`commit`) | Project has special commit conventions (scope format, co-author, issue links) | Agent commits following conventions — no more "fix bug" messages |
-| **Migration check** (`migrate-check`) | Must check backward compatibility before release | Agent analyzes migration scripts, flags breaking changes |
-
-These are all Mech (pure scripts, zero LLM inference) — once registered, the Agent calls them via `msm_exec deploy`, with automatic path escape validation and full traceability.
-
-**Taking it further**: When all your project's routine operations (deploy, test, commit, lint, publish) are MSM-ized, their combination forms a **natural Harness** — an orchestratable, observable, constraint-enforced operations layer. The Agent no longer guesses "how to deploy" — it works inside the Harness, executing only authorized operations.
-
-This is D19 (bash/msm risk grading) in practice: unsafe manual operations are progressively replaced by safe MSMs — not through禁令, but by offering better alternatives.
-
-### Taming Entropy with SQC
-
-Knowledge accumulation naturally brings information entropy — outdated knowledge, duplicates, constraint conflicts. SQC (Serenity Quality Circle) regularly scans all skill quality (broken references, orphan skills, template compliance), auto-fixes automatable issues, and flags items needing human judgment. Recommended cadence: **`sqc-tool pipeline` weekly**.
-
----
-
-## Two-Phase Initialization (D1)
-
-### Phase 1 — Skeleton Creation
-
-You give a name, Serenity creates:
-
-```
-my-project-serenity/
-├── .serenity                    ← Container marker: "this is the boundary"
-├── .gitignore
-├── opencode.json                ← Agent configuration (clean primary agent)
-├── AGENT_SESSIONS/              ← Every multi-step work auto-generates SESSION.md
-├── docs/                        ← Design documents
-└── .opencode/
-    ├── skills/
-    │   ├── my-project-serenity/     ← Root skill (completed by Agent in Phase 2)
-    │   ├── compass/                 ← Direction assessment skill
-    │   ├── session/                 ← Session tracking skill
-    │   └── sqc/                     ← Quality cycle skill
-    └── references/
-```
-
-Git auto `init → commit → push` (if you provided a remote URL).
-
-### Phase 2 — Agent-Driven Interview
-
-You type your first message, the Agent starts an EAP collaborative interview covering:
-
-- **Topic 1** — What is this CCC for? (purpose + team size)
-- **Topic 2** — Git remote configured?
-- **Topic 3** — What concrete work items will this CCC track?
-- **Topic 4** — Collaboration style (casual or structured?)
-- **Topic 5** — Any external services or domain-specific skills needed?
-
-After the interview, the Agent writes the complete root `SKILL.md`, and the CCC is fully ready.
-
----
-
-## 9 Built-in Tools
-
-Once installed, the Agent gains these capabilities without writing a single line of code:
-
-### Core Triad
-
-| Tool | Purpose |
-|------|---------|
-| `msm_list` | Query what executable operations are available in the current container (with descriptions and flag schemas) |
-| `msm_exec` | Safely execute registered operations. **Replaces bare bash**. Path escape automatically blocked |
-| `msm_admin` | Register/deregister operations, development guide, MSM quality check (`check`). Auto git commit |
-
-The Agent can register custom MSMs directly inside a CCC:
-
-```
-msm_admin register --name my-deploy --path .opencode/scripts/my-deploy.ts \
-  --description "Deploy to production" \
-  --category mech
-```
-
-After registration, `my-deploy` enters `mech-registry.json`, and the Agent can call it with `msm_exec my-deploy`.
-
-### Files & Containers
-
-| Tool | Subcommands | Purpose |
-|------|-------------|---------|
-| `cc-fs` | `root` `resolve` `exists` `list` `tree` `relative` `mkdir` `rm` `mv` `cp` `touch` `append` | 12 file operations, all confined to the container root. Path escape automatically blocked |
-
-### Git (No Bash Dependency)
-
-| Tool | Subcommands | Purpose |
-|------|-------------|---------|
-| `cc-git` | `status` `commit` `push` `log` | High-frequency Git operations. Non-fast-forward push rejection outputs actionable suggestions. Conflict resolution via bash |
-
-### Sessions & Health
-
-| Tool | Subcommands | Purpose |
-|------|-------------|---------|
-| `session` | `list` `show` `create` `health` `qa` `archive` `summary` | Full session lifecycle. Auto-assigns S### IDs, snooze detection, fact verification |
-| `cc-ck` | (none) | CCC three-principle health check. P1 (.serenity exists), P2 (git-managed), P3 (opencode.json exists) |
-
-### Cognitive Quality
-
-| Tool | Purpose |
-|------|---------|
-| `eap` | Complete EAP theory framework (progressive disclosure). The Explicit Abstraction Principle — tells you **how to think** so the Agent executes accurately |
-| `neat` | Neat design collaboration protocol. A structured methodology — tells you **how to align** so design proposals stay on track |
-
----
-
-## 4 Safety Hooks (Silent Operation)
-
-These hooks are completely transparent to the user, but work every second:
-
-| Hook | What It Does | Trigger |
-|------|-------------|---------|
-| Path Isolation (P3) | Read/edit/write/grep all confined to `.serenity` directory | Every file tool invocation |
-| Bash Toggle (D19) | `msm_exec` preferred — controlled via `/serenity-bash-off` and `/serenity-bash-on`, `/serenity-bash-status` for status. **Toggle based on usage**: daily dev via MSM, temporarily enable bash when flexibility needed | Every attempt to call bash |
-| Subagent Inheritance | Sub-agents automatically inherit all constraints (path, bash, SSH) | Every subagent launch |
-| System Prompt Injection | Automatically injects "you are in a CCC" context | Every conversation start |
-
----
-
-## 3 Pre-installed Skills
-
-Phase 1 auto-installs 3 standard skills (with executable MSM scripts):
-
-| Skill | What It Does | MSM Tools |
-|-------|-------------|-----------|
-| `compass` | Direction assessment — 3-channel fast evaluation of whether a new task is viable | `compass-tool validate` / `judge` |
-| `session` | Session tracking — extends ACC's built-in `session` tool with container-level operations | `session-tool reindex` (assigns S### IDs to historical sessions) |
-| `sqc` | Quality cycle — scans all skill quality against DC (design check) rules | `sqc-tool check` / `report` / `pipeline`; MSM quality via `msm_admin check` |
-
-You can register more MSMs and install more skill templates later via `msm_admin`.
-
----
-
-## Multi-Container Management
-
-One plugin manages all containers:
+One plugin manages all containers. Each CCC lives in its own directory, non-interfering:
 
 ```
 ~/projects/
-├── saas-app/          ← SaaS development container
-├── ops-tools/         ← Operations tools container
-└── ai-lab/            ← AI experiment container
+├── saas-app/          ← CCC: SaaS development
+├── ops-tools/         ← CCC: Operations tools
+└── ai-lab/            ← CCC: AI experiments
 ```
 
-Each container's Agent sees only files within its own `.serenity` boundary. Non-interfering, each accumulates independently.
+Within a single OpenCode session, the Agent can only access files in the CCC of the current working directory.
 
 ---
 
-## Development
+## 11. Development
 
 ```bash
 git clone git@github.com:tellmewhattodo/opencode-serenity-plugin.git
 cd opencode-serenity-plugin
 pnpm install
 
-# Development loop
 pnpm typecheck    # TypeScript type checking
 pnpm test         # 413+ tests (vitest)
 pnpm build        # Compile + copy templates
@@ -497,6 +373,21 @@ pnpm install      # Install to local ~/.config/opencode/
 
 ---
 
-> **Version**: v0.4.5 &nbsp;|&nbsp; **License**: MIT &nbsp;|&nbsp; **Prerequisites**: Node ≥ 20, OpenCode ≥ 1.16
+## 12. Use Cases
+
+Serenity is not bound to any domain. A container's **shape** depends on what MSMs you register and what SKILL.md you write:
+
+| Scenario | The Container Becomes | Typical MSMs |
+|----------|----------------------|--------------|
+| Software development (requirements → design → code → test) | Controlled development environment | `deploy`, `api-test`, `commit`, `migrate-check` |
+| Server, network, NAS, smart home management | Operations hub | `ssh-connect`, `health-check`, `backup` |
+| AI experiments (training, results, comparison) | Reproducible experiment chamber | `train`, `evaluate`, `compare` |
+| Media processing, documentation, translation | Content workbench | `transcribe`, `translate`, `publish` |
+
+---
+
+> **Version**: v0.4.13 &nbsp;|&nbsp; **License**: MIT &nbsp;|&nbsp; **Prerequisites**: Node ≥ 20, OpenCode ≥ 1.16
 >
 > **Platform**: Serenity is tested on OpenCode CLI (terminal), Linux desktop, and macOS. **Windows is untested and not guaranteed.**
+>
+> **Full EAP theory**: <https://github.com/tellmewhattodo/theory-eap>

@@ -253,7 +253,10 @@ export function createSession(opts: CreateSessionOptions): string {
 
   writeFileSync(join(sessionPath, SESSION_MD), sessionMd, 'utf8');
 
-  return `Created: ${dirName}/ (S${nextId})`;
+  // 自动将新创建的会话设为当前活跃会话
+  writeFileSync(join(sessionsDir, '.current'), `S${nextId}`, 'utf8');
+
+  return `Created and activated: ${dirName}/ (S${nextId})`;
 }
 
 /** health 子命令 */

@@ -368,6 +368,40 @@ export function archiveSessions(opts: ArchiveOptions): string {
   return `Archived ${count} session(s) → _archived/`;
 }
 
+/** use 子命令 — 激活会话作为当前工作上下文 */
+export function useSession(sessionsDir: string, name: string): string {
+  const session = findSession(sessionsDir, name);
+  if (!session) {
+    throw new SessionError(`Session not found: "${name}". Use "list" to see available sessions.`);
+  }
+
+  const mdPath = join(session.path, SESSION_MD);
+  if (!existsSync(mdPath)) {
+    throw new SessionError(`Session "${session.dirName}" has no SESSION.md — nothing to load.`);
+  }
+
+  // 提取 S### ID 作为标记
+  const idMatch = session.dirName.match(/S(\d{3,})/);
+  const sessionId = idMatch ? idMatch[0] : basename(session.dirName);
+  const dirName = session.dirName;
+
+  // 写入 .current 标记文件（供钩子或其他工具感知当前激活会话）
+  writeFileSync(join(sessionsDir, '.current'), sessionId, 'utf8');
+
+  return [
+    `───────────────────────────────────────────────────────────────`,
+    `[SESSION CONTEXT] Activated: ${dirName}`,
+    `───────────────────────────────────────────────────────────────`,
+    `Use "session show ${sessionId}" to view session details.`,
+    `SESSION.md path: ${mdPath}`,
+    ``,
+    `→ All subsequent work should refer back to this session.`,
+    `  Use "session show ${sessionId}" to check current progress.`,
+    `  After advancing work, update the "进度记录" (progress) section in SESSION.md.`,
+    `───────────────────────────────────────────────────────────────`,
+  ].join('\n');
+}
+
 /** summary 子命令 */
 export function sessionSummary(sessionsDir: string): string {
   const sessions = readAllSessions(sessionsDir);

@@ -8,6 +8,7 @@
  *   list     — 列出 AGENT_SESSIONS/ 中的会话
  *   show     — 查看指定会话详情
  *   create   — 创建会话（item / project 双模式）
+ *   use      — 激活会话为当前上下文，注入 SESSION.md 信息并提示 LLM 回归
  *   health   — 健康检查（stale/stalled/drift/ghost）
  *   archive  — 归档已关闭的超期会话
  *   summary  — 全局仪表盘
@@ -21,6 +22,7 @@ import { SessionError } from '../errors.js';
 import {
   listSessions,
   showSession,
+  useSession,
   healthCheck,
   createSession,
   archiveSessions,
@@ -31,16 +33,18 @@ import {
 export const sessionTool: ToolDefinition = tool({
   description:
     'Session lifecycle management for cognitive containers (CCC). ' +
-    'Manages AGENT_SESSIONS/ directory: list, show, create, health, qa, archive, summary. ' +
+    'Manages AGENT_SESSIONS/ directory: list, show, create, health, qa, archive, summary, use. ' +
+    'Use `use` to activate a session as current context — it injects session goals and progress as LLM context. ' +
     'CCCs should register `session-tool` MSM that wraps `session` for domain-specific extensions.',
   args: {
     subcommand: z
-      .enum(['list', 'show', 'create', 'health', 'qa', 'archive', 'summary'])
+      .enum(['list', 'show', 'create', 'use', 'health', 'qa', 'archive', 'summary'])
       .describe(
         'Operation to perform:\n' +
         '  list    — List all sessions with status summary\n' +
         '  show    — View session details (accepts S###, directory name, or fuzzy keyword)\n' +
         '  create  — Create a new session (--type=item|project --desc <desc>)\n' +
+        '  use     — Activate a session as current context (--name S###). Injects SESSION.md into LLM context with directive to refer back.\n' +
         '  health  — Health check: stale/stalled/drift/ghost\n' +
         '  qa      — Fact-check a session: verify SESSION.md claims against reality\n' +
         '  archive — Archive completed sessions past their grace period\n' +
@@ -109,6 +113,13 @@ export const sessionTool: ToolDefinition = tool({
         goal: input.goal,
         dryRun: input['dry-run'] ?? false,
       }) + extHint;
+    }
+
+    if (sub === 'use') {
+      if (!input.name) {
+        throw new SessionError('session-tool use: requires --name (S### or directory name)');
+      }
+      return useSession(sessionsDir, input.name);
     }
 
     if (sub === 'health') {

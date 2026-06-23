@@ -92,7 +92,7 @@ export const sessionTool: ToolDefinition = tool({
         'Operation to perform:\n' +
         '  list              — List all sessions with status summary (active/in-progress first)\n' +
         '  show              — View session details (accepts S###, directory name, or fuzzy keyword)\n' +
-        '  create            — Create a new session (--desc <desc> [--goal <goal>])\n' +
+        '  create            — Create a new session (--desc <desc> [--goal <goal>]) or (--issue <id>)\n' +
         '  use               — Activate a session as current context (--name S###). Closed sessions can be re-opened.\n' +
         '  close             — Close a session (requires --name + --confirm). Cannot be undone.\n' +
         '  health            — Health check: stale/stalled/drift/ghost\n' +
@@ -118,7 +118,11 @@ export const sessionTool: ToolDefinition = tool({
     desc: z
       .string()
       .optional()
-      .describe('Short description for create subcommand (any language, max 5 words)'),
+      .describe('Short description for create subcommand (any language, max 5 words). Mutually exclusive with --issue.'),
+    issue: z
+      .string()
+      .optional()
+      .describe('Issue/ticket ID for create subcommand (e.g. apaas-24712). Directory named YYYY-MM-DD--<issue>/. Mutually exclusive with --desc.'),
     goal: z
       .string()
       .optional()
@@ -157,14 +161,18 @@ export const sessionTool: ToolDefinition = tool({
     }
 
     if (sub === 'create') {
-      if (!input.desc) {
-        throw new SessionError('session-tool create: requires --desc (short description)');
+      if (!input.desc && !input.issue) {
+        throw new SessionError('session-tool create: requires --desc or --issue');
+      }
+      if (input.desc && input.issue) {
+        throw new SessionError('session-tool create: --desc and --issue are mutually exclusive');
       }
       // 先执行 ACC 默认创建（写 SESSION.md）
       const result = createSession({
         sessionsDir,
         root,
         desc: input.desc,
+        issue: input.issue,
         goal: input.goal,
         dryRun: input['dry-run'] ?? false,
       });

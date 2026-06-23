@@ -175,7 +175,10 @@ export function showSession(sessionsDir: string, name: string): string {
 export interface CreateSessionOptions {
   sessionsDir: string;
   root: string;
-  desc: string;
+  /** --desc 模式的描述（与 issue 互斥） */
+  desc?: string;
+  /** --issue 模式的工单号（与 desc 互斥） */
+  issue?: string;
   goal?: string;
   dryRun: boolean;
 }
@@ -188,9 +191,56 @@ export interface CreateSessionResult {
 }
 
 export function createSession(opts: CreateSessionOptions): CreateSessionResult {
-  const { sessionsDir, desc, goal, dryRun } = opts;
+  const { sessionsDir, desc, issue, goal, dryRun } = opts;
 
-  // Validate desc — allow any non-empty string (Chinese, spaces, etc.)
+  // 互斥校验：必须且只能选一个
+  if (!desc && !issue) {
+    throw new SessionError('create requires either --desc or --issue');
+  }
+  if (desc && issue) {
+    throw new SessionError('--desc and --issue are mutually exclusive');
+  }
+
+  const now = new Date();
+  const datePrefix = now.toISOString().slice(0, 10); // YYYY-MM-DD
+
+  if (issue) {
+    // ── --issue 模式 ──
+    if (issue.length > 100) {
+      throw new SessionError(`issue too long: ${issue.length} chars (max 100)`);
+    }
+
+    const dirName = `${datePrefix}--${issue}`;
+    const sessionPath = join(sessionsDir, dirName);
+
+    if (!dryRun && existsSync(sessionPath)) {
+      throw new SessionError(`Session directory already exists: "${dirName}"`);
+    }
+
+    if (dryRun) {
+      return {
+        message: `[dry-run] Would create: ${dirName}/`,
+        dirName,
+        sessionPath,
+        sessionId: issue,
+      };
+    }
+
+    mkdirSync(sessionPath, { recursive: true });
+
+    const sessionMd = `# SESSION: ${issue}\n- ID: ${issue}\n\n## 目标\n${goal ?? '（待补充）'}\n\n## 状态\n- [ ] 进行中\n\n## 关键决策\n| # | 决策 | 理由 |\n|---|------|------|\n| 1 | | |\n\n## 进度记录\n- ${now.toISOString().slice(0, 16).replace('T', ' ')} — 创建\n\n## 产出物\n- \n\n## 未解决的问题\n- \n`;
+
+    writeFileSync(join(sessionPath, SESSION_MD), sessionMd, 'utf8');
+
+    return {
+      message: `Created: ${dirName}/`,
+      dirName,
+      sessionPath,
+      sessionId: issue,
+    };
+  }
+
+  // ── --desc 模式（原有逻辑） ──
   if (!desc || desc.length === 0) {
     throw new SessionError('description cannot be empty');
   }
@@ -198,10 +248,7 @@ export function createSession(opts: CreateSessionOptions): CreateSessionResult {
     throw new SessionError(`description too long: ${desc.length} chars (max 200)`);
   }
 
-  const now = new Date();
-  const datePrefix = now.toISOString().slice(0, 10); // YYYY-MM-DD
-
-  // 分配 S### ID — 从现有最大值 + 1
+  // 分配 S### ID
   const sessions = readAllSessions(sessionsDir);
   const idPattern = /--S(\d{3,})--/;
   let maxId = 0;
@@ -232,10 +279,8 @@ export function createSession(opts: CreateSessionOptions): CreateSessionResult {
     };
   }
 
-  // 创建目录
   mkdirSync(sessionPath, { recursive: true });
 
-  // 写 SESSION.md
   const sessionMd = `# SESSION: ${desc}\n- ID: S${nextId}\n\n## 目标\n${goal ?? '（待补充）'}\n\n## 状态\n- [ ] 进行中\n\n## 关键决策\n| # | 决策 | 理由 |\n|---|------|------|\n| 1 | | |\n\n## 进度记录\n- ${now.toISOString().slice(0, 16).replace('T', ' ')} — 创建\n\n## 产出物\n- \n\n## 未解决的问题\n- \n`;
 
   writeFileSync(join(sessionPath, SESSION_MD), sessionMd, 'utf8');

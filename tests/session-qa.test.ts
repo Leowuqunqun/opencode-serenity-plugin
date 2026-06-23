@@ -15,6 +15,23 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+/** 返回 N 天前的日期字符串 (YYYY-MM-DD) */
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** 临时会话目录名用的日期前缀 */
+function datePrefix(): string {
+  return daysAgo(0);
+}
+
+/** 最近的日期（1 天前），不会触发 stale 检查 */
+const RECENT = daysAgo(1);
+/** 过旧的日期，会触发 stale 检查 */
+const ANCIENT = '2025-01-01';
+
 /** 创建临时 AGENT_SESSIONS 目录，返回路径和 helper */
 function setup() {
   const root = mkdtempSync(join(tmpdir(), 'qa-test-'));
@@ -48,7 +65,7 @@ const CLEAN_SESSION = `# SESSION: test-clean
 | 1 | 使用 text-based 报告 | LLM 可读性优于 JSON |
 
 ## 进度记录
-- 2026-06-13 — 开始实现 QA
+- ${RECENT} — 开始实现 QA
 
 ## 产出物
 - 测试报告
@@ -75,7 +92,7 @@ const COMPLETED_SESSION = `# SESSION: test-completed
 | 1 | 使用 TS | 类型安全 |
 
 ## 进度记录
-- 2026-06-13 — 创建
+- ${RECENT} — 创建
 
 ## 产出物
 - 完成报告
@@ -103,7 +120,7 @@ const INCONSISTENT_SESSION = `# SESSION: test-inconsistent
 | 1 | 测试 | 验证矛盾检测 |
 
 ## 进度记录
-- 2026-06-13 — 开始
+- ${RECENT} — 开始
 
 ## 产出物
 - 结果
@@ -128,7 +145,7 @@ const EMPTY_SECTION_SESSION = `# SESSION: test-empty-sections
 | 1 | 决策一 | 理由一 |
 
 ## 进度记录
-- 2026-06-13 — 创建
+- ${RECENT} — 创建
 
 ## 产出物
 
@@ -153,7 +170,7 @@ const STALE_SESSION = `# SESSION: test-stale
 | 1 | 某个决定 | 某个理由 |
 
 ## 进度记录
-- 2025-01-01 — 创建
+- ${ANCIENT} — 创建
 
 ## 产出物
 - 暂无
@@ -175,7 +192,7 @@ const NO_DECISIONS_SESSION = `# SESSION: test-no-decisions
 （暂无）
 
 ## 进度记录
-- 2026-06-13 — 创建
+- ${RECENT} — 创建
 
 ## 产出物
 - 
@@ -202,8 +219,8 @@ const COMPLETED_WITH_UNRESOLVED_SESSION = `# SESSION: test-completed-unresolved
 | 1 | 选择方案 A | 性能更好 |
 
 ## 进度记录
-- 2026-06-13 — 开始实现
-- 2026-06-13 — 完成
+- ${RECENT} — 开始实现
+- ${RECENT} — 完成
 
 ## 产出物
 - 代码
@@ -230,8 +247,8 @@ const ALL_TASKS_DONE_SESSION = `# SESSION: test-all-done
 | 1 | 决定用 TS | 类型安全 |
 
 ## 进度记录
-- 2026-06-13 — 创建
-- 2026-06-13 — 完成所有
+- ${RECENT} — 创建
+- ${RECENT} — 完成所有
 
 ## 产出物
 - 代码
@@ -254,7 +271,7 @@ describe('session-qa — 事实核对', () => {
   it('qa on session without SESSION.md → error', async () => {
     const { sessionsDir, cleanup } = setup();
     try {
-      const dirName = '2026-06-13--S999--empty-dir';
+      const dirName = `${RECENT}--S999--empty-dir`;
       mkdirSync(join(sessionsDir, dirName), { recursive: true });
       const { qaSession } = await import('../src/session/lib.js');
       const result = qaSession(sessionsDir, dirName);
@@ -267,7 +284,7 @@ describe('session-qa — 事实核对', () => {
   it('clean session → no errors or warnings', async () => {
     const { sessionsDir, cleanup } = setup();
     try {
-      createSession(sessionsDir, '2026-06-13--S001--test-clean', CLEAN_SESSION);
+      createSession(sessionsDir, `${RECENT}--S001--test-clean`, CLEAN_SESSION);
       const { qaSession } = await import('../src/session/lib.js');
       const result = qaSession(sessionsDir, 'S001');
       expect(result).toContain('0 error');
@@ -280,7 +297,7 @@ describe('session-qa — 事实核对', () => {
   it('completed session (consistent) → no errors', async () => {
     const { sessionsDir, cleanup } = setup();
     try {
-      createSession(sessionsDir, '2026-06-13--S002--test-completed', COMPLETED_SESSION);
+      createSession(sessionsDir, `${RECENT}--S002--test-completed`, COMPLETED_SESSION);
       const { qaSession } = await import('../src/session/lib.js');
       const result = qaSession(sessionsDir, 'S002');
       expect(result).toContain('0 error');
@@ -292,7 +309,7 @@ describe('session-qa — 事实核对', () => {
   it('session marked complete but has pending tasks → error', async () => {
     const { sessionsDir, cleanup } = setup();
     try {
-      createSession(sessionsDir, '2026-06-13--S003--test-inconsistent', INCONSISTENT_SESSION);
+      createSession(sessionsDir, `${RECENT}--S003--test-inconsistent`, INCONSISTENT_SESSION);
       const { qaSession } = await import('../src/session/lib.js');
       const result = qaSession(sessionsDir, 'S003');
       expect(result).toContain('[ERR:consistency]');
@@ -305,7 +322,7 @@ describe('session-qa — 事实核对', () => {
   it('session with empty sections → warnings', async () => {
     const { sessionsDir, cleanup } = setup();
     try {
-      createSession(sessionsDir, '2026-06-13--S004--test-empty-sections', EMPTY_SECTION_SESSION);
+      createSession(sessionsDir, `${RECENT}--S004--test-empty-sections`, EMPTY_SECTION_SESSION);
       const { qaSession } = await import('../src/session/lib.js');
       const result = qaSession(sessionsDir, 'S004');
       // 目标为空、产出物为空、未解决的问题为空 → 多个 warning
@@ -320,7 +337,7 @@ describe('session-qa — 事实核对', () => {
   it('stale session with pending tasks → warning', async () => {
     const { sessionsDir, cleanup } = setup();
     try {
-      createSession(sessionsDir, '2026-06-13--S005--test-stale', STALE_SESSION);
+      createSession(sessionsDir, `${ANCIENT}--S005--test-stale`, STALE_SESSION);
       const { qaSession } = await import('../src/session/lib.js');
       const result = qaSession(sessionsDir, 'S005');
       expect(result).toContain('[WRN:stale]');
@@ -332,7 +349,7 @@ describe('session-qa — 事实核对', () => {
   it('session with no decisions on active session → info', async () => {
     const { sessionsDir, cleanup } = setup();
     try {
-      createSession(sessionsDir, '2026-06-13--S006--test-no-decisions', NO_DECISIONS_SESSION);
+      createSession(sessionsDir, `${RECENT}--S006--test-no-decisions`, NO_DECISIONS_SESSION);
       const { qaSession } = await import('../src/session/lib.js');
       const result = qaSession(sessionsDir, 'S006');
       expect(result).toContain('[INF:quality]');
@@ -345,7 +362,7 @@ describe('session-qa — 事实核对', () => {
   it('completed session with unresolved items → warning', async () => {
     const { sessionsDir, cleanup } = setup();
     try {
-      createSession(sessionsDir, '2026-06-13--S007--test-completed-unresolved', COMPLETED_WITH_UNRESOLVED_SESSION);
+      createSession(sessionsDir, `${RECENT}--S007--test-completed-unresolved`, COMPLETED_WITH_UNRESOLVED_SESSION);
       const { qaSession } = await import('../src/session/lib.js');
       const result = qaSession(sessionsDir, 'S007');
       expect(result).toContain('[WRN:consistency]');
@@ -358,7 +375,7 @@ describe('session-qa — 事实核对', () => {
   it('all tasks done but no completion mark → info', async () => {
     const { sessionsDir, cleanup } = setup();
     try {
-      createSession(sessionsDir, '2026-06-13--S008--test-all-done', ALL_TASKS_DONE_SESSION);
+      createSession(sessionsDir, `${RECENT}--S008--test-all-done`, ALL_TASKS_DONE_SESSION);
       const { qaSession } = await import('../src/session/lib.js');
       const result = qaSession(sessionsDir, 'S008');
       expect(result).toContain('[INF:consistency]');

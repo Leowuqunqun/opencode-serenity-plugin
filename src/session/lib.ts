@@ -136,8 +136,8 @@ function findSession(sessionsDir: string, name: string): SessionEntry | null {
 
 // ── 核心 API ──
 
-/** list 子命令 */
-export function listSessions(sessionsDir: string): string {
+/** list 子命令 — activeId 来自 `session use` 的 in-memory 状态 */
+export function listSessions(sessionsDir: string, activeId?: string): string {
   const sessions = readAllSessions(sessionsDir);
   if (sessions.length === 0) {
     return '(no sessions in AGENT_SESSIONS/)';
@@ -145,9 +145,11 @@ export function listSessions(sessionsDir: string): string {
 
   const lines = sessions.map((s) => {
     const age = Math.floor((Date.now() - s.mtime.getTime()) / 86400000);
-    const status = s.status.completed ? '✓' : '○';
-    const sessionId = s.dirName;
-    return `${status} ${sessionId} (${age}d ago)`;
+    const idMatch = s.dirName.match(/S(\d{3,})/);
+    const sessionId = idMatch ? idMatch[0] : '';
+    const isActive = activeId !== undefined && sessionId === activeId;
+    const status = isActive ? '●' : s.status.completed ? '✓' : '○';
+    return `${status} ${s.dirName} (${age}d ago)`;
   });
 
   return `AGENT_SESSIONS/ (${sessions.length} sessions)\n` + lines.join('\n');

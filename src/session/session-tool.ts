@@ -32,7 +32,7 @@ import {
   sessionSummary,
   qaSession,
 } from './lib.js';
-import { setActiveSession, removeActiveSession } from './active-state.js';
+import { setActiveSession, removeActiveSession, getActiveSession } from './active-state.js';
 import type { MechEntry } from '../config-schema.js';
 
 /** 从 flags 中查找 name 匹配的 flag，仅在 new-style 对象上检查 */
@@ -145,7 +145,8 @@ export const sessionTool: ToolDefinition = tool({
     }
 
     if (sub === 'list') {
-      return listSessions(sessionsDir) + extHint;
+      const activeSession = getActiveSession(ctx.sessionID);
+      return listSessions(sessionsDir, activeSession?.sessionId) + extHint;
     }
 
     if (sub === 'show') {

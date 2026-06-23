@@ -77,6 +77,21 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
   if (!state.skillContent) return;  // SKILL.md 读失败或缺失 → 跳过
   if (output.system.includes(state.skillContent)) return;
   output.system.push(state.skillContent);
+
+  // 注入当前活跃会话（idempotent）
+  const sessionMarker = '=== Serenity Session ===';
+  if (!output.system.some(s => typeof s === 'string' && s.includes(sessionMarker))) {
+    if (_input.sessionID) {
+      const active = getActiveSession(_input.sessionID);
+      if (active) {
+        output.system.push(
+          `\n=== Serenity Session ===\n` +
+          `Active: ${active.sessionId} — ${active.dirName}\n` +
+          `Path: ${active.mdPath}\n`,
+        );
+      }
+    }
+  }
 };
 
 /**

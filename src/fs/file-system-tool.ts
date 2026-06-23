@@ -120,7 +120,7 @@ function assertNotProtected(root: string, absPath: string, targetLabel: string):
 const SUBCOMMANDS = [
   'root', 'resolve', 'exists', 'list', 'relative',
   'mkdir', 'rm', 'mv', 'cp', 'touch', 'tree', 'append',
-  'reveal', 'info',
+  'reveal', 'info', 'find',
 ] as const;
 
 export const fileSystemTool: ToolDefinition = tool({
@@ -147,7 +147,8 @@ export const fileSystemTool: ToolDefinition = tool({
         '  tree     — Recursive directory listing, tree-like output as JSON\n' +
         '  append   — Append content to a file (like shell >>)\n' +
         '  reveal   — Open a path in the OS file manager (xdg-open on Linux, Finder on macOS)\n' +
-        '  info     — Show detailed file/directory metadata (type, size, mtime, mode, owner)',
+        '  info     — Show detailed file/directory metadata (type, size, mtime, mode, owner)\n' +
+        '  find     — Recursively search files by name pattern (glob or fuzzy substring)',
       ),
     path: z
       .string()
@@ -204,6 +205,26 @@ export const fileSystemTool: ToolDefinition = tool({
       .string()
       .optional()
       .describe('Content to append (for append subcommand)'),
+    pattern: z
+      .string()
+      .optional()
+      .describe(
+        'Glob or fuzzy filename pattern for find subcommand. ' +
+        'Supports * (any chars) and ? (single char). ' +
+        'Plain text does case-insensitive substring matching.',
+      ),
+    absolute: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('With find: return absolute paths instead of relative-to-root'),
+    'max-depth': z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe('With find: maximum recursion depth (default: unlimited)'),
   },
   execute: async (input, ctx) => {
     const cwd = ctx.directory;
@@ -549,6 +570,71 @@ export const fileSystemTool: ToolDefinition = tool({
       const content = input.content;
       writeFileSync(absPath, content, { flag: 'a' });
       return `appended ${Buffer.byteLength(content, 'utf8')} bytes to ${input.path}`;
+    }
+
+    // ── find (glob/fuzzy file search) ──
+    if (sub === 'find') {
+      if (!input.pattern) throw new FileSystemError('file-system find: requires a pattern argument');
+
+      const relPath = input.path || '.';
+      const absPath = relPath.startsWith('/')
+        ? relPath
+        : resolveRootPath(root, relPath);
+
+      if (!existsSync(absPath)) {
+        throw new FileSystemError(`file-system find: path "${absPath}" does not exist`);
+      }
+
+      const pattern = input.pattern;
+      const absolutePaths = input.absolute ?? false;
+      const maxDepth = input['max-depth'] ?? -1;
+      const hasGlobChars = /[*?]/.test(pattern);
+
+      function matchFilename(name: string): boolean {
+        if (hasGlobChars) {
+          const regexStr = '^' + pattern
+            .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+            .replace(/\*/g, '.*')
+            .replace(/\?/g, '.') + '$';
+          try {
+            return new RegExp(regexStr).test(name);
+          } catch {
+            return name.includes(pattern);
+          }
+        }
+        return name.toLowerCase().includes(pattern.toLowerCase());
+      }
+
+      function walkFind(dir: string, depth: number): void {
+        if (maxDepth >= 0 && depth > maxDepth) return;
+        let names: string[];
+        try {
+          names = readdirSync(dir);
+        } catch {
+          return;
+        }
+        for (const name of names.sort()) {
+          const full = resolve(dir, name);
+          let stat: Stats;
+          try {
+            stat = statSync(full);
+          } catch {
+            continue;
+          }
+          if (matchFilename(name)) {
+            matches.push(absolutePaths ? full : serenityPathRelative(root, full));
+          }
+          if (stat.isDirectory()) {
+            walkFind(full, depth + 1);
+          }
+        }
+      }
+
+      const matches: string[] = [];
+      walkFind(absPath, 1);
+      matches.sort();
+
+      return JSON.stringify({ path: absPath, pattern, matches, count: matches.length }, null, 2);
     }
 
     throw new FileSystemError(`cc-fs: unknown subcommand "${sub}"`);

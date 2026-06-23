@@ -19,7 +19,7 @@
 import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady, clearPhase2Flag } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
-import { getActiveSession } from '../session/active-state.js';
+import { getActiveSession, setActiveSession } from '../session/active-state.js';
 import pkg from '../../package.json' with { type: 'json' };
 
 const VERSION: string = pkg.version;
@@ -113,10 +113,46 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
   }
 
   const state = getState();
-  if (!state.needsPhase2 || !state.phase2Prompt) return;
-
-  // 从后往前找最后一个真实用户消息（跳过 synthetic / ignored / non-user）
   const messages = output.messages ?? [];
+
+  // ── 活跃会话自动恢复 ──
+  // 当 Map 为空（进程重启/恢复会话）时，从历史消息中寻找 [SESSION CONTEXT] 模式恢复状态
+  const ocSessionId = (_input as any).sessionID as string | undefined;
+  if (ocSessionId) {
+    const existing = getActiveSession(ocSessionId);
+    if (!existing) {
+      for (const msg of messages) {
+        for (const part of (msg as any).parts ?? []) {
+          if (part.type === 'toolResult') {
+            const text = typeof part.output === 'string' ? part.output : '';
+            if (text.includes('[SESSION CONTEXT] Activated:')) {
+              const lines = text.split('\n');
+              let dirName = '';
+              let mdPath = '';
+              for (const line of lines) {
+                if (line.includes('[SESSION CONTEXT] Activated:')) {
+                  dirName = line.split('Activated:')[1]?.trim() ?? '';
+                }
+                if (line.startsWith('SESSION.md path:')) {
+                  mdPath = line.split('SESSION.md path:')[1]?.trim() ?? '';
+                }
+              }
+              if (dirName) {
+                const idMatch = dirName.match(/S(\d{3,})/);
+                const sessionId = idMatch ? `S${idMatch[1]}` : dirName;
+                setActiveSession(ocSessionId, { sessionId, dirName, mdPath });
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // ── Phase 2 强制访谈 ──
+  if (!state.needsPhase2 || !state.phase2Prompt) return;
+  // 从后往前找最后一个真实用户消息（跳过 synthetic / ignored / non-user）
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (!msg || msg.info.role !== 'user') continue;

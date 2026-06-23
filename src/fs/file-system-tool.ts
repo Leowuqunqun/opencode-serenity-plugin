@@ -120,7 +120,7 @@ function assertNotProtected(root: string, absPath: string, targetLabel: string):
 const SUBCOMMANDS = [
   'root', 'resolve', 'exists', 'list', 'relative',
   'mkdir', 'rm', 'mv', 'cp', 'touch', 'tree', 'append',
-  'reveal',
+  'reveal', 'info',
 ] as const;
 
 export const fileSystemTool: ToolDefinition = tool({
@@ -146,7 +146,8 @@ export const fileSystemTool: ToolDefinition = tool({
         '  touch    — Create empty file or update timestamp\n' +
         '  tree     — Recursive directory listing, tree-like output as JSON\n' +
         '  append   — Append content to a file (like shell >>)\n' +
-        '  reveal   — Open a path in the OS file manager (xdg-open on Linux, Finder on macOS)',
+        '  reveal   — Open a path in the OS file manager (xdg-open on Linux, Finder on macOS)\n' +
+        '  info     — Show detailed file/directory metadata (type, size, mtime, mode, owner)',
       ),
     path: z
       .string()
@@ -472,6 +473,32 @@ export const fileSystemTool: ToolDefinition = tool({
       }
 
       return JSON.stringify({ path: absPath, entries, maxDepth }, null, 2);
+    }
+
+    // ── info (show file metadata) ──
+    if (sub === 'info') {
+      if (!input.path) throw new FileSystemError('file-system info: requires a path argument');
+      const absPath = input.path.startsWith('/')
+        ? input.path
+        : resolveRootPath(root, input.path);
+
+      if (!existsSync(absPath)) {
+        throw new FileSystemError(`file-system info: path "${absPath}" does not exist`);
+      }
+
+      const stat = statSync(absPath);
+      const fileType = detectFileType(stat);
+      const modeStr = stat.mode.toString(8).slice(-4);
+
+      return [
+        `path: ${serenityPathRelative(root, absPath)}`,
+        `type: ${fileType}`,
+        `size: ${stat.size} (${humanSize(stat.size)})`,
+        `mtime: ${stat.mtime.toISOString()}`,
+        `mode: ${modeStr}`,
+        `uid: ${stat.uid}`,
+        `gid: ${stat.gid}`,
+      ].join('\n');
     }
 
     // ── reveal (open path in OS file manager) ──

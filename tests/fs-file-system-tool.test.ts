@@ -121,6 +121,32 @@ describe('file-system tool — 只读子命令', () => {
   it('list — 不存在的路径报错', async () => {
     await expect(callFs({ subcommand: 'list', path: 'nonexistent' }, root)).rejects.toThrow('does not exist');
   });
+
+  it('info — 返回文件元数据', async () => {
+    writeFileSync(join(root, 'test.txt'), 'hello world');
+    const result = await callFs({ subcommand: 'info', path: 'test.txt' }, root);
+    expect(result).toContain('path: test.txt');
+    expect(result).toContain('type: file');
+    expect(result).toContain('size:');
+    expect(result).toContain('mtime:');
+    expect(result).toContain('mode:');
+    expect(result).toContain('uid:');
+    expect(result).toContain('gid:');
+  });
+
+  it('info — 返回目录元数据', async () => {
+    mkdirSync(join(root, 'mydir'));
+    const result = await callFs({ subcommand: 'info', path: 'mydir' }, root);
+    expect(result).toContain('type: dir');
+  });
+
+  it('info — 不存在的路径报错', async () => {
+    await expect(callFs({ subcommand: 'info', path: 'nonexistent' }, root)).rejects.toThrow('does not exist');
+  });
+
+  it('info — 无 path 参数时报错', async () => {
+    await expect(callFs({ subcommand: 'info' }, root)).rejects.toThrow('path argument');
+  });
 });
 
 describe('file-system tool — mkdir', () => {

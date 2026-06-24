@@ -10,6 +10,7 @@
  *   push    — git push origin <current-branch>
  *   log     — git log --oneline [-n <count>]
  *   pull    — git pull --ff-only（安全 fast-forward；有分歧时输出 [REJECTED] + 操作建议）
+ *   diff    — git diff [--cached] [<ref>] [-- <path>]
  *
  * 冲突约定（设计文档 §8.4）：
  *   - push/pull 被 non-fast-forward 拒绝时输出 [REJECTED] + 操作建议
@@ -24,7 +25,7 @@ import pkg from '../../package.json' with { type: 'json' };
 
 const VERSION = pkg.version;
 
-const SUBCOMMANDS = ['status', 'commit', 'push', 'log', 'pull'] as const;
+const SUBCOMMANDS = ['status', 'commit', 'push', 'log', 'pull', 'diff'] as const;
 
 // ── 内部 helper ──
 
@@ -67,7 +68,7 @@ export const ccGitTool: ToolDefinition = tool({
     `Serenity git utility (v${VERSION}). ` +
     `Git operations for the CCC (Concrete Cognitive Container). ` +
     `Subcommands: status (porcelain status), commit (git add -A + commit), push (push to origin), log (oneline history), ` +
-    `pull (pull --ff-only). ` +
+    `pull (pull --ff-only), diff (git diff [--staged] [--ref <ref>] [--path <path>]). ` +
     `Use this for git operations when bash is not available. ` +
     `Conflict resolution is NOT automated — use bash for merges and rebases.`,
   args: {
@@ -78,7 +79,8 @@ export const ccGitTool: ToolDefinition = tool({
         'commit (git add -A + commit -m <msg>), ' +
         'push (git push origin HEAD), ' +
         'log (git log --oneline), ' +
-        'pull (git pull --ff-only)',
+        'pull (git pull --ff-only), ' +
+        'diff (git diff [--staged] [--ref <ref>] [--path <path>])',
       ),
     message: z
       .string()
@@ -92,6 +94,19 @@ export const ccGitTool: ToolDefinition = tool({
       .optional()
       .default(10)
       .describe('Number of commits for log subcommand (default: 10, max: 100)'),
+    staged: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('For diff: show staged changes (git diff --cached)'),
+    ref: z
+      .string()
+      .optional()
+      .describe('For diff: compare against a ref (e.g. HEAD~1, main, origin/main)'),
+    path: z
+      .string()
+      .optional()
+      .describe('For diff: filter to specific path (e.g. src/, package.json)'),
   },
   execute: async (input, ctx) => {
     const root = findSerenityRoot(ctx.directory);
@@ -248,6 +263,19 @@ export const ccGitTool: ToolDefinition = tool({
       const n = input.n ?? 10;
       const { stdout } = execGit(['log', '--oneline', `-n`, String(n)], root);
       if (!stdout) return '(no commits)';
+      return stdout;
+    }
+
+    // ── diff ──
+    if (sub === 'diff') {
+      const args: string[] = ['diff'];
+      if (input.staged) args.push('--cached');
+      if (input.ref) args.push(input.ref);
+      if (input.path) args.push('--', input.path);
+
+      const { stdout, stderr } = execGit(args, root);
+      if (stderr) return `[WARN] git diff had stderr:\n${stderr}`;
+      if (!stdout) return '(no diff)';
       return stdout;
     }
 

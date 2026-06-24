@@ -112,64 +112,36 @@ my-project-serenity/
 
 ## 你现在有哪些工具
 
-安装后，你得到了 **9 个工具**。每次在 CCC 目录中启动 OpenCode，Agent 直接可用，无需写代码。
+安装后你获得 **9 个工具**，按设计目的分为四组。
 
-### msm_list —— 查询可用操作
+### 安全的执行通道
 
-当前 CCC 里注册了哪些 MSM？它们的参数是什么？`msm_list` 输出完整清单（含描述和 flag schema）。
+裸 bash 不可记录、不可审计、容易越界。MSM（Mech & Semi-Mech）框架将常用操作注册为可执行单元，通过统一的安全通道执行。
 
-### msm_exec —— 安全执行操作
+- **`msm_list`** — 查看当前 CCC 注册了哪些 MSM，以及它们的参数。
+- **`msm_exec`** — 安全执行 MSM。路径逃逸自动阻断。**优先于 bash 使用。**
+- **`msm_admin`** — 注册/注销 MSM。`register` 自动 git commit。`guide` 查看开发手册。`check` 运行品质检查。
 
-替代裸 bash。注册过的 MSM 通过此工具执行，路径逃逸自动阻断，调用自动记入会话日志。**优先于 bash 使用。**
+### 边界内的日常操作
 
-### msm_admin —— 注册/管理可执行操作
+CCC 有明确的目录边界。Agent 对文件系统和版本控制的一切操作都限定在这个边界内。
 
-| 子命令 | 做什么 |
-|--------|--------|
-| `register` | 注册一个新 MSM（name + path + description + category） |
-| `deregister` | 注销一个 MSM |
-| `guide` | 查看 MSM 开发手册 |
-| `check` | 对已注册 MSM 运行品质检查（DC-M1~M4） |
+- **`cc-fs`** — 15 种文件操作（`root` / `resolve` / `exists` / `list` / `tree` / `relative` / `mkdir` / `rm` / `mv` / `cp` / `touch` / `append` / `reveal` / `info` / `find`），全部路径逃逸自动阻断。
+- **`cc-git`** — 高频 Git 操作：`status` / `commit` / `push` / `log` / `pull`。非快进推送自动输出建议，冲突解决走 bash。
+- **`cc-ck`** — 无参数。三原则健康检查：.serenity 存在？Git 管理？配置完整？
 
-注册后自动 git commit 注册变更。
+### 跨对话的工作记忆
 
-### cc-fs —— 安全的文件操作
+每次新对话 Agent 从零开始。会话系统把决策、进度、未解决问题沉淀为可追溯的记录。
 
-限定在 CCC 根目录内的 12 种文件操作：`root`、`resolve`、`exists`、`list`、`tree`、`relative`、`mkdir`、`rm`、`mv`、`cp`、`touch`、`append`。路径逃逸自动阻断。
+- **`session`** — `create` / `use` / `close` / `list` / `show` / `summary` / `archive` / `health` / `qa`。Agent 自动创建会话，自动记录决策，对话压缩或重启后仍可恢复上下文。
 
-### cc-git —— 高频 Git 操作
+### 思维质量框架
 
-5 个子命令：`status`、`commit`、`push`、`log`、`pull`。push 被拒绝时自动输出建议。冲突解决走 bash。
+这两个工具不操作文件——它们提升 Agent 思考本身的品质。
 
-### session —— 会话全生命周期管理
-
-9 个子命令：
-
-| 子命令 | 做什么 |
-|--------|--------|
-| `list` | 列出所有会话（含状态摘要） |
-| `show` | 查看会话详情 |
-| `create` | 创建新会话（自动生成 SESSION.md） |
-| `use` | 激活会话为当前上下文 |
-| `close` | 关闭会话 |
-| `health` | 健康检查：僵死/停滞/漂移/幽灵会话 |
-| `qa` | 事实核查——验证 SESSION.md 与现实一致 |
-| `archive` | 归档已完成的旧会话 |
-| `summary` | 统计面板：数量 + 最近活动 + 警告 |
-
-每次多步工作前，Agent 自动创建会话。决策自动记录，不依赖你的记忆力。
-
-### cc-ck —— CCC 健康检查
-
-无参数。验证三原则：P1（.serenity 存在？）、P2（Git 管理？）、P3（opencode.json 存在？）。返回 pass/fail 报告。
-
-### eap —— 认知质量框架
-
-无参数。渐进式披露 EAP 理论——定义认知质量标准（E↑ / R↓ / S↑），指导 Agent 的思考结构和输出质量。
-
-### neat —— 设计协作协议
-
-无参数。小步对齐、显式决策、文档驱动的协作方法论。
+- **`eap`** — 认知质量框架。定义 E↑ / R↓ / S↑ 标准，指导每一次输出的外部可重建性。
+- **`neat`** — 设计协作协议。小步对齐、显式决策、文档驱动，确保复杂设计的每一步可追溯。
 
 ---
 

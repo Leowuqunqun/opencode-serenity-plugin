@@ -251,7 +251,12 @@ const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
     `=== End Serenity Context ===`,
   ].join('\n');
 
-  output.description = context + '\n\n' + output.description;
+  // 追加 SKILL.md 全文（subagent 继承 CCC 认知上下文）
+  const skillPart = state.skillContent
+    ? `\n\n=== Serenity Skill ===\n${state.skillContent}`
+    : '';
+
+  output.description = context + skillPart + '\n\n' + output.description;
 };
 
 /** 工厂：返回 compacting / system transform / tool definition 相关的 hooks 集合

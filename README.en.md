@@ -113,64 +113,36 @@ Upgrade the plugin (`npm update`), all CCCs automatically gain new tools and fea
 
 ## Your Tools
 
-After installation, you get **9 tools**. Every time you start OpenCode inside a CCC directory, the Agent can use them immediately — no code to write.
+You get **9 tools** after installation, organized by design purpose into four groups.
 
-### msm_list — Discover available operations
+### Safe execution channel
 
-What MSMs are registered in the current CCC? What are their parameters? `msm_list` outputs the full list with descriptions and flag schemas.
+Raw bash is unlogged, unaudited, and prone to path escape. The MSM (Mech & Semi-Mech) framework turns common operations into registered, safe executable units.
 
-### msm_exec — Execute operations safely
+- **`msm_list`** — Discover registered MSMs in the current CCC and their parameters.
+- **`msm_exec`** — Execute MSMs safely. Path escape is auto-blocked. **Preferred over bash.**
+- **`msm_admin`** — Register/deregister MSMs. `register` auto git-commits. `guide` shows the dev handbook. `check` runs quality checks.
 
-Replaces bare bash. Registered MSMs execute through this tool with automatic path-escape blocking and call logging. **Preferred over raw bash.**
+### Everyday operations within bounds
 
-### msm_admin — Register and manage operations
+A CCC has a clear filesystem boundary. Every file and git operation stays inside it.
 
-| Subcommand | What it does |
-|------------|--------------|
-| `register` | Register a new MSM (name + path + description + category) |
-| `deregister` | Remove an MSM |
-| `guide` | View the MSM development handbook |
-| `check` | Run quality checks on MSMs (DC-M1~M4) |
+- **`cc-fs`** — 15 file operations (`root` / `resolve` / `exists` / `list` / `tree` / `relative` / `mkdir` / `rm` / `mv` / `cp` / `touch` / `append` / `reveal` / `info` / `find`), all with auto path-escape blocking.
+- **`cc-git`** — High-frequency git operations: `status` / `commit` / `push` / `log` / `pull`. Non-fast-forward pushes output suggestions; conflict resolution goes through bash.
+- **`cc-ck`** — No parameters. Three-principle health check: .serenity present? Git-managed? Config complete?
 
-Registration changes are auto git-committed.
+### Cross-conversation working memory
 
-### cc-fs — Safe file operations
+Every new conversation starts from zero. The session system captures decisions, progress, and open questions as traceable records.
 
-12 file operations confined to the CCC root: `root`, `resolve`, `exists`, `list`, `tree`, `relative`, `mkdir`, `rm`, `mv`, `cp`, `touch`, `append`. Path escape is auto-blocked.
+- **`session`** — `create` / `use` / `close` / `list` / `show` / `summary` / `archive` / `health` / `qa`. The Agent auto-creates sessions, auto-records decisions, and recovers context after compression or restart.
 
-### cc-git — High-frequency Git operations
+### Thinking quality frameworks
 
-5 subcommands: `status`, `commit`, `push`, `log`, `pull`. Rejected pushes output actionable suggestions. Conflict resolution goes through bash.
+These two tools don't manipulate files — they improve the quality of Agent thinking itself.
 
-### session — Full session lifecycle
-
-9 subcommands:
-
-| Subcommand | What it does |
-|------------|--------------|
-| `list` | List all sessions with status summaries |
-| `show` | View session details |
-| `create` | Create a new session (auto-generates SESSION.md) |
-| `use` | Activate a session as current context |
-| `close` | Close a session |
-| `health` | Check for stale/stalled/drift/ghost sessions |
-| `qa` | Fact-check — verifies SESSION.md claims against reality |
-| `archive` | Archive completed old sessions |
-| `summary` | Dashboard: counts + recent activity + warnings |
-
-Before each multi-step work task, the Agent auto-creates a session. Decisions are recorded automatically — no reliance on your memory.
-
-### cc-ck — CCC health check
-
-No parameters. Validates three principles: P1 (does `.serenity` exist?), P2 (Git-managed?), P3 (opencode.json present?). Returns a pass/fail report.
-
-### eap — Cognitive quality framework
-
-No parameters. Progressive disclosure of EAP theory — defines cognitive quality metrics (E↑ / R↓ / S↑), guides the Agent's thinking structure and output quality.
-
-### neat — Design collaboration protocol
-
-No parameters. Small-step alignment, explicit decisions, document-driven collaboration methodology.
+- **`eap`** — Cognitive quality framework. Defines E↑ / R↓ / S↑ standards that guide every output's external reconstructability.
+- **`neat`** — Design collaboration protocol. Small-step alignment, explicit decisions, document-driven — every step of a complex design is traceable.
 
 ---
 

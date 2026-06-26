@@ -27,6 +27,8 @@ import { getState, ensureReady } from '../state.js';
 import { isHookEnabled, type HookConfig } from './util.js';
 import { log } from '../util/log.js';
 import { isBashDisabled } from '../bash-toggle.js';
+import { loadMechRegistryFrom } from '../msm.js';
+import { callMsmExec } from '../util/msm-call.js';
 
 type ToolArgs = Record<string, unknown>;
 
@@ -94,6 +96,53 @@ function classifyPath(value: string, cwdRoot: string): 'inside' | 'outside' | 's
   return 'inside';
 }
 
+/**
+ * WIP: Write Interceptor Protocol — call CCC's write-interceptor MSM
+ *
+ * After RR5 path validation passes, give CCC a chance to block/reject
+ * based on content-level or structural rules (not path boundaries).
+ *
+ * Exit code contract:
+ *   0 = ALLOW (write proceeds)
+ *   1 = BLOCK (write rejected; stderr = reason)
+ *   other/throw = ALLOW (fail-safe: CCC errors don't block writes)
+ */
+async function callWriteInterceptor(tool: 'write' | 'edit', paths: string[]): Promise<void> {
+  const state = getState();
+  const entries = loadMechRegistryFrom(state.cwdRoot, state.cccName);
+  const hasInterceptor = entries.some(e => e.name === 'write-interceptor');
+  if (!hasInterceptor) return;
+
+  try {
+    const result = await callMsmExec({
+      msm_name: 'write-interceptor',
+      businessArgs: [`--tool=${tool}`, `--paths=${paths.join(',')}`],
+    });
+
+    if (result.exitCode === 1) {
+      const reason = result.stderr.trim() || `CCC denied ${tool} to these paths`;
+      throw new Error(
+        `[serenity] write-interceptor blocked ${tool} to "${paths.join(', ')}": ${reason}`,
+      );
+    }
+
+    if (result.exitCode !== 0) {
+      log.warn('write-interceptor',
+        `write-interceptor exited with code ${result.exitCode} (allowing write)`,
+        { tool, paths, exitCode: result.exitCode, stderr: result.stderr },
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('[serenity] write-interceptor blocked ')) {
+      throw err;
+    }
+    log.warn('write-interceptor',
+      `write-interceptor call failed (allowing write): ${err}`,
+      { tool, paths },
+    );
+  }
+}
+
 const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (input, _output) => {
   // v0.1: 阻塞等待 Phase 2 完成（失败时：放行所有 = plugin 不工作）
   try {
@@ -121,6 +170,11 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
         );
       }
     }
+  }
+
+  // WIP: Write Interceptor Protocol — CCC can block writes after RR5 passes
+  if (input.tool === 'write' || input.tool === 'edit') {
+    await callWriteInterceptor(input.tool, paths);
   }
 
   // webfetch A2 决定不动（保持 v0.1-3 行为）

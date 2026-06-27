@@ -14,7 +14,7 @@
  */
 
 import { existsSync, writeFileSync, readFileSync, unlinkSync, mkdirSync, openSync } from "node:fs";
-import { spawn, execSync } from "node:child_process";
+import { spawn, execSync, execFileSync } from "node:child_process";
 
 const STOP_TOKEN = process.argv[2];
 const PORT = parseInt(process.argv[3] ?? "0", 10);
@@ -128,7 +128,7 @@ function api<T>(path: string, body?: unknown, timeoutMs = 300_000, retries = 3):
   const url = `${BASE_URL}${path}`;
   const method = body ? "POST" : "GET";
   const args = [
-    "curl", "-s", "-f",
+    "-s", "-f",
     "-X", method,
     "--max-time", String(maxTime),
     "--connect-timeout", "30",
@@ -140,7 +140,7 @@ function api<T>(path: string, body?: unknown, timeoutMs = 300_000, retries = 3):
   let lastErr: Error | null = null;
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const stdout = execSync(args.join(" "), {
+      const stdout = execFileSync("curl", args, {
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
         maxBuffer: 10 * 1024 * 1024,
@@ -154,7 +154,6 @@ function api<T>(path: string, body?: unknown, timeoutMs = 300_000, retries = 3):
       lastErr = err instanceof Error ? err : new Error(String(err));
       if (attempt < retries - 1) {
         log(`curl 重试 (${attempt + 1}/${retries - 1}): ${lastErr.message}`);
-        // 同步 sleep — runner 单线程，不阻塞其他操作
         execSync("sleep 1", { stdio: "ignore" });
       }
     }

@@ -287,7 +287,7 @@ ${PROGRESS_FILE ? `- 每轮结束时更新进度文件: ${PROGRESS_FILE} (记录
 // ── CLI 守卫 ──
 
 if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file://").href) {
-  main().catch((err) => {
+  main().then(() => process.exit(0)).catch((err) => {
     const msg = err instanceof LoopError ? `${err.code}: ${err.message}` : String(err);
     log(`错误: ${msg}`);
     process.exit(1);

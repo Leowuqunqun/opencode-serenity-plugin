@@ -17,7 +17,6 @@
 import { randomBytes } from "node:crypto";
 import { spawn, execSync } from "node:child_process";
 import { readFileSync, existsSync, unlinkSync } from "node:fs";
-import { createInterface } from "node:readline";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getState } from "../state.js";
@@ -85,78 +84,23 @@ export const loopTool: ToolDefinition = tool({
     const runnerPath = resolve(__dirname, "loop-runner.js");
     const cwdRoot = getState().cwdRoot;
 
-    activePorts.add(port);
-
+    // background spawn — tool returns immediately, runner drives itself
     const child = spawn(findNodeBin(), [runnerPath, stopToken, String(port), label, cwdRoot], {
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ["pipe", "ignore", "ignore"],
+      detached: true,
     });
+    child.unref();
 
-    // 收集 stderr
-    const stderrChunks: string[] = [];
-    child.stderr!.on("data", (chunk: Buffer) => {
-      stderrChunks.push(chunk.toString());
-    });
-
-    // 取消时 kill runner → runner exit handler → kill serve
-    ctx.abort?.addEventListener("abort", () => {
-      try { child.kill("SIGTERM"); } catch {}
-    });
-
-    // 通过 stdin 传递 prompt
     child.stdin!.write(prompt);
     child.stdin!.end();
 
-    // 用 line 事件收集 stdout
-    const lines: string[] = [];
-    const rl = createInterface({ input: child.stdout! });
-    rl.on("line", (line: string) => {
-      if (!line.trim()) return;
-      lines.push(line);
+    activePorts.add(port);
 
-      try {
-        const data = JSON.parse(line);
-        const summary = data.response
-          ? data.response.slice(0, 80) + (data.response.length > 80 ? "..." : "")
-          : "(no response)";
+    ctx.metadata({ title: `loop \"${label}\" 已启动` });
 
-        ctx.metadata({
-          title: `loop 第 ${data.round} 轮: ${summary}`,
-          metadata: {
-            round: data.round,
-            response: data.response,
-            finishReason: data.finishReason,
-          },
-        });
-
-        if (data.done) {
-          (child as any)._loopResult = data;
-        }
-      } catch {
-        // 非 JSON 行跳过
-      }
-    });
-
-    // 等待子进程退出
-    const exitCode = await new Promise<number>((resolve) => child.on("close", resolve));
-    const result = (child as any)._loopResult;
-
-    activePorts.delete(port);
-
-    if (result && result.done) {
-      return JSON.stringify({
-        rounds: result.round,
-        finalResponse: result.response,
-        finishReason: result.finishReason ?? "stop",
-      }, null, 2);
-    }
-
-    const allOutput = lines.join("\n");
-    const stderr = stderrChunks.join("").trim();
-    throw new Error(
-      `loop: 外部进程意外退出 (exit=${exitCode})\n` +
-      (stderr ? `[stderr]\n${stderr}\n\n` : "") +
-      `[stdout]\n${allOutput.slice(0, 2000)}`,
-    );
+    return `loop \"${label}\" 已在后台启动（专用 serve 端口 ${port}）。` +
+      `\n跟踪进度: AGENT_SESSIONS/loop-${label}.md` +
+      `\n\nrunner 独立进程，不受 opencode tool timeout 限制。`;
   },
 });
 

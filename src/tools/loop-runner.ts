@@ -5,7 +5,7 @@
  * 由 loop tool 通过 child_process.spawn 启动，在独立进程中
  * 通过 opencode serve headless API 驱动 LLM 循环执行。
  *
- * 自动管理 opencode serve 生命周期：未运行时自动启动。
+ * 始终为新循环启动专用 opencode serve，结束时自动清理。
  *
  * 用法: loop-runner.ts <stop-token> <port>
  *   stdin: 第 1 轮的 prompt 文本
@@ -17,7 +17,7 @@ import { existsSync, writeFileSync, readFileSync, unlinkSync, mkdirSync, openSyn
 import { spawn, execSync } from "node:child_process";
 
 const STOP_TOKEN = process.argv[2];
-const PORT = parseInt(process.argv[3] ?? "4096", 10);
+const PORT = parseInt(process.argv[3] ?? "0", 10);
 
 if (!STOP_TOKEN || !PORT) {
   process.stderr.write("usage: loop-runner.ts <stop-token> <port>\n");
@@ -26,6 +26,7 @@ if (!STOP_TOKEN || !PORT) {
 
 const BASE_URL = `http://localhost:${PORT}`;
 const PID_DIR = "/tmp/serenity-bg-task";
+let serveProc: ReturnType<typeof spawn> | null = null;
 
 // ── 错误类 ──
 
@@ -41,6 +42,21 @@ class LoopError extends Error {
 function log(msg: string): void {
   process.stderr.write(`[loop] ${msg}\n`);
 }
+
+// ── 清理 ──
+
+function cleanupServe(): void {
+  if (serveProc && serveProc.pid) {
+    try { serveProc.kill("SIGTERM"); } catch {}
+    serveProc = null;
+  }
+  try { unlinkSync(pidFile(PORT)); } catch {}
+}
+
+// 确保 runner 退出时 serve 也被清理
+process.on("exit", cleanupServe);
+process.on("SIGTERM", () => process.exit(0));
+process.on("SIGINT", () => process.exit(0));
 
 // ── Server 生命周期 ──
 
@@ -69,19 +85,6 @@ function logFile(port: number): string {
   return `${PID_DIR}/server-${port}.log`;
 }
 
-function isServerRunning(port: number): boolean {
-  const pf = pidFile(port);
-  if (!existsSync(pf)) return false;
-  try {
-    const pid = parseInt(readFileSync(pf, "utf-8").trim(), 10);
-    execSync(`kill -0 ${pid}`, { stdio: "ignore" });
-    return true;
-  } catch {
-    try { unlinkSync(pf); } catch {}
-    return false;
-  }
-}
-
 function startServer(port: number): void {
   if (!existsSync(PID_DIR)) mkdirSync(PID_DIR, { recursive: true });
   const bin = findOpenCodeBin();
@@ -89,12 +92,10 @@ function startServer(port: number): void {
   const fd = openSync(lf, "a");
 
   log(`启动 opencode serve (${bin}) --port ${port}`);
-  const proc = spawn(bin, ["serve", "--port", String(port), "--hostname", "0.0.0.0"], {
+  serveProc = spawn(bin, ["serve", "--port", String(port), "--hostname", "0.0.0.0"], {
     stdio: ["ignore", fd, fd],
-    detached: true,
   });
-  proc.unref();
-  writeFileSync(pidFile(port), String(proc.pid ?? ""));
+  writeFileSync(pidFile(port), String(serveProc.pid ?? ""));
 }
 
 async function waitForServer(timeout = 30): Promise<void> {
@@ -145,16 +146,21 @@ async function api<T>(path: string, body?: unknown, timeoutMs = 300_000): Promis
 // ── 主流程 ──
 
 async function main(): Promise<void> {
-  // 1. 确保 server 运行
-  if (!isServerRunning(PORT)) {
-    log(`port ${PORT} 无运行中的 server`);
-    startServer(PORT);
-    await waitForServer(30);
-  } else {
-    log(`复用 port ${PORT} 的 server`);
+  // 1. 清理旧孤儿 serve
+  const pf = pidFile(PORT);
+  if (existsSync(pf)) {
+    try {
+      const oldPid = parseInt(readFileSync(pf, "utf-8").trim(), 10);
+      try { execSync(`kill -0 ${oldPid}`, { stdio: "ignore" }); execSync(`kill ${oldPid}`, { stdio: "ignore" }); } catch {}
+    } catch {}
+    try { unlinkSync(pf); } catch {}
   }
 
-  // 2. 收集 stdin (prompt)
+  // 2. 启动专用 serve
+  startServer(PORT);
+  await waitForServer(30);
+
+  // 3. 收集 stdin (prompt)
   const stdin = await new Promise<string>((resolve) => {
     let data = "";
     process.stdin.setEncoding("utf8");
@@ -164,13 +170,13 @@ async function main(): Promise<void> {
   const prompt = stdin.trim();
   if (!prompt) throw new LoopError("NO_PROMPT", "stdin 未收到 prompt");
 
-  // 3. 创建 session
+  // 4. 创建 session
   log("创建 headless session");
   const session = await api<{ id: string }>("/session", { title: "loop-task" });
   const sessionId = session.id;
   log(`session: ${sessionId}`);
 
-  // 4. 构建第 1 轮消息
+  // 5. 构建第 1 轮消息
   const round1Msg = `${prompt}
 
 ---
@@ -181,7 +187,7 @@ async function main(): Promise<void> {
 - 保持简洁，每轮只输出本轮做了什么
 `;
 
-  // 5. 循环提交消息
+  // 6. 循环提交消息
   let round = 0;
 
   while (true) {

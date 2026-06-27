@@ -53,17 +53,23 @@ export const loopTool: ToolDefinition = tool({
       .string()
       .optional()
       .describe("使用的 agent 类型名称 (默认 default)"),
+    model: z
+      .string()
+      .optional()
+      .describe("指定 LLM 模型 (例如 'deepseek-v4'，不指定则用配置默认)"),
   },
   execute: async (input, ctx) => {
     const prompt = input.prompt;
     const stopToken = randomBytes(16).toString("hex");
     const port = randomPort();
     const runnerPath = resolve(__dirname, "loop-runner.js");
+    const model = input.model ?? "";
+    const agent = input.agent ?? "default";
 
     activePorts.add(port);
 
     // 通过 child_process 启动外部进程
-    const child = spawn(findNodeBin(), [runnerPath, stopToken, String(port)], {
+    const child = spawn(findNodeBin(), [runnerPath, stopToken, String(port), model, agent], {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -91,15 +97,22 @@ export const loopTool: ToolDefinition = tool({
 
       try {
         const data = JSON.parse(line);
-        if (data.done) {
-          ctx.metadata({ title: `loop 完成 (${data.round} 轮)` });
-          (child as any)._loopResult = data;
-        }
-
         const summary = data.response
           ? data.response.slice(0, 80) + (data.response.length > 80 ? "..." : "")
           : "(no response)";
-        ctx.metadata({ title: `loop 第 ${data.round} 轮: ${summary}` });
+
+        ctx.metadata({
+          title: `loop 第 ${data.round} 轮: ${summary}`,
+          metadata: {
+            round: data.round,
+            response: data.response,
+            finishReason: data.finishReason,
+          },
+        });
+
+        if (data.done) {
+          (child as any)._loopResult = data;
+        }
       } catch {
         // 非 JSON 行跳过
       }

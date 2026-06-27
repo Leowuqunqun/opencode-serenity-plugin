@@ -18,6 +18,8 @@ import { spawn, execSync } from "node:child_process";
 
 const STOP_TOKEN = process.argv[2];
 const PORT = parseInt(process.argv[3] ?? "0", 10);
+const MODEL = process.argv[4]?.trim() || "";
+const AGENT = process.argv[5]?.trim() || "default";
 
 if (!STOP_TOKEN || !PORT) {
   process.stderr.write("usage: loop-runner.ts <stop-token> <port>\n");
@@ -172,7 +174,10 @@ async function main(): Promise<void> {
 
   // 4. 创建 session
   log("创建 headless session");
-  const session = await api<{ id: string }>("/session", { title: "loop-task" });
+  const sessionBody: Record<string, unknown> = { title: "loop-task" };
+  if (MODEL) sessionBody.model = MODEL;
+  if (AGENT) sessionBody.agent = AGENT;
+  const session = await api<{ id: string }>("/session", sessionBody);
   const sessionId = session.id;
   log(`session: ${sessionId}`);
 
@@ -196,9 +201,12 @@ async function main(): Promise<void> {
     const maxWait = round === 1 ? 600_000 : 300_000;
 
     log(`第 ${round} 轮，提交消息 (timeout=${(maxWait / 1000).toFixed(0)}s)`);
+    const msgBody: Record<string, unknown> = { parts: [{ type: "text", text }] };
+    if (MODEL) msgBody.model = MODEL;
+    if (AGENT) msgBody.agent = AGENT;
     const result = await api<{ info: Record<string, unknown>; parts: Array<{ type: string; text?: string }> }>(
       `/session/${sessionId}/message`,
-      { parts: [{ type: "text", text }] },
+      msgBody,
       maxWait,
     );
 

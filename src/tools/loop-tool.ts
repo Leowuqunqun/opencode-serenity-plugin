@@ -50,29 +50,24 @@ export const loopTool: ToolDefinition = tool({
     child.stdin!.write(prompt);
     child.stdin!.end();
 
-    // 收集 stdout 行
+    // 用 line 事件收集 stdout（比 for await...of 更可靠，避免丢失最后一行）
     const lines: string[] = [];
     const rl = createInterface({ input: child.stdout! });
-
-    for await (const line of rl) {
-      if (!line.trim()) continue;
+    rl.on("line", (line: string) => {
+      if (!line.trim()) return;
       lines.push(line);
 
       try {
         const data = JSON.parse(line);
         if (data.done) {
-          // 最终结果
           ctx.metadata({
             title: `loop 完成 (${data.round} 轮)`,
           });
-          return JSON.stringify({
-            rounds: data.round,
-            finalResponse: data.response,
-            finishReason: data.finishReason ?? "stop",
-          }, null, 2);
+          // 找到 done 信号后不能直接 return——需要等进程退出再处理
+          // 先存结果，让 close 事件触发时返回
+          (child as any)._loopResult = data;
         }
 
-        // 进度更新
         const summary = data.response
           ? data.response.slice(0, 80) + (data.response.length > 80 ? "..." : "")
           : "(no response)";
@@ -82,10 +77,21 @@ export const loopTool: ToolDefinition = tool({
       } catch {
         // 非 JSON 行（如日志）跳过
       }
+    });
+
+    // 等待子进程退出
+    const exitCode = await new Promise<number>((resolve) => child.on("close", resolve));
+    const result = (child as any)._loopResult;
+
+    if (result && result.done) {
+      return JSON.stringify({
+        rounds: result.round,
+        finalResponse: result.response,
+        finishReason: result.finishReason ?? "stop",
+      }, null, 2);
     }
 
-    // 进程意外结束（没有 done 信号）
-    const exitCode = child.exitCode ?? (await new Promise<number>((resolve) => child.on("close", resolve)));
+    // 没有 done 信号
     const allOutput = lines.join("\n");
     throw new Error(
       `loop: 外部进程意外退出 (exit=${exitCode})\n${allOutput.slice(0, 2000)}`,

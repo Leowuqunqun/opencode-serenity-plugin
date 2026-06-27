@@ -69,10 +69,10 @@ function allowMsm(): string {
   ].join('\n');
 }
 
-function blockMsm(stderrMsg: string): string {
+function blockMsm(stdoutMsg: string): string {
   return [
     '#!/usr/bin/env npx tsx',
-    `console.error("${stderrMsg}");`,
+    `console.log("${stdoutMsg}");`,
     'process.exit(1);',
   ].join('\n');
 }
@@ -200,7 +200,7 @@ describe('WIP: write-interceptor — 场景 3: 注册且 exit 1（拦截）', ()
     ).rejects.toThrow(BLOCK_REASON);
   });
 
-  it('拒绝信息的格式包含 [serenity] write-interceptor blocked', async () => {
+  it('拒绝时 error message 就是 MSM stdout 的内容（ACC 不加前缀）', async () => {
     const { createPermissionGuards } = await import('../src/hooks/permission-guards.js');
     const hooks = createPermissionGuards();
     const hook = hooks['tool.execute.before']!;
@@ -208,7 +208,11 @@ describe('WIP: write-interceptor — 场景 3: 注册且 exit 1（拦截）', ()
     writeFileSync(insideFile, 'data');
     await expect(
       hook({ tool: 'write', sessionID: 's', callID: 'c' } as any, { args: { filePath: insideFile } } as any),
-    ).rejects.toThrow(/serenity.*write-interceptor blocked/);
+    ).rejects.toThrow(BLOCK_REASON);
+    // 确认没有 ACC 前缀
+    await expect(
+      hook({ tool: 'write', sessionID: 's', callID: 'c' } as any, { args: { filePath: insideFile } } as any),
+    ).rejects.not.toThrow(/serenity/);
   });
 });
 

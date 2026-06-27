@@ -28,7 +28,7 @@ import { isHookEnabled, type HookConfig } from './util.js';
 import { log } from '../util/log.js';
 import { isBashDisabled } from '../bash-toggle.js';
 import { loadMechRegistryFrom } from '../msm.js';
-import { callMsmExec } from '../util/msm-call.js';
+import { callMsmExec, type MsmCallResult } from '../util/msm-call.js';
 
 type ToolArgs = Record<string, unknown>;
 
@@ -113,33 +113,29 @@ async function callWriteInterceptor(tool: 'write' | 'edit', paths: string[]): Pr
   const hasInterceptor = entries.some(e => e.name === 'write-interceptor');
   if (!hasInterceptor) return;
 
+  let result: MsmCallResult;
   try {
-    const result = await callMsmExec({
+    result = await callMsmExec({
       msm_name: 'write-interceptor',
       businessArgs: [`--tool=${tool}`, `--paths=${paths.join(',')}`],
     });
-
-    if (result.exitCode === 1) {
-      const reason = result.stderr.trim() || `CCC denied ${tool} to these paths`;
-      throw new Error(
-        `[serenity] write-interceptor blocked ${tool} to "${paths.join(', ')}": ${reason} ` +
-        `(guide: docs/write-interceptor-protocol-design.md)`,
-      );
-    }
-
-    if (result.exitCode !== 0) {
-      log.warn('write-interceptor',
-        `write-interceptor exited with code ${result.exitCode} (allowing write)`,
-        { tool, paths, exitCode: result.exitCode, stderr: result.stderr },
-      );
-    }
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith('[serenity] write-interceptor blocked ')) {
-      throw err;
-    }
     log.warn('write-interceptor',
       `write-interceptor call failed (allowing write): ${err}`,
       { tool, paths },
+    );
+    return;
+  }
+
+  if (result.exitCode === 1) {
+    const message = result.stdout.trim() || result.stderr.trim() || `${tool} blocked by CCC`;
+    throw new Error(message);
+  }
+
+  if (result.exitCode !== 0) {
+    log.warn('write-interceptor',
+      `write-interceptor exited with code ${result.exitCode} (allowing write)`,
+      { tool, paths, exitCode: result.exitCode, stderr: result.stderr },
     );
   }
 }

@@ -5,24 +5,21 @@
  * 由 ACC 在 tool.execute.before 中调用（write/edit 工具），
  * 在 RR5 路径安全检查通过后执行自定义校验逻辑。
  *
+ * 完整 WIP 开发指南：msm_admin write-interceptor-guide
+ *
  * 类别：Mech（无 LLM 决策，纯确定性校验）
  *
  * 退出码契约：
  *   0 — ALLOW（写入继续）
- *   1 — BLOCK（写入被拒绝，stderr 为原因）
+ *   1 — BLOCK（写入被拒绝；stdout 为返回给 LLM 的错误信息，ACC 不加前缀）
  *
- * 用法（被 ACC 调用，非手动调用）：
- *   npx tsx write-interceptor.ts --tool=write --paths=/abs/path1,/abs/path2
- *   npx tsx write-interceptor.ts --tool=edit --paths=/abs/path1
+ * 被 ACC 调用时参数：
+ *   --tool=write|edit
+ *   --paths=/abs/path1,/abs/path2
  *
- * 输出：
- *   - exit 0：无输出（写入继续）
- *   - exit 1：stderr 输出拒绝原因
- *
- * 完整指南见 docs/write-interceptor-protocol-design.md（CCC Developer Guide 章节）。
  * 自定义步骤：
- *   1. 在 checkWrite() 中实现拦截逻辑
- *   2. console.error("reason") + process.exit(1) = 拒绝
+ *   1. 修改 checkWrite() 实现拦截逻辑
+ *   2. console.log("返回给LLM的信息") + process.exit(1) = 拒绝
  *   3. 默认 process.exit(0) = 全部允许
  */
 

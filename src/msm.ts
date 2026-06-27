@@ -420,11 +420,12 @@ export const msmAdminTool: ToolDefinition = tool({
     '**v1.17**: replaces the old msm_register + msm_deregister tools with a single tool + action enum. ' +
     'Auto-commits the registry change as "chore(msm): register <name>" or "chore(msm): deregister <name>". ' +
     'Use action=guide to get the MSM development handbook (script conventions, testing, registration). ' +
-    'Use action=check to run DC-M1~M4 quality checks on all MSM scripts.',
+    'Use action=check to run DC-M1~M4 quality checks on all MSM scripts. ' +
+    'Use action=write-interceptor-guide to get the WIP (Write Interceptor Protocol) guide.',
   args: {
     action: z
-      .enum(['register', 'deregister', 'guide', 'check'])
-      .describe('operation: register (add MSM), deregister (remove), guide (show development handbook), check (run DC-M1~M4 quality checks)'),
+      .enum(['register', 'deregister', 'guide', 'check', 'write-interceptor-guide'])
+      .describe('operation: register (add MSM), deregister (remove), guide (show development handbook), check (run DC-M1~M4 quality checks), write-interceptor-guide (get WIP guide)'),
     name: z
       .string()
       .optional()
@@ -489,6 +490,88 @@ export const msmAdminTool: ToolDefinition = tool({
     }
     if (input.action === 'check') {
       return checkMsmInner();
+    }
+    if (input.action === 'write-interceptor-guide') {
+      return [
+        '═══ WIP: Write Interceptor Protocol (v1) — 开发指南 ═══',
+        '',
+        'WIP 让 CCC 可以在 tool.execute.before 中拦截 write/edit 操作，',
+        '在 RR5 路径安全检查之后、实际写入之前执行自定义校验。',
+        '',
+        '── 协议 ──',
+        '',
+        'ACC 在 tool.execute.before 中自动检测 CCC 是否注册了 write-interceptor MSM。',
+        '如果注册了，ACC 在 RR5 检查通过后调用：',
+        '',
+        '  callMsmExec write-interceptor --tool=<write|edit> --paths=<abs-path1,abs-path2,...>',
+        '',
+        '退出码契约：',
+        '  0  = ALLOW  (写入继续)',
+        '  1  = BLOCK  (写入被拒绝；stdout 为错误信息返回给 LLM)',
+        '  other/throw = ALLOW (fail-safe: 写入放行, 日志记录警告)',
+        '',
+        '── 注册步骤 ──',
+        '',
+        '1. 在 CCC 的 skills 目录下创建脚本：',
+        '     .opencode/skills/<ccc-name>/scripts/write-interceptor.ts',
+        '',
+        '2. 编写拦截逻辑（参考下方的完整模板）',
+        '',
+        '3. 注册到 mech-registry.json：',
+        '     msm_admin register write-interceptor \\',
+        '       --path .opencode/skills/<ccc-name>/scripts/write-interceptor.ts \\',
+        '       --category mech \\',
+        '       --description "WIP: intercept write/edit for content validation" \\',
+        '       --flags \'[',
+        '         {"name":"tool","type":"string","description":"write|edit","required":true},',
+        '         {"name":"paths","type":"string","description":"comma-separated absolute paths","required":true}',
+        '       ]\'',
+        '',
+        '── 完整模板 ──',
+        '',
+        '将以下内容保存到 write-interceptor.ts，然后修改 checkWrite() 实现你的拦截逻辑：',
+        '',
+        '  #!/usr/bin/env npx tsx',
+        '  /** write-interceptor.ts — 按 exit code 决定 allow/block */',
+        '  import { existsSync, readFileSync } from "node:fs";',
+        '',
+        '  function getFlagValue(argv: string[], flag: string): string | null {',
+        '    for (let i = 0; i < argv.length; i++) {',
+        '      if (argv[i] === flag) return argv[i + 1] ?? null;',
+        '      if (argv[i]!.startsWith(flag + "=")) return argv[i]!.slice(flag.length + 1);',
+        '    }',
+        '    return null;',
+        '  }',
+        '',
+        '  function checkWrite(tool: string, paths: string[]): void {',
+        '    for (const p of paths) {',
+        '      // === 在这里实现你的拦截逻辑 ===',
+        '      // process.exit(0)                    = 允许',
+        '      // console.log("原因") + process.exit(1) = 拒绝',
+        '    }',
+        '    process.exit(0);',
+        '  }',
+        '',
+        '  function main(): void {',
+        '    const args = process.argv.slice(2);',
+        '    const tool = getFlagValue(args, "--tool");',
+        '    const pathsRaw = getFlagValue(args, "--paths");',
+        '    if (!tool || !pathsRaw) { console.error("missing --tool or --paths"); process.exit(1); }',
+        '    if (tool !== "write" && tool !== "edit") { console.error("invalid tool"); process.exit(1); }',
+        '    const paths = pathsRaw.split(",").map(s => s.trim()).filter(Boolean);',
+        '    if (paths.length === 0) { console.error("empty paths"); process.exit(1); }',
+        '    checkWrite(tool, paths);',
+        '  }',
+        '',
+        '  import.meta.url === new URL(process.argv[1], "file://").href && main();',
+        '',
+        '── 注意事项 ──',
+        '',
+        '- Block 时 stdout 的 trim() 结果就是 LLM 看到的错误信息，ACC 不加任何前缀',
+        '- 拦截器崩溃（throw）或 exit 1 以外的 code 不会阻断写入（fail-safe）',
+        '- 拦截器在每次 write/edit 前同步执行，应保持轻量',
+        '- WIP 不是 skill，LLM 不需要加载它 — 它在 tool.execute.before 中透明运行',
+      ].join('\n');
     }
     if (input.action === 'register') {
       if (!input.name || !input.path || !input.description || !input.category) {

@@ -25,6 +25,14 @@ import { z } from "zod";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+function findNodeBin(): string {
+  try {
+    return execSync("which node", { encoding: "utf-8" }).trim() || "node";
+  } catch {
+    return "node";
+  }
+}
+
 /** 当前活跃的 loop 端口列表（供 dispose 钩子清理） */
 export const activePorts = new Set<number>();
 
@@ -55,7 +63,7 @@ export const loopTool: ToolDefinition = tool({
     activePorts.add(port);
 
     // 通过 child_process 启动外部进程
-    const child = spawn(process.execPath, [runnerPath, stopToken, String(port)], {
+    const child = spawn(findNodeBin(), [runnerPath, stopToken, String(port)], {
       stdio: ["pipe", "pipe", "pipe"],
     });
 

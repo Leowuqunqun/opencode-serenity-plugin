@@ -140,7 +140,11 @@ async function api<T>(path: string, body?: unknown, timeoutMs = 300_000): Promis
   } catch (err) {
     if (err instanceof LoopError) throw err;
     const msg = err instanceof Error ? err.message : String(err);
-    throw new LoopError("HTTP_FAILED", `fetch failed: ${msg}`, { path });
+    const name = err instanceof Error ? err.name : "Error";
+    const stack = err instanceof Error ? (err.stack ?? "").split("\n").slice(0, 3).join("\n") : "";
+    log(`fetch 异常 — ${name}: ${msg}`);
+    if (stack) log(`  stack: ${stack}`);
+    throw new LoopError("HTTP_FAILED", `fetch failed: ${msg}`, { path, errorName: name, errorStack: stack });
   } finally {
     clearTimeout(timer);
   }

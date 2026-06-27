@@ -46,6 +46,12 @@ export const loopTool: ToolDefinition = tool({
       stdio: ["pipe", "pipe", "pipe"],
     });
 
+    // 收集 stderr（之前被管道吞了导致看不到错误）
+    const stderrChunks: string[] = [];
+    child.stderr!.on("data", (chunk: Buffer) => {
+      stderrChunks.push(chunk.toString());
+    });
+
     // 通过 stdin 传递 prompt
     child.stdin!.write(prompt);
     child.stdin!.end();
@@ -63,8 +69,6 @@ export const loopTool: ToolDefinition = tool({
           ctx.metadata({
             title: `loop 完成 (${data.round} 轮)`,
           });
-          // 找到 done 信号后不能直接 return——需要等进程退出再处理
-          // 先存结果，让 close 事件触发时返回
           (child as any)._loopResult = data;
         }
 
@@ -91,10 +95,13 @@ export const loopTool: ToolDefinition = tool({
       }, null, 2);
     }
 
-    // 没有 done 信号
+    // 没有 done 信号——收集 stderr 作为错误信息
     const allOutput = lines.join("\n");
+    const stderr = stderrChunks.join("").trim();
     throw new Error(
-      `loop: 外部进程意外退出 (exit=${exitCode})\n${allOutput.slice(0, 2000)}`,
+      `loop: 外部进程意外退出 (exit=${exitCode})\n` +
+      (stderr ? `[stderr]\n${stderr}\n\n` : "") +
+      `[stdout]\n${allOutput.slice(0, 2000)}`,
     );
   },
 });

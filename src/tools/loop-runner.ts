@@ -16,6 +16,15 @@
 import { existsSync, writeFileSync, readFileSync, unlinkSync, mkdirSync, openSync } from "node:fs";
 import { spawn, execSync } from "node:child_process";
 
+// @ts-ignore undici 是 Node.js 内置模块
+const { Agent, setGlobalDispatcher } = (await import("undici")) as any;
+// 禁掉 undici 内置 5 分钟 timeout — 只让我们的 AbortController 控制超时
+setGlobalDispatcher(new Agent({
+  headersTimeout: 0,
+  bodyTimeout: 0,
+  connectTimeout: 30_000,
+}));
+
 const STOP_TOKEN = process.argv[2];
 const PORT = parseInt(process.argv[3] ?? "0", 10);
 const LABEL = process.argv[4]?.trim() || "task";

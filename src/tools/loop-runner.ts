@@ -16,15 +16,6 @@
 import { existsSync, writeFileSync, readFileSync, unlinkSync, mkdirSync, openSync } from "node:fs";
 import { spawn, execSync } from "node:child_process";
 
-// @ts-ignore undici 是 Node.js 内置模块
-const { Agent, setGlobalDispatcher } = (await import("undici")) as any;
-// 禁掉 undici 内置 5 分钟 timeout — 只让我们的 AbortController 控制超时
-setGlobalDispatcher(new Agent({
-  headersTimeout: 0,
-  bodyTimeout: 0,
-  connectTimeout: 30_000,
-}));
-
 const STOP_TOKEN = process.argv[2];
 const PORT = parseInt(process.argv[3] ?? "0", 10);
 const LABEL = process.argv[4]?.trim() || "task";
@@ -115,13 +106,14 @@ async function waitForServer(timeout = 30): Promise<void> {
   const deadline = Date.now() + timeout * 1000;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${BASE_URL}/global/health`, { signal: AbortSignal.timeout(3_000) });
-      if (res.ok) {
-        const body = await res.json() as Record<string, unknown>;
-        if (body.healthy === true) {
-          log("server 就绪");
-          return;
-        }
+      const out = execSync(
+        `curl -s -f --max-time 3 --connect-timeout 2 "${BASE_URL}/global/health"`,
+        { encoding: "utf-8" },
+      );
+      const body = JSON.parse(out) as Record<string, unknown>;
+      if (body.healthy === true) {
+        log("server 就绪");
+        return;
       }
     } catch {}
     await new Promise(r => setTimeout(r, 500));
@@ -131,42 +123,46 @@ async function waitForServer(timeout = 30): Promise<void> {
 
 // ── HTTP 工具 ──
 
-async function api<T>(path: string, body?: unknown, timeoutMs = 300_000, retries = 3): Promise<T> {
+function api<T>(path: string, body?: unknown, timeoutMs = 300_000, retries = 3): T {
+  const maxTime = Math.ceil(timeoutMs / 1000);
+  const url = `${BASE_URL}${path}`;
+  const method = body ? "POST" : "GET";
+  const args = [
+    "curl", "-s", "-f",
+    "-X", method,
+    "--max-time", String(maxTime),
+    "--connect-timeout", "30",
+    "-H", "Content-Type: application/json",
+  ];
+  if (body) args.push("-d", JSON.stringify(body));
+  args.push(url);
+
   let lastErr: Error | null = null;
   for (let attempt = 0; attempt < retries; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(`${BASE_URL}${path}`, {
-        method: body ? "POST" : "GET",
-        headers: { "Content-Type": "application/json", "Connection": "close" },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
+      const stdout = execSync(args.join(" "), {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"],
+        maxBuffer: 10 * 1024 * 1024,
       });
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new LoopError("HTTP_ERROR", `HTTP ${res.status}: ${text}`, { path, status: res.status });
-      }
-      return await res.json() as T;
-    } catch (err) {
-      if (err instanceof LoopError) {
-        if (err.code === "HTTP_ERROR") throw err;
+      return JSON.parse(stdout) as T;
+    } catch (err: any) {
+      // curl -f 在 HTTP 4xx/5xx 时退出码 22 → 不重试
+      if (err.status === 22) {
+        throw new LoopError("HTTP_ERROR", `curl HTTP error: ${err.stderr?.toString()?.slice(0, 200) ?? err.message}`, { path, exitCode: 22 });
       }
       lastErr = err instanceof Error ? err : new Error(String(err));
       if (attempt < retries - 1) {
-        log(`fetch 重试 (${attempt + 1}/${retries - 1}): ${lastErr.message}`);
-        await new Promise(r => setTimeout(r, 1000));
+        log(`curl 重试 (${attempt + 1}/${retries - 1}): ${lastErr.message}`);
+        // 同步 sleep — runner 单线程，不阻塞其他操作
+        execSync("sleep 1", { stdio: "ignore" });
       }
-    } finally {
-      clearTimeout(timer);
     }
   }
-  const name = lastErr?.name ?? "Error";
+  const code = (lastErr as any)?.status ?? "unknown";
   const msg = lastErr?.message ?? "unknown";
-  const stack = lastErr?.stack?.split("\n").slice(0, 3).join("\n") ?? "";
-  log(`fetch 失败 (${retries} 次重试) — ${name}: ${msg}`);
-  if (stack) log(`  stack: ${stack}`);
-  throw new LoopError("HTTP_FAILED", `fetch failed after ${retries} retries: ${msg}`, { path, errorName: name });
+  log(`curl 失败 (${retries} 次重试): exit=${code} ${msg}`);
+  throw new LoopError("HTTP_FAILED", `curl failed after ${retries} retries: exit=${code} ${msg}`, { path });
 }
 
 // ── 主流程 ──

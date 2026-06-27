@@ -130,7 +130,7 @@ async function api<T>(path: string, body?: unknown, timeoutMs = 300_000, retries
     try {
       const res = await fetch(`${BASE_URL}${path}`, {
         method: body ? "POST" : "GET",
-        headers: body ? { "Content-Type": "application/json" } : undefined,
+        headers: { "Content-Type": "application/json", "Connection": "close" },
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
@@ -141,7 +141,6 @@ async function api<T>(path: string, body?: unknown, timeoutMs = 300_000, retries
       return await res.json() as T;
     } catch (err) {
       if (err instanceof LoopError) {
-        // HTTP_ERROR is not retriable
         if (err.code === "HTTP_ERROR") throw err;
       }
       lastErr = err instanceof Error ? err : new Error(String(err));

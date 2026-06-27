@@ -89,6 +89,7 @@ export const loopTool: ToolDefinition = tool({
 
     const child = spawn(findNodeBin(), [runnerPath, stopToken, String(port), label, cwdRoot], {
       stdio: ["pipe", "pipe", "pipe"],
+      detached: true,  // 独立进程组，可以用 -pid 组杀
     });
 
     // 收集 stderr（错误日志）
@@ -98,6 +99,11 @@ export const loopTool: ToolDefinition = tool({
     // 写 prompt 到 stdin
     child.stdin!.write(prompt);
     child.stdin!.end();
+
+    // 杀进程组的辅助函数
+    const killGroup = () => {
+      try { process.kill(-child.pid!, "SIGTERM"); } catch {}
+    };
 
     // 逐行读 stdout，每行 JSON 实时更新 metadata
     const lines: string[] = [];
@@ -118,13 +124,13 @@ export const loopTool: ToolDefinition = tool({
       } catch { /* skip non-JSON */ }
     });
 
-    // 用户取消 → 杀 runner 进程
+    // 用户取消 → 进程组杀（runner + serve 一锅端）
     if (ctx.abort.aborted) {
-      child.kill("SIGTERM");
+      killGroup();
       activePorts.delete(port);
       throw new Error("loop 已被用户取消");
     }
-    const onAbort = () => { child.kill("SIGTERM"); };
+    const onAbort = () => { killGroup(); };
     ctx.abort.addEventListener("abort", onAbort);
 
     // 等待子进程退出

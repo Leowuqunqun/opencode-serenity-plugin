@@ -110,10 +110,9 @@ function checkWrite(tool: string, paths: string[]): void {
 
 | File | Change | Layer |
 |------|--------|-------|
-| `docs/write-interceptor-protocol-design.md` | **New** — this document | Design |
+| `docs/write-interceptor-protocol-design.md` | **New** — this document (source of truth + CCC developer guide) | Design |
 | `src/hooks/permission-guards.ts` | Add `callWriteInterceptor()` after RR5 check | ACC |
 | `src/templates/write-interceptor/scripts/write-interceptor.ts` | **New** — CCC template MSM | Template |
-| `src/templates/write-interceptor/SKILL.md` | **New** — template skill doc | Template |
 
 ### Backward Compatibility
 
@@ -130,3 +129,48 @@ function checkWrite(tool: string, paths: string[]): void {
 | Trigger | `session create` etc. | `write` / `edit` tools |
 | Hook discovery | `discoverCccHooks()` via flag description | MSM name check in registry |
 | Fail-safe | Catch → append warning to message | Catch → allow write silently |
+
+---
+
+## CCC Developer Guide
+
+> WIP 不是 skill — LLM 不需要加载它。它是 `tool.execute.before` 中透明运行的协议。
+> 本文档是你实现 write-interceptor MSM 的完整指南。
+
+### 注册
+
+在 CCC 中注册 write-interceptor MSM：
+
+```bash
+msm_admin register write-interceptor \
+  --path .opencode/skills/<ccc-name>/scripts/write-interceptor.ts \
+  --category mech \
+  --description "WIP: intercept write/edit for content validation (exit 0=allow, exit 1=block)" \
+  --flags '[
+    {"name":"tool","type":"string","description":"write|edit","required":true},
+    {"name":"paths","type":"string","description":"comma-separated absolute paths","required":true}
+  ]'
+```
+
+### 退出码
+
+| Code | 含义 | ACC 行为 |
+|------|------|----------|
+| `0` | ALLOW | 写入继续 |
+| `1` | BLOCK | 写入被拒绝，stderr 为原因 |
+| other | ERROR | Fail-safe：写入放行，日志记录警告 |
+
+### 实现步骤
+
+1. 从 `src/templates/write-interceptor/scripts/write-interceptor.ts` 复制模板
+2. 修改 `checkWrite()` 函数实现你的拦截逻辑
+3. `process.exit(0)` = 允许写入；`process.exit(1)` + `console.error("原因")` = 拒绝
+4. 注册到 mech-registry（见上方命令）
+5. 测试：执行 write/edit 操作，观察拦截器行为
+
+### 注意事项
+
+- **Fail-safe**: 拦截器崩溃（throw / exit 1 以外的 code）不会阻断写入
+- **性能**: 拦截器在每次 write/edit 前同步执行，应保持轻量
+- **透明**: LLM 无需感知拦截器存在 — 被阻断时会在 write/edit 的错误信息中看到原因
+- **调试**: 被阻断时错误消息格式为 `[serenity] write-interceptor blocked: <reason>`

@@ -122,7 +122,8 @@ async function callWriteInterceptor(tool: 'write' | 'edit', paths: string[]): Pr
     if (result.exitCode === 1) {
       const reason = result.stderr.trim() || `CCC denied ${tool} to these paths`;
       throw new Error(
-        `[serenity] write-interceptor blocked ${tool} to "${paths.join(', ')}": ${reason}`,
+        `[serenity] write-interceptor blocked ${tool} to "${paths.join(', ')}": ${reason} ` +
+        `(guide: docs/write-interceptor-protocol-design.md)`,
       );
     }
 

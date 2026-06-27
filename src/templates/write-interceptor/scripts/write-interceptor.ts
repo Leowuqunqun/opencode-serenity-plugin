@@ -19,10 +19,11 @@
  *   - exit 0：无输出（写入继续）
  *   - exit 1：stderr 输出拒绝原因
  *
- * 自定义指南：
- *   1. 在 checkWrite() 中实现你的拦截逻辑
+ * 完整指南见 docs/write-interceptor-protocol-design.md（CCC Developer Guide 章节）。
+ * 自定义步骤：
+ *   1. 在 checkWrite() 中实现拦截逻辑
  *   2. console.error("reason") + process.exit(1) = 拒绝
- *   3. 默认 behavior = 全部允许（process.exit(0)）
+ *   3. 默认 process.exit(0) = 全部允许
  */
 
 import { existsSync, readFileSync } from "node:fs";

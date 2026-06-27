@@ -32,6 +32,7 @@ import { cccStatusTool } from './ccc-status.js';
 import { eapTool } from './eap-tool.js';
 import { neatTool } from './neat-tool.js';
 import { ccGitTool } from './git/cc-git-tool.js';
+import { loopTool } from './tools/loop-tool.js';
 import { createPermissionGuards } from './hooks/permission-guards.js';
 import { createCompactingHooks } from './hooks/compacting.js';
 import { createShellEnv } from './hooks/shell-env.js';
@@ -64,6 +65,7 @@ const plugin: Plugin = async (input) => {
       eap: eapTool,        // v0.3: EAP 认知质量框架 (渐进式披露)
       neat: neatTool,      // v0.3: Neat 设计协作协议 (渐进式披露)
       cc_git: ccGitTool,   // v0.4: CCC git 管理工具 (status/commit/push/log/pull)
+      loop: loopTool,      // v0.5: Loop tool — 外部驱动可靠循环
     },
     ...createPermissionGuards(),
     ...createCompactingHooks(),

@@ -118,11 +118,24 @@ export const loopTool: ToolDefinition = tool({
       } catch { /* skip non-JSON */ }
     });
 
+    // 用户取消 → 杀 runner 进程
+    if (ctx.abort.aborted) {
+      child.kill("SIGTERM");
+      activePorts.delete(port);
+      throw new Error("loop 已被用户取消");
+    }
+    const onAbort = () => { child.kill("SIGTERM"); };
+    ctx.abort.addEventListener("abort", onAbort);
+
     // 等待子进程退出
     const exitCode = await new Promise<number>((resolve) => child.on("close", resolve));
+    ctx.abort.removeEventListener("abort", onAbort);
     activePorts.delete(port);
 
     const result = (child as any)._loopResult;
+    if (ctx.abort.aborted) {
+      throw new Error("loop 已被用户取消");
+    }
     if (result && result.done) {
       return JSON.stringify({
         rounds: result.round,

@@ -25,7 +25,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const loopTool: ToolDefinition = tool({
   description:
     "Loop tool — 让 headless agent 在当前 CCC root 下反复执行任务直到完成。" +
-    "通过 opencode serve API 驱动独立 session，不受当前对话影响。" +
+    "自动管理 opencode serve 生命周期，无需手动启动。" +
     "每轮进度会实时更新。适用于需要可靠循环的场景。",
   args: {
     prompt: z
@@ -35,20 +35,14 @@ export const loopTool: ToolDefinition = tool({
       .string()
       .optional()
       .describe("使用的 agent 类型名称 (默认 default)"),
-    port: z
-      .number()
-      .optional()
-      .default(4096)
-      .describe("opencode serve 端口 (默认 4096)"),
   },
   execute: async (input, ctx) => {
     const prompt = input.prompt;
-    const port = input.port ?? 4096;
     const stopToken = randomBytes(16).toString("hex");
     const runnerPath = resolve(__dirname, "loop-runner.js");
 
-    // 通过 child_process 启动外部进程
-    const child = spawn(process.execPath, [runnerPath, stopToken, String(port)], {
+    // 通过 child_process 启动外部进程（内部逻辑会自启动 opencode serve）
+    const child = spawn(process.execPath, [runnerPath, stopToken], {
       stdio: ["pipe", "pipe", "pipe"],
     });
 

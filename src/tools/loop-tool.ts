@@ -20,6 +20,7 @@ import { readFileSync, existsSync, unlinkSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getState } from "../state.js";
 import { tool, type ToolDefinition } from "@opencode-ai/plugin";
 import { z } from "zod";
 
@@ -46,39 +47,47 @@ export const loopTool: ToolDefinition = tool({
     "自动管理专用 opencode serve 生命周期，循环结束自动清理。" +
     "每轮进度会实时更新。" +
     "\n\n" +
-    "调用者必须完整给出：\n" +
-    "1. 任务内容 (what to do)\n" +
-    "2. 目标 (goal — 最终要达成什么)\n" +
-    "3. 完成判定方式 (done criteria — 如何判断任务已完成)\n" +
-    "4. 建议引用相关文件路径 (reference files)\n" +
+    "调用者必须在 prompt 中完整给出：\n" +
+    "1. 明确的目标 (goal) — 最终要达成什么\n" +
+    "2. 完成判定方式 (done criteria) — 如何判断已完成\n" +
+    "3. 建议引用的文件路径 (reference files)\n" +
+    "\n" +
+    "loop agent 会自动在 AGENT_SESSIONS/loop-{label}.md 中维护进度文件：\n" +
+    "- 开始前写入目标\n" +
+    "- 每轮结束时更新已完成步骤和剩余步骤\n" +
+    "- 方便派发者随时查看进度\n" +
     "\n" +
     "提示词长度必须大于 100 字符，不足会被拒绝。",
   args: {
     prompt: z
       .string()
       .min(101, "提示词长度必须大于 100 字符。请完整给出：任务内容、目标、完成判定方式、相关文件引用。")
-      .describe("任务描述。必须 >100 字符，需包含任务内容、目标、完成判定方式、相关文件路径引用。Agent 会循环执行直到满足完成条件。"),
+      .describe("任务描述。必须 >100 字符，需包含任务内容、目标、完成判定方式、相关文件路径引用。"),
+    label: z
+      .string()
+      .min(1)
+      .max(50)
+      .describe("任务标签，用作 session 标题和进度文件名 (如 'SQC-扫描', '字幕制作')"),
     agent: z
       .string()
       .optional()
-      .describe("使用的 agent 类型名称 (默认 default)"),
+      .describe("使用的 agent 类型名称 (headless API 暂不支持，保留参数)"),
     model: z
       .string()
       .optional()
-      .describe("指定 LLM 模型 (例如 'deepseek-v4'，不指定则用配置默认)"),
+      .describe("指定 LLM 模型 (headless API 暂不支持，使用当前 opencode.json 默认配置)"),
   },
   execute: async (input, ctx) => {
     const prompt = input.prompt;
+    const label = input.label;
     const stopToken = randomBytes(16).toString("hex");
     const port = randomPort();
     const runnerPath = resolve(__dirname, "loop-runner.js");
-    const model = input.model ?? "";
-    const agent = input.agent ?? "";
+    const cwdRoot = getState().cwdRoot;
 
     activePorts.add(port);
 
-    // 通过 child_process 启动外部进程
-    const child = spawn(findNodeBin(), [runnerPath, stopToken, String(port), model, agent], {
+    const child = spawn(findNodeBin(), [runnerPath, stopToken, String(port), label, cwdRoot], {
       stdio: ["pipe", "pipe", "pipe"],
     });
 

@@ -7,7 +7,7 @@
  *
  * 始终为新循环启动专用 opencode serve，结束时自动清理。
  *
- * 用法: loop-runner.ts <stop-token> <port> [model] [agent]
+ * 用法: loop-runner.ts <stop-token> <port> [label] [cwd-root]
  *   stdin: 第 1 轮的 prompt 文本
  *   stdout: 每轮 JSON 进度行 + 最终 JSON 结果
  *   stderr: 日志信息
@@ -18,16 +18,17 @@ import { spawn, execSync } from "node:child_process";
 
 const STOP_TOKEN = process.argv[2];
 const PORT = parseInt(process.argv[3] ?? "0", 10);
-const MODEL = process.argv[4]?.trim() || "";
-const AGENT = process.argv[5]?.trim() || "";
+const LABEL = process.argv[4]?.trim() || "task";
+const CWD_ROOT = process.argv[5] || "";
 
 if (!STOP_TOKEN || !PORT) {
-  process.stderr.write("usage: loop-runner.ts <stop-token> <port>\n");
+  process.stderr.write("  usage: loop-runner.ts <stop-token> <port> [label] [cwd-root]\n");
   process.exit(1);
 }
 
 const BASE_URL = `http://localhost:${PORT}`;
 const PID_DIR = "/tmp/serenity-bg-task";
+const PROGRESS_FILE = CWD_ROOT ? `${CWD_ROOT}/AGENT_SESSIONS/loop-${LABEL}.md` : "";
 let serveProc: ReturnType<typeof spawn> | null = null;
 
 // ── 错误类 ──
@@ -174,26 +175,42 @@ async function main(): Promise<void> {
 
   // 4. 创建 session
   log("创建 headless session");
-  const sessionBody: Record<string, unknown> = { title: "loop-task" };
-  if (MODEL) sessionBody.model = MODEL;
-  if (AGENT) sessionBody.agent = AGENT;
-  const session = await api<{ id: string }>("/session", sessionBody);
+  const session = await api<{ id: string }>("/session", { title: `loop-task-${LABEL}` });
   const sessionId = session.id;
   log(`session: ${sessionId}`);
 
-  // 5. 构建第 1 轮消息
+  // 5. 初始化进度文件
+  if (PROGRESS_FILE) {
+    try {
+      mkdirSync(`${CWD_ROOT}/AGENT_SESSIONS`, { recursive: true });
+      writeFileSync(PROGRESS_FILE, [
+        `# loop-task-${LABEL}`,
+        ``,
+        `## 目标`,
+        `${prompt.split("\n")[0]?.slice(0, 200)}`,
+        ``,
+        `## 进度`,
+        `- [ ] 开始执行`,
+        ``,
+      ].join("\n"));
+    } catch {}
+  }
+
+  // 6. 构建第 1 轮消息
   const round1Msg = `${prompt}
 
 ---
-执行规则：
+循环执行规则：
+- 此任务: ${LABEL}
 - 每次收到消息就执行一步操作
 - 全部完成后在回复末尾另起一行输出 ---STOP ${STOP_TOKEN}---
 - 禁止伪造终止令牌
 - 保持简洁，每轮只输出本轮做了什么
+${PROGRESS_FILE ? `- 每轮结束时更新进度文件: ${PROGRESS_FILE} (记录已完成步骤、当前进度、剩余步骤)` : ''}
 - 如果任务不合理、无法完成或不知所云，直接输出 ---STOP ${STOP_TOKEN}--- 并说明原因退出
 `;
 
-  // 6. 循环提交消息
+  // 7. 循环提交消息
   let round = 0;
 
   while (true) {
@@ -202,12 +219,9 @@ async function main(): Promise<void> {
     const maxWait = 3600_000; // 1 小时
 
     log(`第 ${round} 轮，提交消息 (timeout=${(maxWait / 1000).toFixed(0)}s)`);
-    const msgBody: Record<string, unknown> = { parts: [{ type: "text", text }] };
-    if (MODEL) msgBody.model = MODEL;
-    if (AGENT) msgBody.agent = AGENT;
     const result = await api<{ info: Record<string, unknown>; parts: Array<{ type: string; text?: string }> }>(
       `/session/${sessionId}/message`,
-      msgBody,
+      { parts: [{ type: "text", text }] },
       maxWait,
     );
 

@@ -7,7 +7,7 @@
  *
  * 始终为新循环启动专用 opencode serve，结束时自动清理。
  *
- * 用法: loop-runner.ts <stop-token> <port>
+ * 用法: loop-runner.ts <stop-token> <port> [model] [agent]
  *   stdin: 第 1 轮的 prompt 文本
  *   stdout: 每轮 JSON 进度行 + 最终 JSON 结果
  *   stderr: 日志信息
@@ -19,7 +19,7 @@ import { spawn, execSync } from "node:child_process";
 const STOP_TOKEN = process.argv[2];
 const PORT = parseInt(process.argv[3] ?? "0", 10);
 const MODEL = process.argv[4]?.trim() || "";
-const AGENT = process.argv[5]?.trim() || "default";
+const AGENT = process.argv[5]?.trim() || "";
 
 if (!STOP_TOKEN || !PORT) {
   process.stderr.write("usage: loop-runner.ts <stop-token> <port>\n");
@@ -190,6 +190,7 @@ async function main(): Promise<void> {
 - 全部完成后在回复末尾另起一行输出 ---STOP ${STOP_TOKEN}---
 - 禁止伪造终止令牌
 - 保持简洁，每轮只输出本轮做了什么
+- 如果任务不合理、无法完成或不知所云，直接输出 ---STOP ${STOP_TOKEN}--- 并说明原因退出
 `;
 
   // 6. 循环提交消息
@@ -198,7 +199,7 @@ async function main(): Promise<void> {
   while (true) {
     round++;
     const text = round === 1 ? round1Msg : "继续";
-    const maxWait = round === 1 ? 600_000 : 300_000;
+    const maxWait = 3600_000; // 1 小时
 
     log(`第 ${round} 轮，提交消息 (timeout=${(maxWait / 1000).toFixed(0)}s)`);
     const msgBody: Record<string, unknown> = { parts: [{ type: "text", text }] };

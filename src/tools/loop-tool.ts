@@ -44,11 +44,20 @@ export const loopTool: ToolDefinition = tool({
   description:
     "Loop tool — 让 headless agent 在当前 CCC root 下反复执行任务直到完成。" +
     "自动管理专用 opencode serve 生命周期，循环结束自动清理。" +
-    "每轮进度会实时更新。适用于需要可靠循环的场景。",
+    "每轮进度会实时更新。" +
+    "\n\n" +
+    "调用者必须完整给出：\n" +
+    "1. 任务内容 (what to do)\n" +
+    "2. 目标 (goal — 最终要达成什么)\n" +
+    "3. 完成判定方式 (done criteria — 如何判断任务已完成)\n" +
+    "4. 建议引用相关文件路径 (reference files)\n" +
+    "\n" +
+    "提示词长度必须大于 100 字符，不足会被拒绝。",
   args: {
     prompt: z
       .string()
-      .describe("任务描述，可以非常长。Agent 会循环执行直到任务完成。"),
+      .min(101, "提示词长度必须大于 100 字符。请完整给出：任务内容、目标、完成判定方式、相关文件引用。")
+      .describe("任务描述。必须 >100 字符，需包含任务内容、目标、完成判定方式、相关文件路径引用。Agent 会循环执行直到满足完成条件。"),
     agent: z
       .string()
       .optional()
@@ -64,7 +73,7 @@ export const loopTool: ToolDefinition = tool({
     const port = randomPort();
     const runnerPath = resolve(__dirname, "loop-runner.js");
     const model = input.model ?? "";
-    const agent = input.agent ?? "default";
+    const agent = input.agent ?? "";
 
     activePorts.add(port);
 

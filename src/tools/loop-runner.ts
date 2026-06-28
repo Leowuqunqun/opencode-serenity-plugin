@@ -29,7 +29,39 @@ if (!STOP_TOKEN || !PORT) {
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const PID_DIR = "/tmp/serenity-bg-task";
 const PROGRESS_FILE = CWD_ROOT ? `${CWD_ROOT}/AGENT_SESSIONS/loop-${LABEL}.md` : "";
+const STATUS_FILE = CWD_ROOT ? `${CWD_ROOT}/AGENT_SESSIONS/loop-${LABEL}.json` : "";
 let serveProc: ReturnType<typeof spawn> | null = null;
+
+// ── 状态文件 ──
+
+function writeStatus(round: number, done: boolean, response: string, status?: string): void {
+  if (!STATUS_FILE) return;
+  try {
+    writeFileSync(STATUS_FILE, JSON.stringify({
+      label: LABEL,
+      round,
+      done,
+      status: status ?? (done ? "done" : "running"),
+      response: response.slice(0, 200),
+      updatedAt: Date.now(),
+    }));
+  } catch {}
+}
+function writeFailedStatus(code: string, message: string): void {
+  if (!STATUS_FILE) return;
+  try {
+    writeFileSync(STATUS_FILE, JSON.stringify({
+      label: LABEL,
+      round: 0,
+      done: true,
+      status: "failed",
+      errorCode: code,
+      errorMessage: message.slice(0, 200),
+      response: "",
+      updatedAt: Date.now(),
+    }));
+  } catch {}
+}
 
 // ── 错误类 ──
 
@@ -253,6 +285,7 @@ ${PROGRESS_FILE ? `- 每轮结束时更新进度文件: ${PROGRESS_FILE} (记录
     if (stopIdx !== -1) {
       const finalResponse = responseText.slice(0, stopIdx).trim();
       log(`第 ${round} 轮检测到 stop token，循环结束`);
+      writeStatus(round, true, finalResponse);
       process.stdout.write(JSON.stringify({
         round,
         done: true,
@@ -263,6 +296,7 @@ ${PROGRESS_FILE ? `- 每轮结束时更新进度文件: ${PROGRESS_FILE} (记录
     }
 
     log(`第 ${round} 轮完成 (${responseText.length} chars)`);
+    writeStatus(round, false, responseText);
     process.stdout.write(JSON.stringify({
       round,
       done: false,
@@ -273,6 +307,7 @@ ${PROGRESS_FILE ? `- 每轮结束时更新进度文件: ${PROGRESS_FILE} (记录
     // 安全阀
     if (round >= 100) {
       log("达到最大轮数 (100)，强制结束");
+      writeStatus(round, true, responseText);
       process.stdout.write(JSON.stringify({
         round,
         done: true,
@@ -288,7 +323,9 @@ ${PROGRESS_FILE ? `- 每轮结束时更新进度文件: ${PROGRESS_FILE} (记录
 
 if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file://").href) {
   main().then(() => process.exit(0)).catch((err) => {
+    const code = err instanceof LoopError ? err.code : "UNKNOWN";
     const msg = err instanceof LoopError ? `${err.code}: ${err.message}` : String(err);
+    writeFailedStatus(code, msg);
     log(`错误: ${msg}`);
     process.exit(1);
   });

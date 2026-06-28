@@ -55,7 +55,7 @@
 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import type { TuiPlugin } from '@opencode-ai/plugin/tui';
 import {
   isValidPrefix,
@@ -310,6 +310,71 @@ const Tui: TuiPlugin = async (api) => {
     },
   ];
 });
+
+  // L3 TODO — Loop 持久 sidebar slot（需 bun build + @opentui/solid + OC slot API 稳定）
+  // 当前不可用：tsc 无法编译 solid JSX runtime（v1.9.1 已标记）
+  // 替代方案：下方的 loop 状态轮询 + toast（L2）
+
+  // ═══════════════════════════════════════════════════════════════
+  // v0.5.22 L2 — Loop 状态轮询 + toast 通知（不依赖 @opentui/solid）
+  // 轮询 AGENT_SESSIONS/loop-*.json 每 3s，diff 状态变化 → api.ui.toast
+  // ═══════════════════════════════════════════════════════════════
+  const loopStates = new Map<string, { status: string; updatedAt: number }>();
+  setInterval(() => {
+    try {
+      const sessionsDir = `${cwd}/AGENT_SESSIONS`;
+      if (!existsSync(sessionsDir)) return;
+      const files = readdirSync(sessionsDir);
+      for (const f of files) {
+        if (!f.startsWith('loop-') || !f.endsWith('.json')) continue;
+        try {
+          const raw = readFileSync(`${sessionsDir}/${f}`, 'utf-8');
+          const data = JSON.parse(raw) as {
+            label?: string;
+            status?: string;
+            round?: number;
+            done?: boolean;
+            response?: string;
+            errorCode?: string;
+            errorMessage?: string;
+            updatedAt?: number;
+          };
+          const label = data.label ?? f.replace(/^loop-/, '').replace(/\.json$/, '');
+          const status = data.status ?? (data.done ? 'done' : 'running');
+          const prev = loopStates.get(label);
+          if (!prev || prev.status !== status || prev.updatedAt !== data.updatedAt) {
+            loopStates.set(label, { status, updatedAt: data.updatedAt ?? 0 });
+            if (prev) {
+              const r = data.round ?? 0;
+              const resp = (data.response ?? '').slice(0, 60);
+              if (status === 'done') {
+                api.ui.toast({
+                  title: `✅ loop ${label}: 完成`,
+                  message: `第 ${r} 轮，${resp}`,
+                  variant: 'success',
+                  duration: 5000,
+                });
+              } else if (status === 'failed') {
+                api.ui.toast({
+                  title: `❌ loop ${label}: 失败`,
+                  message: data.errorMessage ?? resp,
+                  variant: 'error',
+                  duration: 8000,
+                });
+              } else if (status === 'running') {
+                api.ui.toast({
+                  title: `loop ${label}: 第 ${r} 轮`,
+                  message: resp || '运行中...',
+                  variant: 'info',
+                  duration: 3000,
+                });
+              }
+            }
+          }
+        } catch { /* skip broken JSON */ }
+      }
+    } catch { /* noop */ }
+  }, 3000);
 };
 
 export default {

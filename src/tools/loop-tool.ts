@@ -117,8 +117,14 @@ export const loopTool: ToolDefinition = tool({
           ? data.response.slice(0, 80) + (data.response.length > 80 ? "..." : "")
           : "(no response)";
         ctx.metadata({
-          title: `loop 第 ${data.round} 轮: ${summary}`,
-          metadata: { round: data.round, response: data.response, finishReason: data.finishReason },
+          title: `loop ${label} 第 ${data.round} 轮: ${summary}`,
+          metadata: {
+            label,
+            round: data.round,
+            done: data.done,
+            response: data.response,
+            finishReason: data.finishReason,
+          },
         });
         if (data.done) (child as any)._loopResult = data;
       } catch { /* skip non-JSON */ }

@@ -266,7 +266,7 @@ ${PROGRESS_FILE ? `- 每轮结束时更新进度文件: ${PROGRESS_FILE} (记录
   while (true) {
     round++;
     const text = round === 1 ? round1Msg : "继续";
-    const maxWait = 3600_000; // 1 小时
+    const maxWait = 7200_000; // 2 小时
 
     log(`第 ${round} 轮，提交消息 (timeout=${(maxWait / 1000).toFixed(0)}s)`);
     const result = await api<{ info: Record<string, unknown>; parts: Array<{ type: string; text?: string }> }>(

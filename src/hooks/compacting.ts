@@ -101,7 +101,11 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
           `Rules:\n` +
           `  • Record all progress into this SESSION.md\n` +
           `  • Update the "进度记录" section after advancing work\n` +
-          `  • Reference this session in all subsequent messages\n`,
+          `  • Reference this session in all subsequent messages\n` +
+          `\n` +
+          `IMPORTANT: Read SESSION.md now. Parse the "剩余工作" / "进度记录" /\n` +
+          `"变更日志" sections and call todowrite to synchronize the built-in todo\n` +
+          `list. Keep todos in sync with SESSION.md as work progresses.\n`,
         );
       }
     }

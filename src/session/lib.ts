@@ -463,6 +463,10 @@ export function useSession(sessionsDir: string, name: string): string {
     `→ All subsequent work should refer back to this session.`,
     `  Use "session show ${sessionId}" to check current progress.`,
     `  After advancing work, update the "进度记录" (progress) section in SESSION.md.`,
+    ``,
+    `→ IMPORTANT: Read SESSION.md now. Parse the "剩余工作" / "进度记录" /`,
+    `  "变更日志" sections and call todowrite to synchronize the built-in todo`,
+    `  list. Keep todos in sync with SESSION.md as work progresses.`,
     `───────────────────────────────────────────────────────────────`,
   ].join('\n');
 }

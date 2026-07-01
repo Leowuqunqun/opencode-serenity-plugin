@@ -252,8 +252,32 @@ pnpm install      # 安装到本地 ~/.config/opencode/
 
 ---
 
-> **版本**: v0.4.13 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16
->
-> **平台**: Serenity 在 OpenCode CLI（终端版）、Linux 桌面和 macOS 上经验证。**Windows 未经测试，不保证正常使用。**
->
-> **EAP 理论完整版**: <https://github.com/tellmewhattodo/theory-eap>
+## 更新日志
+
+### v0.5.29 — todowrite 自动携带 SESSION 上下文
+
+`session use` 后，LLM 每次调用 `todowrite` 创建 todo 列表时，插件自动在首位注入当前 SESSION 标识（如 `SESSION: S035 — plugin-long-term-dev`），状态标记为 `completed`，不干扰实际工作项。这意味着你永远能在 TUI 右侧栏看到当前在哪个会话中工作。
+
+### v0.5.28 — session use 输出加固
+
+`session use` 工具返回结果现在直接包含完整的会话规则（进度记录、todowrite 同步指令），不再依赖 system prompt 重建时机。双通道覆盖确保 LLM 第一时间收到指令。
+
+### v0.5.27 — session use 自动同步 todo
+
+`session use` 激活会话后，LLM 会被提示立即读取 `SESSION.md`，解析"剩余工作/进度记录/变更日志"段落，并调用 `todowrite` 同步到 OpenCode 内置 todo 列表。从此会话进度和 todo 保持双写一致。
+
+### v0.5.26 — EAP 审计：优化所有提示词注入
+
+基于完整的 EAP 理论框架，对 ACC 全部 4 个提示词注入点（ACC 认知块、约束摘要块、活跃会话块、Subagent 上下文块）做了 E↑/R↓/S↑ 优化。英文化了全部工具描述，明确了 ACC/CCC 全称定义，精确化了 bash 禁用语义。
+
+### v0.5.24 ~ v0.5.25 — EAP / Neat 完整理论框架
+
+`eap` 和 `neat` 工具现返回从 `theory-eap` 仓库同步的完整理论内容。EAP 新增：第 1-6 章论文全文（前置抽象无穷性、语言作为接口、词汇激活范围辨析、英式中文策略、信息论形式化证明）。Neat 新增：内容架构完整章（非软件场景、5 步工作流、11 条写作陷阱、双语定义模式、Language Register）。
+
+### v0.5.22 — loop TUI 实时反馈
+
+loop 运行时 TUI 每 3 秒轮询状态文件，通过 toast 弹窗通知：启动、每轮进度、完成/失败。不再需要手动查看进度文件。
+
+---
+
+> **版本**: v0.5.29 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16

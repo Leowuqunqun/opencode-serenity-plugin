@@ -211,8 +211,12 @@ const sessionCompactingImpl: NonNullable<Hooks['experimental.session.compacting'
   // 注入当前 OpenCode 会话的活跃 session 上下文（in-memory，不落盘）
   const active = getActiveSession(_input.sessionID);
   if (active) {
+    const shortName = active.dirName.replace(/^\d{4}-\d{2}-\d{2}--/, '');
     output.context.push(
       `[active-session] id=${active.sessionId}; dir=${active.dirName}; path=${active.mdPath}`,
+    );
+    output.context.push(
+      `[active-session-todo] todowrite first item MUST be: SESSION: ${active.sessionId} — ${shortName} (completed, low); keep at position 0 permanently`,
     );
   }
 };

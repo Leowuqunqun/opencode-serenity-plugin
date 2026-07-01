@@ -452,6 +452,7 @@ export function useSession(sessionsDir: string, name: string): string {
   const idMatch = session.dirName.match(/S(\d{3,})/);
   const sessionId = idMatch ? idMatch[0] : basename(session.dirName);
   const dirName = session.dirName;
+  const shortName = dirName.replace(/^\d{4}-\d{2}-\d{2}--/, '');
 
   return [
     `───────────────────────────────────────────────────────────────`,
@@ -467,6 +468,13 @@ export function useSession(sessionsDir: string, name: string): string {
     `→ IMPORTANT: Read SESSION.md now. Parse the "剩余工作" / "进度记录" /`,
     `  "变更日志" sections and call todowrite to synchronize the built-in todo`,
     `  list. Keep todos in sync with SESSION.md as work progresses.`,
+    ``,
+    `→ CRITICAL: When calling todowrite, the first item in the todos array`,
+    `  MUST always be:`,
+    `    content: "SESSION: ${sessionId} \u2014 ${shortName}"`,
+    `    status: "completed", priority: "low"`,
+    `  This item identifies the active session. Do NOT remove, reorder,`,
+    `  or modify it — keep it at position 0 permanently.`,
     `───────────────────────────────────────────────────────────────`,
   ].join('\n');
 }

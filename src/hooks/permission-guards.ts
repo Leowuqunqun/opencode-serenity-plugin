@@ -29,7 +29,6 @@ import { log } from '../util/log.js';
 import { isBashDisabled } from '../bash-toggle.js';
 import { loadMechRegistryFrom } from '../msm.js';
 import { callMsmExec, type MsmCallResult } from '../util/msm-call.js';
-import { getActiveSession } from '../session/active-state.js';
 
 type ToolArgs = Record<string, unknown>;
 
@@ -193,30 +192,6 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
     throw new Error(
       `bash is disabled by user, use msm instead`,
     );
-  }
-
-  // todowrite: inject active session info as first todo item
-  if (input.tool === 'todowrite') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const todos: Array<Record<string, unknown>> = (args as any).todos;
-    if (Array.isArray(todos)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sid = (input as any).sessionID as string | undefined;
-      if (sid) {
-        const active = getActiveSession(sid);
-        if (active) {
-          const label = `${active.sessionId} — ${active.dirName.replace(/^\d{4}-\d{2}-\d{2}--/, '')}`;
-          const firstContent = todos.length > 0 ? String(todos[0]?.content ?? '') : '';
-          if (todos.length === 0 || !firstContent.startsWith('SESSION:')) {
-            todos.unshift({
-              content: `SESSION: ${label}`,
-              status: 'completed',
-              priority: 'low',
-            });
-          }
-        }
-      }
-    }
   }
 
 };

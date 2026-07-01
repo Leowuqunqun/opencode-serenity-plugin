@@ -105,7 +105,14 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
           `\n` +
           `IMPORTANT: Read SESSION.md now. Parse the "剩余工作" / "进度记录" /\n` +
           `"变更日志" sections and call todowrite to synchronize the built-in todo\n` +
-          `list. Keep todos in sync with SESSION.md as work progresses.\n`,
+          `list. Keep todos in sync with SESSION.md as work progresses.\n` +
+          `\n` +
+          `CRITICAL: When calling todowrite, the first item in the todos array MUST\n` +
+          `always be:\n` +
+          `  { content: "SESSION: ${active.sessionId} — ${active.dirName.replace(/^\d{4}-\d{2}-\d{2}--/, '')}",\n` +
+          `    status: "completed", priority: "low" }\n` +
+          `This preserves the session context across todo updates.\n` +
+          `Do NOT remove or reorder this item — keep it at position 0.\n`,
         );
       }
     }

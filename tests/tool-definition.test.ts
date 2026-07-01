@@ -46,12 +46,10 @@ describe('tool.definition — serenity context injection', () => {
     expect(output.description).toContain('=== Serenity System Context ===');
     expect(output.description).toContain('CCC: home-serenity');
     expect(output.description).toContain('Root: /repo');
-    // WARNING 语句
-    expect(output.description).toContain('WARNING: Subagents inherit ALL serenity constraints.');
-    expect(output.description).toContain('Spawning a subagent does NOT bypass serenity restrictions.');
-    // 约束列表
-    expect(output.description).toContain('File access (read/edit/write/grep/glob) is LIMITED');
-    expect(output.description).toContain('bash is high-risk fallback; use msm_exec by default (D19)');
+    // 约束列
+    expect(output.description).toContain('Subagent constraints (identical to parent agent):');
+    expect(output.description).toContain('File tools (read/edit/write/grep/glob) confined to Root');
+    expect(output.description).toContain('bash may be disabled by user');
     // 可用工具
     expect(output.description).toContain('msm_list');
     expect(output.description).toContain('msm_exec');
@@ -113,7 +111,7 @@ describe('tool.definition — serenity context injection', () => {
     const output = { description: 'test', parameters: undefined };
     await hook({ toolID: 'task' } as any, output as any);
 
-    expect(output.description).toContain('IMPORTANT: Include this serenity context');
+    expect(output.description).toContain('IMPORTANT: Append this entire block');
   });
 
   it('不使用 skillContent 不存在时仍注入（仅依赖 cccName）', async () => {

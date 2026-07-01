@@ -46,11 +46,20 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
       `ACC: opencode-serenity-plugin v${VERSION}`,
       `CCC: ${state.cccName}  Root: ${state.cwdRoot}`,
       '',
-      `This agent is running inside a Cognitive Container (CCC) —`,
-      `a workspace managed by the ACC (Abstract Cognitive Container)`,
-      `plugin. The ACC provides built-in tools (msm_list, msm_exec,`,
-      `msm_admin, cc-fs, session, cc-ck, eap, neat), path isolation (P3),`,
-      `and session tracking. Additional MSMs may be registered in this CCC.`,
+      `You are running inside a Concrete Cognitive Container (CCC) —`,
+      `the runtime instance of an Abstract Cognitive Container (ACC).`,
+      `The ACC (this plugin) provides the following built-in tools:`,
+      '',
+      `  msm_list  — list all registered MSM tools (name | skill | category | description)`,
+      `  msm_exec  — safely execute a registered MSM by name with string array args`,
+      `  msm_admin — register/deregister MSMs, run quality checks, view dev guide`,
+      `  cc-fs     — file operations strictly within Root (root/resolve/list/mkdir/rm/mv/cp/touch/tree/append)`,
+      `  session   — session lifecycle (list/show/create/use/close/health/qa/archive/summary)`,
+      `  cc-ck     — validate CCC three principles (P1 rooted / P2 git-managed / P3 binary permissions)`,
+      `  eap       — return the full EAP cognitive quality framework`,
+      `  neat      — return the full Neat design collaboration protocol`,
+      '',
+      `Additional MSMs registered by this CCC are available — call msm_list to discover them.`,
       '',
     ].join('\n');
     output.system.push(accBlock);
@@ -64,10 +73,10 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
       '',
       '=== Serenity Constraints ===',
       `Root: ${state.cwdRoot}`,
-      '  • File access → read/edit/write/grep/glob limited to root (RR5)',
-      '  • Shell → use msm_exec (bash is high-risk fallback; use msm_exec by default — D19)',
-      '  • Subagent → inherits ALL constraints (no bypass)',
-      '  • Session-first: propose existing or new session; wait for user to say "使用" or "use" to confirm before starting work',
+      '  • File access — read/edit/write/grep/glob are confined to Root; paths outside Root are rejected (RR5)',
+      '  • Shell — use msm_exec by default. Note: bash may be disabled by the user (bash = high-risk; only available when explicitly enabled — D19)',
+      '  • Subagent — copies ALL parent constraints: file boundary, shell rules, session rules (no bypass)',
+      '  • Session-first — before starting multi-step work, propose an existing or new AGENT_SESSIONS entry; wait for user "use" or "使用" to confirm',
       '',
     ].join('\n');
     output.system.push(block);
@@ -86,8 +95,13 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
       if (active) {
         output.system.push(
           `\n=== Serenity Session ===\n` +
-          `Active: ${active.sessionId} — ${active.dirName}\n` +
-          `Path: ${active.mdPath}\n`,
+          `Active session: ${active.sessionId} — ${active.dirName}\n` +
+          `SESSION.md path: ${active.mdPath}\n` +
+          `\n` +
+          `Rules:\n` +
+          `  • Record all progress into this SESSION.md\n` +
+          `  • Update the "进度记录" section after advancing work\n` +
+          `  • Reference this session in all subsequent messages\n`,
         );
       }
     }
@@ -226,28 +240,22 @@ const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
     `CCC: ${state.cccName}`,
     `Root: ${state.cwdRoot}`,
     ``,
-    `WARNING: Subagents inherit ALL serenity constraints.`,
-    `Spawning a subagent does NOT bypass serenity restrictions.`,
-    ``,
-    `Constraints that also apply to subagents:`,
-    `  - File access (read/edit/write/grep/glob) is LIMITED to the serenity root.`,
-    `    Paths outside ${state.cwdRoot} will be REJECTED.`,
-    `  - bash is high-risk fallback; use msm_exec by default (D19).`,
-    `  - For shell commands, use msm_exec with an appropriate MSM.`,
-    ``,
-    `If the primary agent is blocked by a constraint, the subagent will be blocked too.`,
-    `Do NOT delegate restricted operations to a subagent as a workaround.`,
+    `Subagent constraints (identical to parent agent):`,
+    `  • File tools (read/edit/write/grep/glob) confined to Root; outside access rejected`,
+    `  • Shell commands via msm_exec + MSM name. bash may be disabled by user — do not assume bash is available`,
+    `  • All constraints inherited unconditionally — no delegation bypass`,
     ``,
     `Available serenity tools (subagent can use these):`,
-    `  - msm_list  — discover registered MSM tools with descriptions`,
-    `  - msm_exec  — execute an MSM by name with string array args`,
-    `  - cc-fs — safe file operations within serenity root`,
-    `  - eap  — cognitive quality framework (EAP SKILL.md content)`,
-    `  - neat — design collaboration protocol (Neat SKILL.md content)`,
-    `  - session — session lifecycle management`,
+    `Call msm_list to discover CCC-registered MSMs. ACC built-in tools always available:`,
+    `  msm_list  — list all registered MSMs: name, skill, category, description`,
+    `  msm_exec  — execute an MSM by name, args as string array`,
+    `  cc-fs     — file ops within root: root/resolve/list/exists/mkdir/rm/mv/cp/touch/tree/append`,
+    `  eap       — full EAP cognitive quality framework (E/R/S theory + practice)`,
+    `  neat      — full Neat design collaboration protocol`,
+    `  session   — session lifecycle: list/show/create/use/close/health/qa/archive/summary`,
     ``,
-    `IMPORTANT: Include this serenity context in the 'prompt'`,
-    `parameter so the subagent can use serenity tools.`,
+    `IMPORTANT: Append this entire block to the 'prompt' parameter of the task tool.`,
+    `The subagent must know: 1) Root boundary, 2) available tools, 3) bash is unavailable.`,
     `=== End Serenity Context ===`,
   ].join('\n');
 

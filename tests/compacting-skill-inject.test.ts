@@ -137,9 +137,9 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     expect(block).toContain('File access');
     expect(block).toContain('RR5');
     expect(block).toContain('msm_exec');
-    expect(block).toContain('bash is high-risk fallback; use msm_exec by default — D19');
-    expect(block).toContain('inherits ALL constraints');
-    expect(block).toContain('no bypass');
+    expect(block).toContain('bash may be disabled by the user');
+    expect(block).toContain('D19');
+    expect(block).toContain('copies ALL parent constraints');
     expect(block).toContain('session');
   });
 

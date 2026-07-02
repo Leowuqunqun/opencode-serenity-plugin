@@ -6,8 +6,8 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     globals: false,
     // msm-call.test.ts 用 npx tsx spawn msm-exec stub, 冷启动可能 >5s 默认超时
-    // 显式提到 20s 避免偶发 flake（与本次 debt 清理无关）
-    testTimeout: 20_000,
+    // msm-exec-tool.test.ts 部分用例 ~12s；显式提到 30s 避免 flake
+    testTimeout: 30_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

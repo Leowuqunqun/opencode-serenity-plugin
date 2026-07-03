@@ -69,14 +69,6 @@ export const loopTool: ToolDefinition = tool({
       .min(1)
       .max(50)
       .describe("任务标签，用作 session 标题和进度文件名 (如 'SQC-扫描', '字幕制作')"),
-    agent: z
-      .string()
-      .optional()
-      .describe("使用的 agent 类型名称 (headless API 暂不支持，保留参数)"),
-    model: z
-      .string()
-      .optional()
-      .describe("指定 LLM 模型 (headless API 暂不支持，使用当前 opencode.json 默认配置)"),
   },
   execute: async (input, ctx) => {
     const prompt = input.prompt;

@@ -104,9 +104,9 @@ export class MsmExecutionError extends SerenityError {
   readonly exitCode: number;
   constructor(msmName: string, exitCode: number, stdout: string, stderr: string) {
     const stdoutSnippet = stdout ? `
-stdout: ${stdout.slice(0, 1000)}` : '';
+stdout: ${stdout.slice(0, 5000)}` : '';
     const stderrSnippet = stderr ? `
-stderr: ${stderr.slice(0, 500)}` : '';
+stderr: ${stderr.slice(0, 5000)}` : '';
     super(`MSM "${msmName}" failed with exit code ${exitCode}${stdoutSnippet}${stderrSnippet}`);
     this.name = 'MsmExecutionError';
     this.exitCode = exitCode;

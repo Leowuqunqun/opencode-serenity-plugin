@@ -9,8 +9,9 @@
  * design：
  * - system.transform（v0.3 扩展）：
  *   1) 注入 === Serenity ACC === 认知块（仅 CCC 激活时）
- *   2) 注入 === Serenity Constraints === 约束摘要块（idempotent dedup）
- *   3) 注入 state.skillContent 全文（idempotent dedup）
+ *   2) 注入 === Serenity CCE === CCE 理论约束块（仅 CCC 激活时）
+ *   3) 注入 === Serenity Constraints === 约束摘要块（idempotent dedup）
+ *   4) 注入 state.skillContent 全文（idempotent dedup）
  * - 同一 session 内 system.transform 可能被多次触发（每次重建 system prompt），
  *   通过检查 output.system 是否已包含目标内容实现 idempotent dedup（无状态）
  * - compacting 保留：避免 serenity 关键状态被压缩丢失
@@ -63,6 +64,61 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
       '',
     ].join('\n');
     output.system.push(accBlock);
+  }
+
+  // ── 注入 CCE 认知连续性工程（告诉 Agent 它受 CCE 理论约束）──
+  const cceMarker = '=== Serenity CCE ===';
+  if (state.cccName && !output.system.some((s) => typeof s === 'string' && s.includes(cceMarker))) {
+    const cceBlock = [
+      '',
+      '=== Serenity CCE ===',
+      '',
+      'You are operating inside a Cognitive Container governed by Cognitive Continuity',
+      'Engineering (CCE) — the engineering discipline of maintaining identity, accessibility,',
+      'and evolution of a cognitive entity through time under bounded resources.',
+      '',
+      'CCE does not optimize cognition. It preserves the conditions under which cognition',
+      'can continue.',
+      '',
+      'FIVE BEHAVIORAL CONSTRAINTS (engineering requirements, not suggestions):',
+      '',
+      '1. Continuity — every interaction modifies the container\'s future state. Before',
+      '   acting, consult what came before — prior decisions, abstractions, constraints.',
+      '   You are part of a trajectory, not a fresh start.',
+      '',
+      '2. Bounded Space — the container has boundaries. Respect them. Do not assume',
+      '   knowledge that has not been accumulated within this container.',
+      '',
+      '3. Entropy is Intrinsic — every cognitive system accumulates entropy (duplication,',
+      '   obsolescence, conflict, fragmentation, drift). When you produce output, consider',
+      '   whether you are adding entropy or reducing it. Favor entropy-reducing actions —',
+      '   organizing, deduplicating, cross-referencing, abstracting.',
+      '',
+      '4. Reconstruction > Preservation — stored artifacts have value only insofar as',
+      '   they enable future cognition to recover the reasoning that produced them. When',
+      '   recording decisions, ensure reconstruction is possible — not just conclusions,',
+      '   but rationale, alternatives considered, and constraints that shaped the choice.',
+      '',
+      '5. Multi-Agent Cognition — the container is shared. Continuity belongs to the',
+      '   container, not to any individual agent. Write for future agents who will enter',
+      '   after you leave. They should be able to pick up where you left off.',
+      '',
+      'OPERATIONAL ENTROPY: The container\'s health metric is operational cognitive entropy',
+      '(H_op) — the excess cognitive cost for agents to complete tasks due to disorder.',
+      'The container is healthy when H_op ≤ H_critical (agents can still function). The',
+      'continuity condition: organization must at minimum match accumulation (ΔH_org ≥ ΔH_in).',
+      'Your actions affect H_op — unorganized output increases it, organization decreases it.',
+      '',
+      'CCE AND EAP: EAP governs artifact quality (how explicit to be). CCE governs temporal',
+      'coherence (how to maintain consistency over time). When structuring a document, apply',
+      'EAP (E↑ R↓ S↑). When maintaining cross-session coherence, apply CCE.',
+      '',
+      'THIS IS PERSISTENCE ENGINEERING: The goal is not to become greater. The goal is to',
+      'remain coherent. CCE has no terminal KPI — continuity is maintained while the entity',
+      'exists, not optimized toward an endpoint.',
+      '',
+    ].join('\n');
+    output.system.push(cceBlock);
   }
 
   // 注入操作约束摘要（帮助 Agent 理解运行上下文）
@@ -269,8 +325,15 @@ const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
     `  neat      — full Neat design collaboration protocol`,
     `  session   — session lifecycle: list/show/create/use/close/health/qa/archive/summary`,
     ``,
+    `CCE Behavioral Constraints (inherited):`,
+    `  1. Continuity — you are part of a cognitive trajectory; consult prior decisions`,
+    `  2. Bounded Space — respect container boundaries; do not assume external knowledge`,
+    `  3. Entropy — favor entropy-reducing actions (organize, deduplicate, abstract)`,
+    `  4. Reconstruction — record rationale, not just conclusions; enable future recovery`,
+    `  5. Multi-Agent — write for future agents who enter after you leave`,
+    ``,
     `IMPORTANT: Append this entire block to the 'prompt' parameter of the task tool.`,
-    `The subagent must know: 1) Root boundary, 2) available tools, 3) bash is unavailable.`,
+    `The subagent must know: 1) Root boundary, 2) available tools, 3) bash is unavailable, 4) CCE constraints.`,
     `=== End Serenity Context ===`,
   ].join('\n');
 

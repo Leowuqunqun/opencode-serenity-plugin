@@ -41,19 +41,23 @@ describe('v1.4 system.transform SKILL.md injection', () => {
 
     const output = { system: [] as string[] };
     await hook!({ sessionID: 'sess-1' } as any, output);
-    expect(output.system).toHaveLength(3);
+    expect(output.system).toHaveLength(4);
     // index 0: ACC block
     expect(output.system[0]).toContain('=== Serenity ACC ===');
     expect(output.system[0]).toContain('CCC: home-serenity');
-    // index 1: constraints block
-    expect(output.system[1]).toContain('=== Serenity Constraints ===');
-    expect(output.system[1]).toContain('Root: /repo');
-    expect(output.system[1]).toContain('File access');
-    expect(output.system[1]).toContain('RR5');
-    expect(output.system[1]).toContain('msm_exec');
-    expect(output.system[1]).toContain('session');
-    // index 2: SKILL.md
-    expect(output.system[2]).toBe('# Mock SKILL.md\n\nThis is the test skill content.');
+    // index 1: CCE block
+    expect(output.system[1]).toContain('=== Serenity CCE ===');
+    expect(output.system[1]).toContain('Cognitive Continuity');
+    expect(output.system[1]).toContain('FIVE BEHAVIORAL CONSTRAINTS');
+    // index 2: constraints block
+    expect(output.system[2]).toContain('=== Serenity Constraints ===');
+    expect(output.system[2]).toContain('Root: /repo');
+    expect(output.system[2]).toContain('File access');
+    expect(output.system[2]).toContain('RR5');
+    expect(output.system[2]).toContain('msm_exec');
+    expect(output.system[2]).toContain('session');
+    // index 3: SKILL.md
+    expect(output.system[3]).toBe('# Mock SKILL.md\n\nThis is the test skill content.');
   });
 
   it('plugin 未激活 → 跳过（不注入）', async () => {
@@ -76,11 +80,12 @@ describe('v1.4 system.transform SKILL.md injection', () => {
 
     const output = { system: [] as string[] };
     await hook!({ sessionID: 'sess-3' } as any, output);
-    // constraints block 不受 skillContent 影响（ACC 块也在）
-    expect(output.system).toHaveLength(2);
+    // constraints block 不受 skillContent 影响（ACC + CCE 块也在）
+    expect(output.system).toHaveLength(3);
     expect(output.system[0]).toContain('=== Serenity ACC ===');
-    expect(output.system[1]).toContain('=== Serenity Constraints ===');
-    expect(output.system[1]).toContain('Root: /repo');
+    expect(output.system[1]).toContain('=== Serenity CCE ===');
+    expect(output.system[2]).toContain('=== Serenity Constraints ===');
+    expect(output.system[2]).toContain('Root: /repo');
   });
 
   it('同一 session 多次调用 → constraints block + SKILL.md 都 dedup（各只注入一次）', async () => {
@@ -93,10 +98,10 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     await hook({ sessionID: 'sess-dedup' } as any, output);
     await hook({ sessionID: 'sess-dedup' } as any, output);
     await hook({ sessionID: 'sess-dedup' } as any, output);
-    // ACC block (1) + constraints block (1) + SKILL.md (1) = 3，不会堆积
-    expect(output.system).toHaveLength(3);
-    expect(output.system[1]).toContain('=== Serenity Constraints ===');
-    expect(output.system[2]).toContain('Mock SKILL.md');
+    // ACC block (1) + CCE block (1) + constraints block (1) + SKILL.md (1) = 4，不会堆积
+    expect(output.system).toHaveLength(4);
+    expect(output.system[2]).toContain('=== Serenity Constraints ===');
+    expect(output.system[3]).toContain('Mock SKILL.md');
   });
 
   it('不同 session → 各自独立注入（constraints block + SKILL.md 各一份）', async () => {
@@ -111,14 +116,61 @@ describe('v1.4 system.transform SKILL.md injection', () => {
     const outputB = { system: [] as string[] };
     await hook({ sessionID: 'sess-A' } as any, outputA);
     await hook({ sessionID: 'sess-B' } as any, outputB);
-    expect(outputA.system).toHaveLength(3);
-    expect(outputB.system).toHaveLength(3);
-    expect(outputA.system[1]).toContain('=== Serenity Constraints ===');
-    expect(outputA.system[1]).toContain('Root: /repo');
-    expect(outputA.system[2]).toContain('Mock SKILL.md');
-    expect(outputB.system[1]).toContain('=== Serenity Constraints ===');
-    expect(outputB.system[1]).toContain('Root: /repo');
-    expect(outputB.system[2]).toContain('Mock SKILL.md');
+    expect(outputA.system).toHaveLength(4);
+    expect(outputB.system).toHaveLength(4);
+    expect(outputA.system[2]).toContain('=== Serenity Constraints ===');
+    expect(outputA.system[2]).toContain('Root: /repo');
+    expect(outputA.system[3]).toContain('Mock SKILL.md');
+    expect(outputB.system[2]).toContain('=== Serenity Constraints ===');
+    expect(outputB.system[2]).toContain('Root: /repo');
+    expect(outputB.system[3]).toContain('Mock SKILL.md');
+  });
+
+  it('CCE block 包含五项行为约束', async () => {
+    setState(makeState());
+    markReady();
+    const hooks = createCompactingHooks();
+    const hook = hooks['experimental.chat.system.transform']!;
+
+    const output = { system: [] as string[] };
+    await hook({ sessionID: 'sess-cce' } as any, output);
+    const cceBlock = output.system[1];  // CCE block is at index 1
+
+    expect(cceBlock).toContain('=== Serenity CCE ===');
+    expect(cceBlock).toContain('FIVE BEHAVIORAL CONSTRAINTS');
+    expect(cceBlock).toContain('Continuity');
+    expect(cceBlock).toContain('Bounded Space');
+    expect(cceBlock).toContain('Entropy is Intrinsic');
+    expect(cceBlock).toContain('Reconstruction > Preservation');
+    expect(cceBlock).toContain('Multi-Agent Cognition');
+    expect(cceBlock).toContain('OPERATIONAL ENTROPY');
+    expect(cceBlock).toContain('PERSISTENCE ENGINEERING');
+  });
+
+  it('CCE block 在 skillContent 为 null 时仍注入', async () => {
+    setState(makeState({ skillContent: null }));
+    markReady();
+    const hooks = createCompactingHooks();
+    const hook = hooks['experimental.chat.system.transform']!;
+
+    const output = { system: [] as string[] };
+    await hook({ sessionID: 'sess-cce-no-skill' } as any, output);
+    expect(output.system).toHaveLength(3);  // ACC + CCE + Constraints
+    expect(output.system[1]).toContain('=== Serenity CCE ===');
+  });
+
+  it('CCE block 同一 session 内 dedup 不重复', async () => {
+    setState(makeState());
+    markReady();
+    const hooks = createCompactingHooks();
+    const hook = hooks['experimental.chat.system.transform']!;
+
+    const output = { system: [] as string[] };
+    await hook({ sessionID: 'sess-cce-dedup' } as any, output);
+    await hook({ sessionID: 'sess-cce-dedup' } as any, output);
+    await hook({ sessionID: 'sess-cce-dedup' } as any, output);
+    expect(output.system).toHaveLength(4);
+    expect(output.system[1]).toContain('=== Serenity CCE ===');
   });
 
   it('constraints block 包含全部约束条目', async () => {
@@ -129,7 +181,7 @@ describe('v1.4 system.transform SKILL.md injection', () => {
 
     const output = { system: [] as string[] };
     await hook({ sessionID: 'sess-all' } as any, output);
-    const block = output.system[1];  // constraints block is at index 1
+    const block = output.system[2];  // constraints block is at index 2
 
     expect(block).toContain('=== Serenity Constraints ===');
     expect(block).toContain('Root: /repo');
@@ -151,7 +203,7 @@ describe('v1.4 system.transform SKILL.md injection', () => {
 
     const output = { system: [] as string[] };
     await hook({ sessionID: 'sess-oldfmt' } as any, output);
-    const block = output.system[1];  // constraints block is at index 1
+    const block = output.system[2];  // constraints block is at index 2
 
     // 确保旧格式被完全替换
     expect(block).not.toContain('[Serenity Root]');

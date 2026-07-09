@@ -124,6 +124,7 @@ export const msmListTool: ToolDefinition = tool({
     'and most plugin tools are intentionally limited. ' +
     'Each MSM is a deterministic, audited operation registered in `mech-registry.json`. ' +
     'Returns one MSM per line: `name | skill | category | description`. ' +
+    'MSMs with required flags show `[flags: ...]` — include these when calling msm_exec. ' +
     'If you need an operation that has no MSM, ask the user to register a new one before running arbitrary commands.',
   args: {},
   execute: async () => {
@@ -142,7 +143,18 @@ export const msmListTool: ToolDefinition = tool({
     if (registry.length === 0) {
       return `${header}\n(no MSM registered)`;
     }
-    return `${header}\n` + registry.map((e) => `${e.name} | ${e.skill} | ${e.category} | ${e.description}`).join('\n');
+    return `${header}\n` + registry.map((e) => {
+      let line = `${e.name} | ${e.skill} | ${e.category} | ${e.description}`;
+      if (e.flags && e.flags.length > 0) {
+        const flagNames = e.flags
+          .map((f: { name?: string; flag?: string }) => f.name || f.flag || '')
+          .filter(Boolean);
+        if (flagNames.length > 0) {
+          line += ` [flags: ${flagNames.join(', ')}]`;
+        }
+      }
+      return line;
+    }).join('\n');
   },
 });
 
@@ -157,7 +169,8 @@ export const msmListTool: ToolDefinition = tool({
 export const msmExecTool: ToolDefinition = tool({
   description:
     'Execute a registered MSM tool. ' +
-    'Call msm_list first to discover MSM names. ' +
+    'Call msm_list first to discover MSM names and descriptions. ' +
+    'If unsure about required arguments, pass "--help" as the first arg to see usage. ' +
     'Example: name="ssh-connect", args=["exec", "ubuntu", "ls -la"]. ' +
     `(serenity-plugin v${VERSION})`,
   args: {
@@ -165,7 +178,8 @@ export const msmExecTool: ToolDefinition = tool({
     args: z
       .array(z.string())
       .default([])
-      .describe('Business args; each element is one argument, preserved losslessly (spaces, newlines, special chars).'),
+      .describe('Business args; each element is one argument, preserved losslessly. ' +
+        'Pass "--help" to discover required flags and subcommands.'),
   },
   execute: async (input) => {
     log.info('msm', 'msm_exec called', {
@@ -201,7 +215,16 @@ export const msmExecTool: ToolDefinition = tool({
     });
     // v1.15.1 §9: 错误路径保留 stdout
     if (result.exitCode !== 0) {
-      throw new MsmExecutionError(input.name, result.exitCode, result.stdout, result.stderr);
+      // v0.5.38: 失败时提示 agent 用 --help 发现所需参数
+      const hint = input.args.includes('--help') || input.args.includes('-h')
+        ? ''
+        : '\n[TIP] Pass "--help" as the first arg to see this MSM\'s usage and required flags.';
+      throw new MsmExecutionError(
+        input.name,
+        result.exitCode,
+        result.stdout,
+        result.stderr + hint,
+      );
     }
     return result.stdout || '(no output)';
   },

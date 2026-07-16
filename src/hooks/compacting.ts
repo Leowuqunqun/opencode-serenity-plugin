@@ -20,7 +20,7 @@
 import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady, clearPhase2Flag } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
-import { getActiveSession, setActiveSession } from '../session/active-state.js';
+import { getActiveSession, setActiveSession, getLastActiveSession } from '../session/active-state.js';
 import pkg from '../../package.json' with { type: 'json' };
 
 const VERSION: string = pkg.version;
@@ -306,7 +306,18 @@ const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
   const state = getState();
   if (!state.activated || !state.cccName) return;
 
-  const context = [
+  // 获取最近活跃会话（tool.definition 无 sessionID 参数，所以用全局指针）
+  const activeSession = getLastActiveSession();
+
+  const sessionLines = activeSession
+    ? [
+        ``,
+        `Active session: ${activeSession.sessionId} — ${activeSession.dirName}`,
+        `SESSION.md path: ${activeSession.mdPath}`,
+      ]
+    : [];
+
+  const contextLines = [
     `=== Serenity System Context ===`,
     `CCC: ${state.cccName}`,
     `Root: ${state.cwdRoot}`,
@@ -315,6 +326,7 @@ const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
     `  • File tools (read/edit/write/grep/glob) confined to Root; outside access rejected`,
     `  • Shell commands via msm_exec + MSM name. bash may be disabled by user — do not assume bash is available`,
     `  • All constraints inherited unconditionally — no delegation bypass`,
+    ...sessionLines,
     ``,
     `Available serenity tools (subagent can use these):`,
     `Call msm_list to discover CCC-registered MSMs. ACC built-in tools always available:`,
@@ -333,9 +345,11 @@ const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
     `  5. Multi-Agent — write for future agents who enter after you leave`,
     ``,
     `IMPORTANT: Append this entire block to the 'prompt' parameter of the task tool.`,
-    `The subagent must know: 1) Root boundary, 2) available tools, 3) bash is unavailable, 4) CCE constraints.`,
+    `The subagent must know: 1) Root boundary, 2) available tools, 3) bash is unavailable, 4) CCE constraints, 5) active session.`,
     `=== End Serenity Context ===`,
-  ].join('\n');
+  ];
+
+  const context = contextLines.join('\n');
 
   // 追加 SKILL.md 全文（subagent 继承 CCC 认知上下文）
   const skillPart = state.skillContent

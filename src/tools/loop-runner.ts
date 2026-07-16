@@ -20,9 +20,12 @@ const STOP_TOKEN = process.argv[2];
 const PORT = parseInt(process.argv[3] ?? "0", 10);
 const LABEL = process.argv[4]?.trim() || "task";
 const CWD_ROOT = process.argv[5] || "";
+const MODEL = (process.argv[6] ?? "").replace(/^''$/g, "").trim();
+const SESSION_ID = (process.argv[7] ?? "").replace(/^''$/g, "").trim();
+const SESSION_DIR = (process.argv[8] ?? "").replace(/^''$/g, "").trim();
 
 if (!STOP_TOKEN || !PORT) {
-  process.stderr.write("  usage: loop-runner.ts <stop-token> <port> [label] [cwd-root]\n");
+  process.stderr.write("  usage: loop-runner.ts <stop-token> <port> [label] [cwd-root] [model] [session-id] [session-dir] [session-title]\n");
   process.exit(1);
 }
 
@@ -70,6 +73,42 @@ class LoopError extends Error {
     super(message);
     this.name = "LoopError";
   }
+}
+
+// ── 模型验证 ──
+
+function validateModel(model: string): void {
+  if (!/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(model)) {
+    log(`无效模型格式: "${model}" (应为 provider/model)`);
+    process.stderr.write(`[loop] 错误: 模型格式无效 "${model}"。格式应为 provider/model (如 deepseek/deepseek-v4-flash)\n`);
+    process.exit(1);
+  }
+
+  log(`验证模型可用性: ${model}`);
+  let modelsOutput: string;
+  try {
+    modelsOutput = execSync("opencode models", { encoding: "utf-8", timeout: 15000 });
+  } catch {
+    log("警告: 无法执行 opencode models 验证模型");
+    return; // fail-open: 无法验证时继续
+  }
+
+  const lines = modelsOutput.split("\n").map(l => l.trim()).filter(Boolean);
+  const found = lines.some(l => l === model);
+  if (!found) {
+    const hint = lines
+      .filter(l => l.includes(model.split("/")[1] || ""))
+      .slice(0, 5);
+    const hintMsg = hint.length
+      ? `\n  相近模型:\n    ${hint.join("\n    ")}`
+      : `\n  可用模型数: ${lines.length} (用 opencode models 查看完整列表)`;
+    process.stderr.write(
+      `[loop] 错误: 模型 "${model}" 不可用。` +
+      `请确认该 provider 已配置且有有效 API key。${hintMsg}\n`
+    );
+    process.exit(1);
+  }
+  log(`模型验证通过: ${model}`);
 }
 
 // ── 日志 ──
@@ -126,9 +165,19 @@ function startServer(port: number): void {
   const lf = logFile(port);
   const fd = openSync(lf, "a");
 
+  const args = ["serve", "--port", String(port), "--hostname", "0.0.0.0"];
+  const env: Record<string, string> = { ...process.env as Record<string, string> };
+
+  // 注入模型覆盖（OPENCODE_CONFIG_CONTENT）
+  if (MODEL) {
+    env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ model: MODEL });
+    log(`使用模型: ${MODEL} (OPENCODE_CONFIG_CONTENT)`);
+  }
+
   log(`启动 opencode serve (${bin}) --port ${port}`);
-  serveProc = spawn(bin, ["serve", "--port", String(port), "--hostname", "0.0.0.0"], {
+  serveProc = spawn(bin, args, {
     stdio: ["ignore", fd, fd],
+    env,
   });
   writeFileSync(pidFile(port), String(serveProc.pid ?? ""));
 }
@@ -209,11 +258,14 @@ async function main(): Promise<void> {
     try { unlinkSync(pf); } catch {}
   }
 
-  // 2. 启动专用 serve
+  // 2. 模型验证（在启动 serve 前执行，快速失败）
+  if (MODEL) validateModel(MODEL);
+
+  // 3. 启动专用 serve
   startServer(PORT);
   await waitForServer(30);
 
-  // 3. 收集 stdin (prompt)
+  // 4. 收集 stdin (prompt)
   const stdin = await new Promise<string>((resolve) => {
     let data = "";
     process.stdin.setEncoding("utf8");
@@ -223,13 +275,13 @@ async function main(): Promise<void> {
   const prompt = stdin.trim();
   if (!prompt) throw new LoopError("NO_PROMPT", "stdin 未收到 prompt");
 
-  // 4. 创建 session
+  // 5. 创建 headless session
   log("创建 headless session");
-  const session = await api<{ id: string }>("/session", { title: `loop-task-${LABEL}` });
-  const sessionId = session.id;
-  log(`session: ${sessionId}`);
+  const headlessSession = await api<{ id: string }>("/session", { title: `loop-task-${LABEL}` });
+  const headlessSessionId = headlessSession.id;
+  log(`headless session: ${headlessSessionId}`);
 
-  // 5. 初始化进度文件
+  // 6. 初始化进度文件
   if (PROGRESS_FILE) {
     try {
       mkdirSync(`${CWD_ROOT}/AGENT_SESSIONS`, { recursive: true });
@@ -246,8 +298,25 @@ async function main(): Promise<void> {
     } catch {}
   }
 
-  // 6. 构建消息模板（伪代码循环体）
+  // 7. 构建消息模板（伪代码循环体）
   const progressRule = PROGRESS_FILE ? `每轮更新进度文件: ${PROGRESS_FILE}` : '';
+
+  // 7a. SESSION 上下文（如果指定了 session）
+  const sessionRules = SESSION_ID ? [
+    ``,
+    `  // ═══════════════════════════════════════════`,
+    `  // 工作会话`,
+    `  // ═══════════════════════════════════════════`,
+    `  当前工作会话: ${SESSION_ID}`,
+    SESSION_DIR ? `  SESSION.md: ${SESSION_DIR}/SESSION.md` : `  （SESSION ${SESSION_ID} 目录未找到，请先创建）`,
+    ``,
+    `  每轮完成后:`,
+    `    1. 读取 SESSION.md 了解已有进度`,
+    `    2. 推进工作`,
+    `    3. 更新 SESSION.md 进度记录`,
+    ``,
+  ] : [];
+
   const rules = [
     ``,
     `你正在一个循环中执行。每收到一条消息，就是循环的一次迭代。`,
@@ -288,7 +357,7 @@ async function main(): Promise<void> {
     `  永远从已完成的进度之后继续，不重复工作。`,
     ``,
     `  ${progressRule}`,
-    ``,
+    ...sessionRules,
     `  // ═══════════════════════════════════════════`,
     `  // 禁止`,
     `  // ═══════════════════════════════════════════`,
@@ -299,7 +368,7 @@ async function main(): Promise<void> {
 
   const round1Msg = rules;
 
-  // 7. 循环提交消息
+  // 9. 循环提交消息
   let round = 0;
 
   while (true) {
@@ -309,7 +378,7 @@ async function main(): Promise<void> {
 
     log(`第 ${round} 轮，提交消息 (timeout=${(maxWait / 1000).toFixed(0)}s)`);
     const result = await api<{ info: Record<string, unknown>; parts: Array<{ type: string; text?: string }> }>(
-      `/session/${sessionId}/message`,
+      `/session/${headlessSessionId}/message`,
       { parts: [{ type: "text", text }] },
       maxWait,
     );

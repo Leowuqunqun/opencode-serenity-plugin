@@ -46,43 +46,67 @@ export const loopTool: ToolDefinition = tool({
     "Loop tool — 让 headless agent 在当前 CCC root 下反复执行任务直到完成。" +
     "自动管理专用 opencode serve 生命周期，循环结束自动清理。" +
     "每轮进度会实时更新。" +
-    "\n\n" +
-    "调用者必须在 prompt 中交代以下内容：\n" +
-    "1. 要使用的 SESSION — loop agent 需要知道工作在哪个会话上下文中\n" +
-    "2. 完整的任务背景和上下文—— loop agent 是独立进程，没有主 session 的对话记忆，\n" +
-    "   必须把相关文件路径、已有决策、当前状态等一次性给足。不要假设它'知道'任何事\n" +
-    "3. 明确的目标 (goal) — 最终要达成什么\n" +
-    "4. 完成判定方式 (done criteria) — 如何判断已完成\n" +
-    "\n" +
-    "loop agent 会自动在 AGENT_SESSIONS/loop-{label}.md 中维护进度文件。\n" +
-    "中断恢复：loop 的工作可能因超时、服务崩溃等原因中断。如果发生中断，\n" +
-    "loop 将被重新启动并从进度文件续跑——不重复已完成的工作。" +
-    "\n" +
-    "提示词长度必须大于 100 字符，不足会被拒绝。",
+    "支持指定 --session 让 loop agent 继承当前工作会话上下文。" +
+    "支持指定 --model 用特定模型运行（如 deepseek/deepseek-v4-flash）。",
   args: {
     prompt: z
       .string()
-      .min(101, "提示词长度必须大于 100 字符。请完整给出：SESSION标识、任务背景与上下文、目标、完成判定方式、相关文件路径。")
-      .describe("任务描述。必须 >100 字符，需包含：SESSION标识、完整任务背景与上下文、目标、完成判定方式、相关文件路径引用。"),
+      .min(101, "提示词长度必须大于 100 字符。请完整给出：任务背景与上下文、目标、完成判定方式、相关文件路径。")
+      .describe("任务描述。必须 >100 字符，需包含：完整任务背景与上下文、目标、完成判定方式、相关文件路径引用。"),
     label: z
       .string()
       .min(1)
       .max(50)
       .describe("任务标签，用作 session 标题和进度文件名 (如 'SQC-扫描', '字幕制作')"),
+    model: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/, "格式: provider/model (如 deepseek/deepseek-v4-flash)")
+      .optional()
+      .describe("指定模型运行 (如 deepseek/deepseek-v4-flash)。不传则用项目默认模型。"),
+    session: z
+      .string()
+      .regex(/^S\d{3,}$/, "格式: S001, S101 等")
+      .optional()
+      .describe("工作会话 ID (如 S101)。loop agent 会自动继承该会话上下文。"),
   },
   execute: async (input, ctx) => {
     const prompt = input.prompt;
     const label = input.label;
+    const model = input.model ?? "";
+    const sessionId = input.session ?? "";
     const stopToken = randomBytes(16).toString("hex");
     const port = randomPort();
     const runnerPath = resolve(__dirname, "loop-runner.js");
     const cwdRoot = getState().cwdRoot;
 
+    // 解析 session 路径：从 active session 或从 AGENT_SESSIONS 目录查找
+    let sessionDir = "";
+    let sessionTitle = "";
+    if (sessionId) {
+      try {
+        const sessionsRoot = resolve(cwdRoot, "AGENT_SESSIONS");
+        if (existsSync(sessionsRoot)) {
+          const { readdirSync } = await import("node:fs");
+          const dirs = readdirSync(sessionsRoot);
+          for (const d of dirs) {
+            if (d.includes(sessionId)) {
+              sessionDir = resolve(sessionsRoot, d);
+              sessionTitle = d;
+              break;
+            }
+          }
+        }
+      } catch { /* fall through */ }
+    }
+
     activePorts.add(port);
 
-    const child = spawn(findNodeBin(), [runnerPath, stopToken, String(port), label, cwdRoot], {
+    const child = spawn(findNodeBin(), [
+      runnerPath, stopToken, String(port), label, cwdRoot,
+      model || "''", sessionId || "''", sessionDir || "''", sessionTitle || "''",
+    ], {
       stdio: ["pipe", "pipe", "pipe"],
-      detached: true,  // 独立进程组，可以用 -pid 组杀
+      detached: true,
     });
 
     // 收集 stderr（错误日志）

@@ -13,14 +13,26 @@ export interface ActiveSession {
 
 const store = new Map<string, ActiveSession>();
 
+// 全局最近活跃 session（不依赖 OpenCode sessionID，供 tool.definition 等无 sessionID 的 hook 使用）
+let lastActive: ActiveSession | null = null;
+
 export function setActiveSession(ocSessionId: string, info: ActiveSession): void {
   store.set(ocSessionId, info);
+  lastActive = info;
 }
 
 export function getActiveSession(ocSessionId: string): ActiveSession | undefined {
   return store.get(ocSessionId);
 }
 
+/** 获取最近一次活跃的 session（不依赖 OpenCode sessionID） */
+export function getLastActiveSession(): ActiveSession | null {
+  return lastActive;
+}
+
 export function removeActiveSession(ocSessionId: string): void {
   store.delete(ocSessionId);
+  if (lastActive && !store.has(ocSessionId)) {
+    lastActive = null;
+  }
 }

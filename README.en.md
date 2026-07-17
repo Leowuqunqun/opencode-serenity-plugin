@@ -118,7 +118,7 @@ Upgrade the plugin (`npm update`), all CCCs automatically gain new tools and fea
 
 ## Your Tools
 
-You get **9 tools** after installation, organized by design purpose into four groups.
+You get **10 tools** after installation, organized by design purpose into five groups.
 
 ### Safe execution channel
 
@@ -148,6 +148,14 @@ These two tools don't manipulate files — they improve the quality of Agent thi
 
 - **`eap`** — Cognitive quality framework. Defines E↑ / R↓ / S↑ standards that guide every output's external reconstructability.
 - **`neat`** — Design collaboration protocol. Small-step alignment, explicit decisions, document-driven — every step of a complex design is traceable.
+
+### Background tasks & loop execution
+
+- **`loop`** — **Loop execution tool**. Runs a headless agent that repeatedly executes a task until completion. Auto-manages a dedicated opencode serve lifecycle; real-time progress updates every round.
+  - `--session <S101>` **(required)** — Specify the working session. The loop agent inherits session context and writes progress into the session directory.
+  - `--model <provider/model>` — Specify a model (e.g. `deepseek/deepseek-v4-flash`). Injected via `OPENCODE_CONFIG_CONTENT`.
+  - `--label <name>` — Task label for progress file naming.
+  - Interruption-resilient: resumes from the progress file without redoing completed work.
 
 ---
 

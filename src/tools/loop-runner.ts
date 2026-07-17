@@ -82,18 +82,18 @@ class LoopError extends Error {
 
 function validateModel(model: string): void {
   if (!/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(model)) {
-    log(`无效模型格式: "${model}" (应为 provider/model)`);
-    process.stderr.write(`[loop] 错误: 模型格式无效 "${model}"。格式应为 provider/model (如 deepseek/deepseek-v4-flash)\n`);
+    log(`invalid model format: "${model}" (expected provider/model)`);
+    process.stderr.write(`[loop] error: invalid model format "${model}". Expected provider/model (e.g. deepseek/deepseek-v4-flash)\n`);
     process.exit(1);
   }
 
-  log(`验证模型可用性: ${model}`);
+  log(`validating model: ${model}`);
   let modelsOutput: string;
   try {
     modelsOutput = execSync("opencode models", { encoding: "utf-8", timeout: 15000 });
   } catch {
-    log("警告: 无法执行 opencode models 验证模型");
-    return; // fail-open: 无法验证时继续
+    log("warning: cannot run opencode models to validate");
+    return; // fail-open: continue if validation unavailable
   }
 
   const lines = modelsOutput.split("\n").map(l => l.trim()).filter(Boolean);
@@ -103,15 +103,15 @@ function validateModel(model: string): void {
       .filter(l => l.includes(model.split("/")[1] || ""))
       .slice(0, 5);
     const hintMsg = hint.length
-      ? `\n  相近模型:\n    ${hint.join("\n    ")}`
-      : `\n  可用模型数: ${lines.length} (用 opencode models 查看完整列表)`;
+      ? `\n  similar models:\n    ${hint.join("\n    ")}`
+      : `\n  total available models: ${lines.length} (run "opencode models" to list all)`;
     process.stderr.write(
-      `[loop] 错误: 模型 "${model}" 不可用。` +
-      `请确认该 provider 已配置且有有效 API key。${hintMsg}\n`
+      `[loop] error: model "${model}" is not available. ` +
+      `Ensure the provider is configured and has a valid API key.${hintMsg}\n`
     );
     process.exit(1);
   }
-  log(`模型验证通过: ${model}`);
+  log(`model validated: ${model}`);
 }
 
 // ── 日志 ──
@@ -177,7 +177,7 @@ function startServer(port: number): void {
     log(`使用模型: ${MODEL} (OPENCODE_CONFIG_CONTENT)`);
   }
 
-  log(`启动 opencode serve (${bin}) --port ${port}`);
+  log(`starting opencode serve (${bin}) --port ${port}`);
   serveProc = spawn(bin, args, {
     stdio: ["ignore", fd, fd],
     env,
@@ -186,7 +186,7 @@ function startServer(port: number): void {
 }
 
 async function waitForServer(timeout = 30): Promise<void> {
-  log("等待 server 就绪...");
+  log("waiting for server...");
   const deadline = Date.now() + timeout * 1000;
   while (Date.now() < deadline) {
     try {
@@ -196,13 +196,13 @@ async function waitForServer(timeout = 30): Promise<void> {
       );
       const body = JSON.parse(out) as Record<string, unknown>;
       if (body.healthy === true) {
-        log("server 就绪");
+        log("server ready");
         return;
       }
     } catch {}
     await new Promise(r => setTimeout(r, 500));
   }
-  throw new LoopError("SERVER_TIMEOUT", `server 未在 ${timeout}s 内就绪`);
+  throw new LoopError("SERVER_TIMEOUT", `server not ready within ${timeout}s`);
 }
 
 // ── HTTP 工具 ──
@@ -261,16 +261,16 @@ async function main(): Promise<void> {
     try { unlinkSync(pf); } catch {}
   }
 
-  // 2. 模型验证（在启动 serve 前执行，快速失败）
+  // 2. validate model (fail fast before starting serve)
   if (MODEL) validateModel(MODEL);
 
-  // 2b. SESSION 目录存在性检查
+  // 2b. SESSION directory existence check
   if (SESSION_ID && SESSION_DIR && !existsSync(SESSION_DIR)) {
-    process.stderr.write(`[loop] 错误: SESSION ${SESSION_ID} 目录不存在: ${SESSION_DIR}\n`);
+    process.stderr.write(`[loop] error: SESSION ${SESSION_ID} directory not found: ${SESSION_DIR}\n`);
     process.exit(1);
   }
   if (SESSION_ID && !SESSION_DIR) {
-    process.stderr.write(`[loop] 错误: SESSION ${SESSION_ID} 未找到，请先用 session create 创建\n`);
+    process.stderr.write(`[loop] error: SESSION ${SESSION_ID} not found. Create it first with 'session create'\n`);
     process.exit(1);
   }
 
@@ -301,80 +301,79 @@ async function main(): Promise<void> {
       writeFileSync(PROGRESS_FILE, [
         `# loop-task-${LABEL}`,
         ``,
-        `## 目标`,
+        `## Goal`,
         `${prompt.split("\n")[0]?.slice(0, 200)}`,
         ``,
-        `## 进度`,
-        `- [ ] 开始执行`,
+        `## Progress`,
+        `- [ ] started`,
         ``,
       ].join("\n"));
     } catch {}
   }
 
-  // 7. 构建消息模板（伪代码循环体）
-  const progressRule = PROGRESS_FILE ? `每轮更新进度文件: ${PROGRESS_FILE}` : '';
+  // 7. Build message template (pseudo-code loop body)
+  const progressRule = PROGRESS_FILE ? `Update progress file: ${PROGRESS_FILE}` : '';
 
-  // 7a. SESSION 上下文（如果指定了 session）
+  // 7a. Session context (if session specified)
   const sessionRules = SESSION_ID ? [
     ``,
     `  // ═══════════════════════════════════════════`,
-    `  // 工作会话`,
+    `  // Working Session`,
     `  // ═══════════════════════════════════════════`,
-    `  当前工作会话: ${SESSION_ID}`,
-    SESSION_DIR ? `  SESSION.md: ${SESSION_DIR}/SESSION.md` : `  （SESSION ${SESSION_ID} 目录未找到，请先创建）`,
+    `  Active session: ${SESSION_ID}`,
+    SESSION_DIR ? `  SESSION.md: ${SESSION_DIR}/SESSION.md` : `  (SESSION ${SESSION_ID} directory not found, create it first)`,
     ``,
-    `  每轮完成后:`,
-    `    1. 读取 SESSION.md 了解已有进度`,
-    `    2. 推进工作`,
-    `    3. 更新 SESSION.md 进度记录`,
+    `  After each round:`,
+    `    1. Read SESSION.md to review progress`,
+    `    2. Advance the work`,
+    `    3. Update progress in SESSION.md`,
     ``,
   ] : [];
 
   const rules = [
     ``,
-    `你正在一个循环中执行。每收到一条消息，就是循环的一次迭代。`,
+    `You are executing in a loop. Each message you receive is one iteration of the loop.`,
     ``,
     `for (let round = 1; ; round++) {`,
     ``,
     `  // ═══════════════════════════════════════════`,
-    `  // 你的任务`,
+    `  // Your Task`,
     `  // ═══════════════════════════════════════════`,
     `  ${prompt}`,
     ``,
     `  // ═══════════════════════════════════════════`,
-    `  // 规则`,
+    `  // Rules`,
     `  // ═══════════════════════════════════════════`,
-    `  本轮内你可以自由工作：读文件、改代码、运行命令、`,
-    `  做任何推进任务需要的事情。你需要自己判断本轮做到`,
-    `  什么程度停下来最合适。`,
+    `  Within this round you are free to work: read files, edit code, run commands,`,
+    `  or do anything needed to advance the task. Decide how far to go each round.`,
     ``,
-    `  本轮的输出中需要包含：`,
-    `    1. 本轮做了什么（具体）`,
-    `    2. 发现或问题`,
-    `    3. 剩余未完成`,
-    `    4. 下一步计划`,
+    `  Your output should include:`,
+    `    1. What you did this round (concrete)`,
+    `    2. Findings or issues discovered`,
+    `    3. Remaining work`,
+    `    4. Next steps planned`,
     ``,
-    `  如果任务全部完成：`,
-    `    在回复末尾另起一行输出 ---STOP ${STOP_TOKEN}--- break;`,
+    `  If the task is fully complete:`,
+    `    Append ---STOP ${STOP_TOKEN}--- break; at the end of your response.`,
     ``,
-    `  如果任务无法完成或遇到不可恢复的错误：`,
-    `    输出 ---STOP ${STOP_TOKEN}--- 并说明原因，break;`,
+    `  If the task cannot be completed or hit an unrecoverable error:`,
+    `    Output ---STOP ${STOP_TOKEN}--- break; and state the reason.`,
     ``,
     `  // ═══════════════════════════════════════════`,
-    `  // 中断恢复`,
+    `  // Interruption Recovery`,
     `  // ═══════════════════════════════════════════`,
-    `  你的工作可能因任何原因中断：超时、服务崩溃、`,
-    `  网络故障…… 如果发生中断，你将被重新启动。`,
+    `  Your work may be interrupted at any time: timeout, server crash,`,
+    `  network failure... If interrupted, you will be restarted.`,
     ``,
-    `  每轮开始前，先检查已经完成了什么——`,
-    `  永远从已完成的进度之后继续，不重复工作。`,
+    `  Before starting each round, check what was already completed —`,
+    `  always continue from where you left off, never redo work.`,
     ``,
     `  ${progressRule}`,
     ...sessionRules,
     `  // ═══════════════════════════════════════════`,
-    `  // 禁止`,
+    `  // Prohibited`,
     `  // ═══════════════════════════════════════════`,
-    `  禁止伪造 ---STOP ${STOP_TOKEN}--- break;`,
+    `  Do NOT fake ---STOP ${STOP_TOKEN}--- break;`,
     `}`,
     ``,
   ].join('\n');
@@ -389,7 +388,7 @@ async function main(): Promise<void> {
     const text = round1Msg;
     const maxWait = 7200_000; // 2 小时
 
-    log(`第 ${round} 轮，提交消息 (timeout=${(maxWait / 1000).toFixed(0)}s)`);
+    log(`round ${round}: submitting message (timeout=${(maxWait / 1000).toFixed(0)}s)`);
     const result = await api<{ info: Record<string, unknown>; parts: Array<{ type: string; text?: string }> }>(
       `/session/${headlessSessionId}/message`,
       { parts: [{ type: "text", text }] },
@@ -401,11 +400,11 @@ async function main(): Promise<void> {
       .map(p => p.text ?? "")
       .join("\n");
 
-    // 检查 stop token
+    // check stop token
     const stopIdx = responseText.indexOf(`---STOP ${STOP_TOKEN}---`);
     if (stopIdx !== -1) {
       const finalResponse = responseText.slice(0, stopIdx).trim();
-      log(`第 ${round} 轮检测到 stop token，循环结束`);
+      log(`round ${round}: stop token detected, loop ends`);
       writeStatus(round, true, finalResponse);
       process.stdout.write(JSON.stringify({
         round,
@@ -416,7 +415,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    log(`第 ${round} 轮完成 (${responseText.length} chars)`);
+    log(`round ${round}: done (${responseText.length} chars)`);
     writeStatus(round, false, responseText);
     process.stdout.write(JSON.stringify({
       round,
@@ -425,9 +424,9 @@ async function main(): Promise<void> {
       finishReason: result.info?.finishReason ?? "unknown",
     }) + "\n");
 
-    // 安全阀
+    // safety valve
     if (round >= 100) {
-      log("达到最大轮数 (100)，强制结束");
+      log("max rounds (100) reached, forcing stop");
       writeStatus(round, true, responseText);
       process.stdout.write(JSON.stringify({
         round,

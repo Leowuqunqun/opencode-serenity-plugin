@@ -38,9 +38,14 @@ Decisions lost. Conventions forgotten. Every time, back to zero.
 You need two things: Node ≥ 20 and OpenCode ≥ 1.16.
 
 ```bash
-npm install @shgroup/opencode-serenity-plugin
-npx opencode-serenity-plugin install
+opencode plugin @shgroup/opencode-serenity-plugin
 ```
+
+> This auto-installs the npm package and writes the opencode config. Alternatively:
+> ```
+> npm install @shgroup/opencode-serenity-plugin
+> npx opencode-serenity-plugin install
+> ```
 
 Then open OpenCode, navigate to the directory you want to work in long-term, and type:
 

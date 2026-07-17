@@ -38,9 +38,14 @@
 你需要两样东西：Node ≥ 20 和 OpenCode ≥ 1.16。
 
 ```bash
-npm install @shgroup/opencode-serenity-plugin
-npx opencode-serenity-plugin install
+opencode plugin @shgroup/opencode-serenity-plugin
 ```
+
+> 该命令会自动安装 npm 包并写入 opencode 配置。或者用传统方式：
+> ```
+> npm install @shgroup/opencode-serenity-plugin
+> npx opencode-serenity-plugin install
+> ```
 
 然后打开 OpenCode，进入你想长期工作的目录，输入：
 

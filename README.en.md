@@ -208,22 +208,37 @@ That's how CCC works: not omniscience, but accessibility.
 
 ---
 
-## Philosophy
+## Why Serenity Works
 
-The theoretical foundation is **EAP** (Explicit Abstraction Principle):
+Serenity's engineering foundation rests on two complementary theoretical disciplines:
+
+### EAP (Explicit Abstraction Principle)
 
 > **"The functional value of a thought is proportional to its external reconstructability."**
 
-Every design decision in Serenity derives from this statement. Every concept you've read here — ACC, CCC, Skill, MSM, Session — is this principle concretized at a different level.
+EAP defines cognitive artifact quality: explicitness (E↑), reconstruction cost (R↓), stability (S↑) of every output. Every concept you've read here — ACC, CCC, Skill, MSM, Session — is EAP concretized at a different level.
+
+Full EAP theory: <https://github.com/tellmewhattodo/theory-eap>
+
+### CCE (Cognitive Continuity Engineering)
+
+> **"Cognitive Continuity Engineering is the engineering discipline of maintaining identity, accessibility, and evolution of a cognitive entity through time under bounded resources and irreversible uncertainty."**
+
+EAP answers "how should a piece of knowledge be structured"; CCE answers "how should structured knowledge evolve over time without losing coherence." Serenity's session system, session tracking, and entropy management (SQC) are all CCE engineering implementations.
+
+CCE core claims:
+
+- **Continuity belongs to the container, not to any participant** — agents come and go, but the CCC's cognitive trajectory persists
+- **Organization must at least keep pace with accumulation** — otherwise operational cognitive entropy (H_op) grows unbounded and accessibility is lost
+- **Reconstruction over preservation** — an artifact's value is determined by its ability to enable future agents to reconstruct the original reasoning
+
+Full CCE theory (Chinese): <https://github.com/tellmewhattodo/cognitive-continuity-engineering/blob/main/README.zh.md>
 
 Think of Serenity as an operating system:
 
 - **ACC is the kernel** — declares what tools, rules, and validations a cognitive container should have
 - **CCC is the user-space workspace** — holds a specific project's skills, MSMs, session records, and files
-
-Upgrade the kernel, all user-space workspaces benefit automatically.
-
-Full EAP theory: <https://github.com/tellmewhattodo/theory-eap>
+- **EAP + CCE are the architectural principles** — guiding cognitive system structure and evolution
 
 ---
 
@@ -257,7 +272,7 @@ pnpm install      # Install to local ~/.config/opencode/
 
 ---
 
-> **Version**: v0.4.13 &nbsp;|&nbsp; **License**: MIT &nbsp;|&nbsp; **Prerequisites**: Node ≥ 20, OpenCode ≥ 1.16
+> **Version**: v0.5.41 &nbsp;|&nbsp; **License**: MIT &nbsp;|&nbsp; **Prerequisites**: Node ≥ 20, OpenCode ≥ 1.16
 >
 > **Platform**: Serenity is tested on OpenCode CLI (terminal), Linux desktop, and macOS. **Windows is untested and not guaranteed.**
 >

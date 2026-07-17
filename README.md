@@ -207,23 +207,37 @@ CCC 就是这样工作的：不是追求全知，而是追求可达。
 
 ---
 
-## 内在哲学
+## 为什么 Serenity 有效
 
-这套模型的理论基础是 **EAP**（显式抽象原则，Explicit Abstraction Principle）：
+Serenity 的工程基础是两门互补的理论学科：
+
+### EAP（显式抽象原则）
 
 > **"思维的功能价值与其外部可重建性成正比。"**
-> The functional value of a thought is proportional to its external reconstructability.
 
-Serenity 的每一个设计决策都从这句话推导而来。你在 README 里读到的每个概念——ACC、CCC、Skill、MSM、Session——都是这个原则在不同层面的具体化。
+EAP 定义认知产物的质量：每次输出的显式度（E↑）、重建成本（R↓）、稳定性（S↑）。你在 README 里读到的每个概念——ACC、CCC、Skill、MSM、Session——都是 EAP 在不同层面的具体化。
+
+完整 EAP 理论：<https://github.com/tellmewhattodo/theory-eap>
+
+### CCE（认知连续性工程）
+
+> **"认知连续性工程是在有限资源与不可逆不确定性的约束下，维持一个认知实体的身份、可达性与演化能力的工程学科。"**
+
+EAP 回答"一段知识应如何被结构化"，CCE 回答"有结构的知识应如何跨时间持续演化而不丧失连贯性"。Serenity 的会话系统、会话追踪、熵管理机制（SQC）都是 CCE 的工程实现。
+
+CCE 的核心主张：
+
+- **连续性属于容器，而非任何个体参与者**——智能体来来去去，但 CCC 的认知轨迹持续存在
+- **组织必须至少与积累同步**——否则操作化认知熵（H_op）无界增长，可达性丧失
+- **重建优于保存**——产物的价值由其使未来智能体重建原始推理的能力决定
+
+完整 CCE 理论（中文）：<https://github.com/tellmewhattodo/cognitive-continuity-engineering/blob/main/README.zh.md>
 
 把 Serenity 比作操作系统：
 
 - **ACC 是内核**——声明认知容器应该有什么工具、规则、验证
 - **CCC 是用户态工作区**——包含具体项目的技能、MSM、会话记录、项目文件
-
-升级内核，所有用户态工作区自动受益。
-
-完整 EAP 理论：<https://github.com/tellmewhattodo/theory-eap>
+- **EAP + CCE 是架构原则**——指导认知系统的结构与演化
 
 ---
 
@@ -261,4 +275,4 @@ pnpm install      # 安装到本地 ~/.config/opencode/
 
 详见 [CHANGELOG.md](./CHANGELOG.md)
 
-> **版本**: v0.5.29 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16
+> **版本**: v0.5.41 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16

@@ -146,11 +146,15 @@ export const msmListTool: ToolDefinition = tool({
     return `${header}\n` + registry.map((e) => {
       let line = `${e.name} | ${e.skill} | ${e.category} | ${e.description}`;
       if (e.flags && e.flags.length > 0) {
-        const flagNames = e.flags
-          .map((f: { name?: string; flag?: string }) => f.name || f.flag || '')
-          .filter(Boolean);
-        if (flagNames.length > 0) {
-          line += ` [flags: ${flagNames.join(', ')}]`;
+        const flagParts = e.flags.map((f: Record<string, unknown>) => {
+          if (f.flag) return String(f.flag);
+          const name = f.name ? String(f.name) : '';
+          const type = f.type ? String(f.type) : 'string';
+          if (type === 'boolean' || type === 'bool') return `--${name}`;
+          return `--${name} <${type}>`;
+        }).filter(Boolean);
+        if (flagParts.length > 0) {
+          line += ` [flags: ${flagParts.join(', ')}]`;
         }
       }
       return line;

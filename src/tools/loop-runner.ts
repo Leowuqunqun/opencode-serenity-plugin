@@ -31,8 +31,11 @@ if (!STOP_TOKEN || !PORT) {
 
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const PID_DIR = "/tmp/serenity-bg-task";
-const PROGRESS_FILE = CWD_ROOT ? `${CWD_ROOT}/AGENT_SESSIONS/loop-${LABEL}.md` : "";
-const STATUS_FILE = CWD_ROOT ? `${CWD_ROOT}/AGENT_SESSIONS/loop-${LABEL}.json` : "";
+
+// 进度文件：如果指定了 SESSION 目录则放入其中，否则放 AGENT_SESSIONS/
+const progressDir = SESSION_DIR || (CWD_ROOT ? `${CWD_ROOT}/AGENT_SESSIONS` : "");
+const PROGRESS_FILE = progressDir ? `${progressDir}/loop-${LABEL}.md` : "";
+const STATUS_FILE = progressDir ? `${progressDir}/loop-${LABEL}.json` : "";
 let serveProc: ReturnType<typeof spawn> | null = null;
 
 // ── 状态文件 ──
@@ -261,6 +264,16 @@ async function main(): Promise<void> {
   // 2. 模型验证（在启动 serve 前执行，快速失败）
   if (MODEL) validateModel(MODEL);
 
+  // 2b. SESSION 目录存在性检查
+  if (SESSION_ID && SESSION_DIR && !existsSync(SESSION_DIR)) {
+    process.stderr.write(`[loop] 错误: SESSION ${SESSION_ID} 目录不存在: ${SESSION_DIR}\n`);
+    process.exit(1);
+  }
+  if (SESSION_ID && !SESSION_DIR) {
+    process.stderr.write(`[loop] 错误: SESSION ${SESSION_ID} 未找到，请先用 session create 创建\n`);
+    process.exit(1);
+  }
+
   // 3. 启动专用 serve
   startServer(PORT);
   await waitForServer(30);
@@ -284,7 +297,7 @@ async function main(): Promise<void> {
   // 6. 初始化进度文件
   if (PROGRESS_FILE) {
     try {
-      mkdirSync(`${CWD_ROOT}/AGENT_SESSIONS`, { recursive: true });
+      mkdirSync(progressDir, { recursive: true });
       writeFileSync(PROGRESS_FILE, [
         `# loop-task-${LABEL}`,
         ``,

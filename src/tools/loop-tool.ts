@@ -46,8 +46,8 @@ export const loopTool: ToolDefinition = tool({
     "Loop tool — 让 headless agent 在当前 CCC root 下反复执行任务直到完成。" +
     "自动管理专用 opencode serve 生命周期，循环结束自动清理。" +
     "每轮进度会实时更新。" +
-    "支持指定 --session 让 loop agent 继承当前工作会话上下文。" +
-    "支持指定 --model 用特定模型运行（如 deepseek/deepseek-v4-flash）。",
+    "必须指定 --session 让 loop 工作在特定会话上下文中（如 S101）。" +
+    "支持 --model 用特定模型运行（如 deepseek/deepseek-v4-flash）。",
   args: {
     prompt: z
       .string()
@@ -66,8 +66,7 @@ export const loopTool: ToolDefinition = tool({
     session: z
       .string()
       .regex(/^S\d{3,}$/, "格式: S001, S101 等")
-      .optional()
-      .describe("工作会话 ID (如 S101)。loop agent 会自动继承该会话上下文。"),
+      .describe("工作会话 ID (如 S101)。loop 进度文件会写入该会话目录下。"),
   },
   execute: async (input, ctx) => {
     const prompt = input.prompt;

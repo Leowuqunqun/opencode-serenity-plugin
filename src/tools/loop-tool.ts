@@ -18,7 +18,7 @@ import { randomBytes } from "node:crypto";
 import { spawn, execSync } from "node:child_process";
 import { readFileSync, existsSync, unlinkSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getState } from "../state.js";
 import { tool, type ToolDefinition } from "@opencode-ai/plugin";
@@ -37,6 +37,26 @@ function findNodeBin(): string {
 /** 当前活跃的 loop 端口列表（供 dispose 钩子清理） */
 export const activePorts = new Set<number>();
 
+/** CCC 级配置接口 */
+interface SerenityConfig {
+  loop?: { defaultModel?: string };
+}
+
+/** 从 CCC 配置中读取 loop 默认模型 */
+export function readLoopDefaultModel(): string {
+  try {
+    const cwdRoot = getState().cwdRoot;
+    if (!cwdRoot) return "";
+    const configPath = join(cwdRoot, ".opencode", "serenity.json");
+    if (!existsSync(configPath)) return "";
+    const raw = readFileSync(configPath, "utf-8");
+    const config = JSON.parse(raw) as SerenityConfig;
+    return config?.loop?.defaultModel?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function randomPort(): number {
   return 1024 + randomBytes(2).readUInt16BE(0) % 64511;
 }
@@ -46,8 +66,8 @@ export const loopTool: ToolDefinition = tool({
     "Loop tool — 让 headless agent 在当前 CCC root 下反复执行任务直到完成。" +
     "自动管理专用 opencode serve 生命周期，循环结束自动清理。" +
     "每轮进度会实时更新。" +
-    "必须指定 --session 让 loop 工作在特定会话上下文中（如 S101）。" +
-    "支持 --model 用特定模型运行（如 deepseek/deepseek-v4-flash）。",
+    "模型从 .opencode/serenity.json 的 loop.defaultModel 读取，未配置则报错。" +
+    "必须指定 --session 让 loop 工作在特定会话上下文中（如 S101）。",
   args: {
     prompt: z
       .string()
@@ -58,11 +78,6 @@ export const loopTool: ToolDefinition = tool({
       .min(1)
       .max(50)
       .describe("任务标签，用作 session 标题和进度文件名 (如 'SQC-扫描', '字幕制作')"),
-    model: z
-      .string()
-      .regex(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/, "格式: provider/model (如 deepseek/deepseek-v4-flash)")
-      .optional()
-      .describe("指定模型运行 (如 deepseek/deepseek-v4-flash)。不传则用项目默认模型。"),
     session: z
       .string()
       .regex(/^S\d{3,}$/, "格式: S001, S101 等")
@@ -71,7 +86,14 @@ export const loopTool: ToolDefinition = tool({
   execute: async (input, ctx) => {
     const prompt = input.prompt;
     const label = input.label;
-    const model = input.model ?? "";
+    const model = readLoopDefaultModel();
+    if (!model) {
+      throw new Error(
+        "loop 需要配置默认模型。请在 .opencode/serenity.json 中设置：\n" +
+        '  { "loop": { "defaultModel": "provider/model" } }\n' +
+        '  示例: { "loop": { "defaultModel": "opencode-go/deepseek-v4-flash" } }'
+      );
+    }
     const sessionId = input.session ?? "";
     const stopToken = randomBytes(16).toString("hex");
     const port = randomPort();

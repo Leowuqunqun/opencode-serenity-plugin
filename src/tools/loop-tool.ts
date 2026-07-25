@@ -80,8 +80,8 @@ export const loopTool: ToolDefinition = tool({
       .describe("任务标签，用作 session 标题和进度文件名 (如 'SQC-扫描', '字幕制作')"),
     session: z
       .string()
-      .regex(/^S\d{3,}$/, "格式: S001, S101 等")
-      .describe("工作会话 ID (如 S101)。loop 进度文件会写入该会话目录下。"),
+      .min(1, "必须指定工作会话 ID（如 S101）")
+      .describe("工作会话 ID (如 S101, S2026-07-25--desc)。loop 进度文件会写入该会话目录下。"),
   },
   execute: async (input, ctx) => {
     const prompt = input.prompt;

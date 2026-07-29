@@ -72,19 +72,19 @@ describe('activation.tryActivateSync (v0.1 two-phase init)', () => {
     rmSync(tmp, { recursive: true });
   });
 
-  it('失败：git repo 但缺 /.serenity（RR1 异步失败）', async () => {
+  it('失败：git repo 但缺 /.serenity（RR1 同步短路）', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'serenity-noserenity-'));
     execFileSync('git', ['init', '-b', 'main'], { cwd: tmp, stdio: 'ignore' });
     const result = tryActivateSync(fakeInput(tmp));
-    // Phase 1 通过（RR6 同步 OK）
-    expect(result.ok).toBe(true);
-    // Phase 2 失败（RR1 缺 /.serenity）
-    await expect(waitForReady()).rejects.toThrow(/RR1/);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toMatch(/RR1/);
+    }
     expect(isActive()).toBe(false);
     rmSync(tmp, { recursive: true });
   });
 
-  it('失败：/.serenity 内容为空（RR1 异步失败）', async () => {
+  it('失败：/.serenity 内容为空（RR1 Phase 2 失败）', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'serenity-empty-'));
     execFileSync('git', ['init', '-b', 'main'], { cwd: tmp, stdio: 'ignore' });
     writeFileSync(join(tmp, '.serenity'), '   \n');

@@ -17,7 +17,7 @@
  */
 
 import { findGitRoot } from './util/git.js';
-import { readSerenityFile } from './util/serenity-file.js';
+import { readSerenityFile, serenityFileExists } from './util/serenity-file.js';
 import { buildSkillPath, validateSkillExists } from './util/path.js';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -61,6 +61,14 @@ export function tryActivateSync(input: PluginInput, getClient?: GetClient): Sync
   } catch (err) {
     const reason = formatErrorMessage(err, 'RR6: cwd not in git repo');
     log.warn('phase1', 'RR6 failed', { reason, cwd });
+    markDisabled(reason);
+    return { ok: false, reason };
+  }
+
+  // Phase 1 — RR1 同步检查（必须在宁静号根目录）
+  if (!serenityFileExists(cwdRoot)) {
+    const reason = 'RR1: .serenity not found';
+    log.warn('phase1', 'RR1 failed', { reason, cwdRoot });
     markDisabled(reason);
     return { ok: false, reason };
   }

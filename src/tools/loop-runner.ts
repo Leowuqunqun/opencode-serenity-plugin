@@ -141,6 +141,7 @@ function findOpenCodeBin(): string {
   const candidates = [
     "/home/yh/.opencode/bin/opencode",
     "/usr/local/bin/opencode",
+    "/opt/homebrew/bin/opencode",
     "/usr/bin/opencode",
   ];
   for (const p of candidates) {

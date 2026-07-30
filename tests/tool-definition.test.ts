@@ -49,7 +49,7 @@ describe('tool.definition — serenity context injection', () => {
     // 约束列
     expect(output.description).toContain('Subagent constraints (identical to parent agent):');
     expect(output.description).toContain('File tools (read/edit/write/grep/glob) confined to Root');
-    expect(output.description).toContain('bash may be disabled by user');
+    expect(output.description).toContain('bash may be disabled');
     // 可用工具
     expect(output.description).toContain('msm_list');
     expect(output.description).toContain('msm_exec');

@@ -64,7 +64,7 @@ import { initWizard, type InitResult } from './init/init-wizard.js';
 import { ensureGlobalTuiPluginRegistration } from './util/tui-install.js';
 import { log } from './util/log.js';
 import { findSerenityRootSafe, readSerenityCccName } from './fs/resolve-path.js';
-import { setBashDisabled, isBashDisabled } from './bash-toggle.js';
+import { setSafeMode, isSafeModeOn } from './safe-mode.js';
 import pkg from '../package.json' with { type: 'json' };
 
 const VERSION: string = pkg.version;
@@ -252,58 +252,58 @@ const Tui: TuiPlugin = async (api) => {
         );
       },
     },
-    // D: /serenity-bash-on — 启用 bash
+    // D: /serenity-safe-mode on — 启用安全模式（bash 禁用 + 写入黑名单）
     {
-      title: 'serenity: enable bash',
-      value: 'serenity-bash-on',
-      description: 'Enable bash tool (default)',
-      slash: { name: 'serenity-bash-on' },
+      title: 'serenity: enable safe mode',
+      value: 'serenity-safe-mode-on',
+      description: 'Enable safe mode: bash disabled + write blacklist active',
+      slash: { name: 'serenity-safe-mode-on' },
       onSelect: () => {
-        setBashDisabled(false, root ?? undefined);
+        setSafeMode(true, root ?? undefined);
         api.ui.toast({
-          title: 'Bash',
-          message: root ? 'bash is now enabled (CCC-root marker removed)' : 'bash is now enabled',
-          variant: 'success',
-          duration: 3000,
-        });
-      },
-    },
-    // D: /serenity-bash-off — 禁用 bash（静默拒绝）
-    {
-      title: 'serenity: disable bash',
-      value: 'serenity-bash-off',
-      description: 'Disable bash tool (silent reject via plugin hook)',
-      slash: { name: 'serenity-bash-off' },
-      onSelect: () => {
-        setBashDisabled(true, root ?? undefined);
-        api.ui.toast({
-          title: 'Bash',
-          message: root ? 'bash is now disabled (CCC-root marker created)' : 'bash is now disabled',
+          title: 'Safe Mode',
+          message: root ? 'safe mode ON (bash disabled, blacklist active)' : 'safe mode ON',
           variant: 'warning',
           duration: 3000,
         });
       },
     },
-    // D: /serenity-bash-status — 查看当前状态
+    // D: /serenity-safe-mode off — 禁用安全模式（bash 启用 + 写入放开）
     {
-      title: 'serenity: bash status',
-      value: 'serenity-bash-status',
-      description: 'Show current bash toggle status',
-      slash: { name: 'serenity-bash-status' },
+      title: 'serenity: disable safe mode',
+      value: 'serenity-safe-mode-off',
+      description: 'Disable safe mode: bash enabled + write unrestricted',
+      slash: { name: 'serenity-safe-mode-off' },
       onSelect: () => {
-        const disabled = isBashDisabled(root ?? undefined);
-        const envNote = process.env.SERENITY_BASH_DISABLED
-          ? ` (env: SERENITY_BASH_DISABLED=${process.env.SERENITY_BASH_DISABLED})`
+        setSafeMode(false, root ?? undefined);
+        api.ui.toast({
+          title: 'Safe Mode',
+          message: root ? 'safe mode OFF (bash enabled, blacklist inactive)' : 'safe mode OFF',
+          variant: 'success',
+          duration: 3000,
+        });
+      },
+    },
+    // D: /serenity-safe-mode status — 查看状态
+    {
+      title: 'serenity: safe mode status',
+      value: 'serenity-safe-mode-status',
+      description: 'Show current safe mode status',
+      slash: { name: 'serenity-safe-mode-status' },
+      onSelect: () => {
+        const on = isSafeModeOn(root ?? undefined);
+        const envNote = process.env.SERENITY_SAFE_MODE
+          ? ` (env: SERENITY_SAFE_MODE=${process.env.SERENITY_SAFE_MODE})`
           : '';
-        const markerNote = root && disabled
+        const markerNote = root && on
           ? ' [CCC-root marker active]'
           : '';
         api.ui.toast({
-          title: 'Bash Status',
-          message: disabled
-            ? `bash is DISABLED${envNote}${markerNote}`
-            : 'bash is ENABLED',
-          variant: disabled ? 'warning' : 'success',
+          title: 'Safe Mode Status',
+          message: on
+            ? `safe mode is ON${envNote}${markerNote}`
+            : 'safe mode is OFF',
+          variant: on ? 'warning' : 'success',
           duration: 5000,
         });
       },

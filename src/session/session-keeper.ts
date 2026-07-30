@@ -81,13 +81,105 @@ export function resetKeeperStore(): void {
   store.clear();
 }
 
-function getOrCreate(id: SessionId, threshold: number): KeeperState {
+function getOrCreate(id: SessionId, threshold: number, messages?: any[]): KeeperState {
   let s = store.get(id);
   if (!s) {
+    if (messages) {
+      // Rebuild state from message history (session restore path)
+      const rebuilt = rebuildFromHistory(messages, threshold);
+      if (rebuilt) {
+        store.set(id, rebuilt);
+        return rebuilt;
+      }
+    }
     s = { score: 0, threshold, pendingCode: null, pendingThreshold: 0, lastAckType: null, lastAckCode: null, consecutiveAckFailure: 0, lastResetAt: Date.now() };
     store.set(id, s);
   }
   return s;
+}
+
+/** Rebuild keeper state from message history (after session restore/reconnect).
+ *  Finds the most recent `session use` or ACK marker as reset point,
+ *  then accumulates tool weights after it for estimated score. */
+function rebuildFromHistory(messages: any[], threshold: number): KeeperState | null {
+  let score = 0;
+  let foundReset = false;
+  let lastAckType: "recorded" | "skipped" | null = null;
+
+  for (const msg of messages) {
+    if (!msg) continue;
+
+    // 1. Accumulate tool weights (only after the first reset)
+    if (foundReset) {
+      for (const part of msg.parts ?? []) {
+        if (part.type !== "toolUse") continue;
+        const name: string = part.name ?? "";
+        const input: Record<string, unknown> = part.input ?? {};
+
+        if (WRITE_TOOLS.has(name)) {
+          score += WRITE_WEIGHT;
+        } else if (name === "cc_fs") {
+          const sub = String(input.subcommand ?? "");
+          if (WRITE_FS_SUBCOMMANDS.has(sub)) score += WRITE_WEIGHT;
+          else if (READ_FS_SUBCOMMANDS.has(sub)) score += READ_WEIGHT;
+        } else if (name === "cc_git") {
+          const sub = String(input.subcommand ?? "");
+          if (WRITE_GIT_SUBCOMMANDS.has(sub)) score += WRITE_WEIGHT;
+          else if (READ_GIT_SUBCOMMANDS.has(sub)) score += READ_WEIGHT;
+        } else if (READ_TOOLS.has(name)) {
+          score += READ_WEIGHT;
+        }
+      }
+    }
+
+    // 2. Check for reset in this message
+    for (const part of msg.parts ?? []) {
+      // session use tool call
+      if (part.type === "toolUse") {
+        const name: string = part.name ?? "";
+        const input: Record<string, unknown> = part.input ?? {};
+        if (name === "session" && input.subcommand === "use") {
+          foundReset = true;
+          lastAckType = null;
+          score = 0;
+        }
+      }
+      // session use result
+      if (part.type === "toolResult") {
+        const text: string = typeof part.output === "string" ? part.output : "";
+        if (text.includes("[SESSION CONTEXT] Activated:")) {
+          foundReset = true;
+          lastAckType = null;
+          score = 0;
+        }
+      }
+      // ACK in assistant text
+      if (part.type === "text" && msg.info?.role === "assistant") {
+        const text: string = part.text ?? "";
+        const match = text.match(ACK_PATTERN);
+        if (match) {
+          foundReset = true;
+          lastAckType = match[1] as "recorded" | "skipped";
+          score = 0;
+        }
+      }
+    }
+  }
+
+  if (!foundReset) {
+    return {
+      score: 0, threshold, pendingCode: null, pendingThreshold: 0,
+      lastAckType: null, lastAckCode: null, consecutiveAckFailure: 0,
+      lastResetAt: Date.now(),
+    };
+  }
+
+  return {
+    score: Math.min(score, threshold - 1),
+    threshold, pendingCode: null, pendingThreshold: 0,
+    lastAckType, lastAckCode: null, consecutiveAckFailure: 0,
+    lastResetAt: Date.now(),
+  };
 }
 
 // ── Config ──
@@ -183,7 +275,8 @@ export function processSessionKeeper(
   sessionDirName: string,
 ): KeeperResult {
   const threshold = readKeeperThreshold(cwdRoot);
-  const state = getOrCreate(ocSessionId, threshold);
+  // Pass messages for state rebuilding on session restore (no existing state in store)
+  const state = getOrCreate(ocSessionId, threshold, messages);
   state.threshold = threshold;
 
   // Step 1: check for ACK in last assistant response

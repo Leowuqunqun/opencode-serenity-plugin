@@ -22,6 +22,7 @@ import { getState, ensureReady, clearPhase2Flag } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
 import { getActiveSession, setActiveSession, getLastActiveSession } from '../session/active-state.js';
 import { processSessionKeeper } from '../session/session-keeper.js';
+import { log } from '../util/log.js';
 import pkg from '../../package.json' with { type: 'json' };
 
 const VERSION: string = pkg.version;
@@ -235,6 +236,9 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
   // ── Session-Keeper（正常会话阶段，非 Phase 2）──
   if (!state.needsPhase2 && ocSessionId) {
     const active = getActiveSession(ocSessionId) ?? getLastActiveSession();
+    log.debug('keeper', 'hook', {
+      ocSessionId, active: !!active, needsPhase2: state.needsPhase2,
+    });
     if (active) {
       const result = processSessionKeeper(
         ocSessionId, messages, state.cwdRoot, active.dirName,

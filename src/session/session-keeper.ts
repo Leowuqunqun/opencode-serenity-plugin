@@ -9,6 +9,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { log } from "../util/log.js";
 
 // ── Types ──
 
@@ -218,31 +219,27 @@ function injectReminderMsg(text: string, code: string, sessionId: string): strin
   return text + REMINDER_TEXT.replace(/\{code\}/g, code).replace(/S###/, sessionId);
 }
 
-/** Extract tool name from a part (supports both "toolUse"/"toolResult" and SDK "tool" format) */
+/** Extract tool name from a part: supports all known hook formats */
 function toolNameFromPart(part: any): string {
-  return (part as any).tool ?? (part as any).name ?? "";
+  return (part as any).tool ?? (part as any).name ?? (part as any).function ?? "";
 }
 
 /** Check if a part is a tool call (not a result) */
 function isToolCallPart(part: any): boolean {
-  if (part.type === "toolUse") return true;
-  if (part.type === "tool") {
-    const state = (part as any).state;
-    // SDK format: tool with state.status that is pending/running (not completed/error)
-    if (state && typeof state === "object") {
-      const s = (state as any).status;
-      if (s === "pending" || s === "running") return true;
-      if (s === "completed" || s === "error") return false;
-    }
-    // Fallback: if no state, treat as call
-    return true;
+  if (part.type === "toolUse" || part.type === "functionCall") return true;
+  if (part.type === "toolResult" || part.type === "functionResponse") return false;
+  if (part.type === "tool" && part.state) {
+    const s = part.state.status;
+    if (s === "pending" || s === "running") return true;
+    if (s === "completed" || s === "error") return false;
+    return true; // unknown status but type is "tool" — treat as call
   }
   return false;
 }
 
 /** Extract tool input from a part */
 function toolInputFromPart(part: any): Record<string, unknown> {
-  return (part as any).input ?? (part as any).arguments ?? {};
+  return (part as any).input ?? (part as any).arguments ?? (part as any).args ?? {};
 }
 
 function findLastAssistantText(messages: any[]): string | null {
@@ -315,6 +312,14 @@ export function processSessionKeeper(
   const state = getOrCreate(ocSessionId, threshold, messages);
   state.threshold = threshold;
 
+  log.debug('keeper', 'process', {
+    ocSessionId,
+    score: state.score,
+    threshold,
+    pendingCode: state.pendingCode,
+    msgCount: messages.length,
+  });
+
   // Step 1: check for ACK in last assistant response
   if (state.pendingCode) {
     const lastText = findLastAssistantText(messages);
@@ -339,6 +344,9 @@ export function processSessionKeeper(
     const elapsedMinutes = Math.floor((Date.now() - state.lastResetAt) / 60000);
     const totalScore = toolScore + elapsedMinutes;
     state.score = Math.max(totalScore, state.score);
+    log.debug('keeper', 'score', {
+      toolScore, elapsedMinutes, totalScore, score: state.score,
+    });
   }
 
   // Step 3: inject reminder if needed
@@ -352,6 +360,7 @@ export function processSessionKeeper(
     state.pendingCode = code;
     state.pendingThreshold = state.threshold;
     const reminder = injectReminderMsg("", code, sessionDirName).trimStart();
+    log.info('keeper', 'trigger', { code, score: state.score, threshold: state.threshold });
     return { reminder, code };
   }
 

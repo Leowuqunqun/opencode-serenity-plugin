@@ -362,3 +362,172 @@ describe('processSessionKeeper() — no active session', () => {
     expect(r.reminder).not.toContain('S###'); // no session in text
   });
 });
+
+// ── Integration: SDK tool format (type "tool" + tool field) ──
+
+describe('processSessionKeeper() — SDK tool format compatibility', () => {
+  beforeEach(() => { cwd = setupEnv({ sessionKeeper: { threshold: 5 } }); resetKeeperStore(); });
+  afterEach(() => resetEnv());
+
+  function sdkToolPart(toolName: string, input?: Record<string, unknown>, stateStatus?: string): any {
+    return {
+      type: "tool",
+      tool: toolName,
+      input: input ?? {},
+      state: stateStatus ? { status: stateStatus } : { status: "pending" },
+    };
+  }
+
+  it('SDK format: tool type with tool field -> weight applied', () => {
+    const messages = [
+      makeMsg('user', 'work', [
+        sdkToolPart('write', { filePath: '/tmp/x.md' }),
+        sdkToolPart('write', { filePath: '/tmp/y.md' }),
+      ]),
+      makeAssistantMsg('done'),
+    ];
+    const r = processSessionKeeper('sdk-test-1', messages, cwd, SESSION_DIR);
+    expect(r.reminder).not.toBeNull();
+  });
+
+  it('SDK format: read tool recognized', () => {
+    const messages = [
+      makeMsg('user', 'read', [
+        sdkToolPart('read', { filePath: '/tmp/x.md' }),
+        sdkToolPart('grep', { pattern: 'foo' }),
+        sdkToolPart('glob', { pattern: '*.ts' }),
+        sdkToolPart('msm_list'),
+        sdkToolPart('msm_exec'),
+      ]),
+      makeAssistantMsg('done'),
+    ];
+    const r = processSessionKeeper('sdk-test-2', messages, cwd, SESSION_DIR);
+    expect(r.reminder).not.toBeNull();
+  });
+
+  it('SDK format: delegate (task) weight 10', () => {
+    const messages = [
+      makeMsg('user', 'delegate', [sdkToolPart('task', { prompt: 'do work' })]),
+      makeAssistantMsg('done'),
+    ];
+    const r = processSessionKeeper('sdk-test-3', messages, cwd, SESSION_DIR);
+    // 10 points, threshold 5 -> triggers
+    expect(r.reminder).not.toBeNull();
+  });
+
+  it('SDK format: cc_fs subcommands work', () => {
+    const messages = [
+      makeMsg('user', 'fs work', [
+        sdkToolPart('cc_fs', { subcommand: 'mkdir', path: '/tmp/d' }),
+        sdkToolPart('cc_fs', { subcommand: 'append', path: '/tmp/f', content: 'x' }),
+      ]),
+      makeAssistantMsg('done'),
+    ];
+    const r = processSessionKeeper('sdk-test-4', messages, cwd, SESSION_DIR);
+    // 2 write subcommands * 3 = 6 >= threshold 5
+    expect(r.reminder).not.toBeNull();
+  });
+
+  it('SDK format: session use detected as reset', () => {
+    resetKeeperStore();
+    const messages = [
+      makeMsg('user', 'use session', [sdkToolPart('session', { subcommand: 'use', name: 'S001' })]),
+      makeAssistantMsg('session activated'),
+      makeMsg('user', 'some work', [sdkToolPart('write', { filePath: '/tmp/x.md' })]),
+      makeAssistantMsg('done'),
+    ];
+    const r = processSessionKeeper('sdk-test-5', messages, cwd, SESSION_DIR);
+    // 1 write + 3 = 3, below threshold 5
+    expect(r.reminder).toBeNull();
+  });
+
+  it('SDK format: completed/error state not counted', () => {
+    const messages = [
+      makeMsg('user', 'work', [
+        // Tool call: counted
+        { type: 'tool', tool: 'write', input: { filePath: '/tmp/a.md' }, state: { status: 'pending' } },
+        // Tool result: NOT counted
+        { type: 'tool', tool: 'write', input: { filePath: '/tmp/a.md' }, state: { status: 'completed', output: 'ok' } },
+        // Tool error: NOT counted
+        { type: 'tool', tool: 'read', input: { filePath: '/tmp/x.md' }, state: { status: 'error', error: 'fail' } },
+      ]),
+      makeAssistantMsg('done'),
+    ];
+    const r = processSessionKeeper('sdk-test-6', messages, cwd, SESSION_DIR);
+    // Only 1 pending write = 3, below threshold 5
+    expect(r.reminder).toBeNull();
+  });
+});
+
+// ── Integration: rebuild from history ──
+
+describe('processSessionKeeper() — rebuild from history on session restore', () => {
+  beforeEach(() => { cwd = setupEnv({ sessionKeeper: { threshold: 10 } }); resetKeeperStore(); });
+  afterEach(() => resetEnv());
+
+  function makeToolUseMsg(role: string, text: string, tools: any[]): any {
+    return {
+      info: { role },
+      parts: [
+        { type: 'text', text },
+        ...tools.map((t: any) => ({
+          type: 'toolUse',
+          name: t.name ?? t.tool ?? t,
+          input: t.input ?? {},
+        })),
+      ],
+    };
+  }
+
+  it('rebuild from history finds session use and accumulates post-ACK score', () => {
+    const history = [
+      { info: { role: 'user' }, parts: [{ type: 'text', text: 'hi' }] },
+      { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'hello' }] },
+      // session use
+      { info: { role: 'user' }, parts: [{ type: 'text', text: 'use session' }] },
+      { info: { role: 'assistant' }, parts: [{ type: 'toolResult', output: 'Session S001 active\n[SESSION CONTEXT] Activated: S001' }] },
+      // work after session use
+      makeToolUseMsg('user', 'do work', [
+        { name: 'write', input: { filePath: '/tmp/a.md' } },
+        { name: 'write', input: { filePath: '/tmp/b.md' } },
+        { name: 'write', input: { filePath: '/tmp/c.md' } },
+      ]),
+      { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'done' }] },
+    ];
+    // First call: rebuild from history
+    const r = processSessionKeeper('rebuild-test', history, cwd, SESSION_DIR);
+    // 3 writes = 9, below threshold 10
+    expect(r.reminder).toBeNull();
+
+    // Second call: add more work to reach threshold
+    const nextMsg = makeToolUseMsg('user', 'more work', [
+      { name: 'write', input: { filePath: '/tmp/d.md' } },
+    ]);
+    const fullHistory = [...history, nextMsg, { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'done2' }] }];
+    const r2 = processSessionKeeper('rebuild-test', fullHistory, cwd, SESSION_DIR);
+    // 4 writes = 12 >= 10 -> triggers
+    expect(r2.reminder).not.toBeNull();
+  });
+
+  it('rebuild from history without session use starts fresh', () => {
+    const history = [
+      { info: { role: 'user' }, parts: [{ type: 'text', text: 'work' }] },
+      makeToolUseMsg('assistant', 'doing', [{ name: 'write', input: { filePath: '/tmp/a.md' } }]),
+    ];
+    const r = processSessionKeeper('rebuild-test-2', history, cwd, SESSION_DIR);
+    // No session use found -> score 0
+    expect(r.reminder).toBeNull();
+  });
+
+  it('rebuild with prior ACK resets score to zero', () => {
+    const history = [
+      { info: { role: 'user' }, parts: [{ type: 'text', text: 'use' }] },
+      { info: { role: 'assistant' }, parts: [{ type: 'toolResult', output: '[SESSION CONTEXT] Activated: S001' }] },
+      makeToolUseMsg('user', 'work', [{ name: 'write', input: { filePath: '/tmp/a.md' } }]),
+      { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'updated\n[SESSION-KEEPER-recorded-ABC]' }] },
+    ];
+    const r = processSessionKeeper('rebuild-test-3', history, cwd, SESSION_DIR);
+    // ACK found -> score = 0, no reminder
+    expect(r.reminder).toBeNull();
+  });
+});

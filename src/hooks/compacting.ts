@@ -240,6 +240,7 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
         ocSessionId, messages, state.cwdRoot, active.dirName,
       );
       if (result.reminder) {
+        // Inject into the last user message (DCP pattern: only modify user messages)
         for (let i = messages.length - 1; i >= 0; i--) {
           const msg = messages[i];
           if (!msg || msg.info.role !== 'user') continue;

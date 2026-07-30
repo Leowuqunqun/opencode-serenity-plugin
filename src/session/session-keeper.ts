@@ -228,10 +228,14 @@ function isToolCallPart(part: any): boolean {
   if (part.type === "toolUse") return true;
   if (part.type === "tool") {
     const state = (part as any).state;
-    // SDK format: tool with state that is a call/running (not completed/error)
-    if (state && typeof state === "object" && (state.type === "call" || state.type === "running")) return true;
-    // Fallback: if no state or unknown, treat as call
-    if (!state) return true;
+    // SDK format: tool with state.status that is pending/running (not completed/error)
+    if (state && typeof state === "object") {
+      const s = (state as any).status;
+      if (s === "pending" || s === "running") return true;
+      if (s === "completed" || s === "error") return false;
+    }
+    // Fallback: if no state, treat as call
+    return true;
   }
   return false;
 }

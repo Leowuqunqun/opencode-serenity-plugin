@@ -27,19 +27,16 @@ type SessionId = string;
 
 // ── Constants ──
 
-const DEFAULT_THRESHOLD = 100;
+const DEFAULT_THRESHOLD = 150;
 const WRITE_WEIGHT = 3;
 const READ_WEIGHT = 1;
 
 const READ_TOOLS = new Set([
-  "read", "grep", "glob",
-  "anysearch", "web-search",
-  "credential", "landscape-tool", "network-tool",
+  "read", "grep", "glob", "msm_list", "msm_admin", "msm_exec",
 ]);
 
 const WRITE_TOOLS = new Set([
   "write", "edit",
-  "profile-tool",
 ]);
 
 // cc_fs subcommands: read-only vs write

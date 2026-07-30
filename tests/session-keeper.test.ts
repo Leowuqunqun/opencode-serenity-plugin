@@ -70,9 +70,9 @@ function makeMsg(role: string, text: string, parts?: any[]): any {
 describe('readKeeperThreshold()', () => {
   afterEach(() => resetEnv());
 
-  it('no config file -> default 100', () => {
+  it('no config file -> default 150', () => {
     cwd = setupEnv(undefined);
-    expect(readKeeperThreshold(cwd)).toBe(100);
+    expect(readKeeperThreshold(cwd)).toBe(150);
   });
 
   it('config with custom threshold', () => {
@@ -82,12 +82,12 @@ describe('readKeeperThreshold()', () => {
 
   it('config without sessionKeeper section -> default', () => {
     cwd = setupEnv({ loop: { defaultModel: 'x' } });
-    expect(readKeeperThreshold(cwd)).toBe(100);
+    expect(readKeeperThreshold(cwd)).toBe(150);
   });
 
   it('invalid threshold type -> default', () => {
     cwd = setupEnv({ sessionKeeper: { threshold: 'abc' } });
-    expect(readKeeperThreshold(cwd)).toBe(100);
+    expect(readKeeperThreshold(cwd)).toBe(150);
   });
 
   it('threshold zero is valid', () => {
@@ -127,9 +127,9 @@ describe('processSessionKeeper() — basic state machine', () => {
   });
 
   it('injects reminder with random 3-char code when threshold reached', () => {
-    // Generate enough tool calls to reach threshold 100
+    // Generate enough tool calls to reach threshold 150
     const toolUses: any[] = [];
-    for (let i = 0; i < 35; i++) {
+    for (let i = 0; i < 50; i++) {
       toolUses.push(makeToolUsePart('write', { filePath: `/tmp/f${i}.md` }));
     }
     const messages = [
@@ -137,7 +137,7 @@ describe('processSessionKeeper() — basic state machine', () => {
       makeAssistantMsg('all done'),
     ];
     const r = processSessionKeeper(OC_SESSION_ID, messages, cwd, SESSION_DIR);
-    // 35 writes * 3 = 105 >= 100
+    // 50 writes * 3 = 150 >= 150
     expect(r.reminder).not.toBeNull();
     expect(r.code).not.toBeNull();
     expect(r.code).toMatch(/^[A-Za-z0-9]{3}$/);
@@ -147,7 +147,7 @@ describe('processSessionKeeper() — basic state machine', () => {
 
   it('code is random across calls', () => {
     const toolUses: any[] = [];
-    for (let i = 0; i < 35; i++) {
+    for (let i = 0; i < 50; i++) {
       toolUses.push(makeToolUsePart('write', { filePath: `/tmp/f${i}.md` }));
     }
     const msgs = () => [
@@ -299,8 +299,8 @@ describe('processSessionKeeper() — tool weight calculation', () => {
         makeToolUsePart('read', { filePath: '/tmp/a.md' }),
         makeToolUsePart('grep', { pattern: 'foo' }),
         makeToolUsePart('glob', { pattern: '*.ts' }),
-        makeToolUsePart('anysearch', { query: 'test' }),
-        makeToolUsePart('web-search', { query: 'test' }),
+        makeToolUsePart('msm_list'),
+        makeToolUsePart('msm_admin'),
       ]),
       makeAssistantMsg('done'),
     ];

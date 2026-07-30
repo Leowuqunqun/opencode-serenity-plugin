@@ -118,7 +118,7 @@ Upgrade the plugin (`npm update`), all CCCs automatically gain new tools and fea
 
 ## Your Tools
 
-You get **10 tools** after installation, organized by design purpose into five groups.
+You get **10 tools** after installation, organized by design purpose into five groups, plus several **background mechanisms** that run automatically.
 
 ### Safe execution channel
 
@@ -153,9 +153,21 @@ These two tools don't manipulate files — they improve the quality of Agent thi
 
 - **`loop`** — **Loop execution tool**. Runs a headless agent that repeatedly executes a task until completion. Auto-manages a dedicated opencode serve lifecycle; real-time progress updates every round.
   - `--session <S101>` **(required)** — Specify the working session. The loop agent inherits session context and writes progress into the session directory.
-  - `--model <provider/model>` — Specify a model (e.g. `deepseek/deepseek-v4-flash`). Injected via `OPENCODE_CONFIG_CONTENT`.
   - `--label <name>` — Task label for progress file naming.
+  - Model is read from `loop.defaultModel` in `.opencode/serenity.json`; errors if unconfigured.
   - Interruption-resilient: resumes from the progress file without redoing completed work.
+
+### Background mechanisms
+
+The following mechanisms run automatically in the background.
+
+- **Session-Keeper** — In primary (non-headless) agent sessions, tracks READ/WRITE tool activity (write=3pt, read=1pt) and elapsed time (1pt/min). When the cumulative score reaches a threshold, injects a reminder into the user message requiring the model to ACK whether it updated SESSION.md. Reminder persists every round until a valid ACK is received. Threshold configured via `sessionKeeper.threshold` in `.opencode/serenity.json` (default 100).
+
+- **Safe Mode** — Disables bash and activates a write blacklist. Toggled via TUI slash command `/serenity-safe-mode on|off|status`, or by creating/removing the `.serenity-safe-on` marker file in the CCC root. Blacklist patterns are configured via `safeMode.blacklist` in `.opencode/serenity.json`, supporting prefix matching and regex (`regex:` prefix).
+
+- **Loop Default Model** — The default model for loop tool is read from `loop.defaultModel` in `.opencode/serenity.json`, eliminating the need to pass `--model` every time.
+
+Full configuration reference: run `msm_admin ccc-config` in TUI.
 
 ---
 
@@ -190,7 +202,7 @@ These safety mechanisms activate automatically. You don't need to think about th
 
 **Path Isolation (P3):** Every Agent file read/write is confined to the CCC root. It cannot touch system files outside.
 
-**Bash Control (D19):** `msm_exec` is preferred over raw bash (with path-escape checking). Toggle with `/serenity-bash-off` and `/serenity-bash-on`.
+**Safe Mode:** When safe mode is ON, bash is disabled and write/edit operations to blacklisted paths are rejected. Toggle via `/serenity-safe-mode on|off|status`, or by creating/removing `.serenity-safe-on` in the CCC root. Blacklist rules are configured per-CCC in `.opencode/serenity.json` (supports prefix matching and regex).
 
 **Subagent Inheritance:** Any subagent spawned by the Agent inherits all constraints. No bypass possible.
 
@@ -280,7 +292,7 @@ pnpm install      # Install to local ~/.config/opencode/
 
 ---
 
-> **Version**: v0.5.41 &nbsp;|&nbsp; **License**: MIT &nbsp;|&nbsp; **Prerequisites**: Node ≥ 20, OpenCode ≥ 1.16
+> **Version**: v0.5.47 &nbsp;|&nbsp; **License**: MIT &nbsp;|&nbsp; **Prerequisites**: Node ≥ 20, OpenCode ≥ 1.16
 >
 > **Platform**: Serenity is tested on OpenCode CLI (terminal), Linux desktop, and macOS. **Windows is untested and not guaranteed.**
 >

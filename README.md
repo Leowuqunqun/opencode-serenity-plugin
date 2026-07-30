@@ -117,7 +117,7 @@ my-project-serenity/
 
 ## 你现在有哪些工具
 
-安装后你获得 **10 个工具**，按设计目的分为五组。
+安装后你获得 **10 个工具**，按设计目的分为五组。此外还有若干**后台机制**自动运行，无需手动调用。
 
 ### 安全的执行通道
 
@@ -152,9 +152,21 @@ CCC 有明确的目录边界。Agent 对文件系统和版本控制的一切操�
 
 - **`loop`** — **循环执行工具**。让 headless agent 在当前 CCC 下反复执行任务直到完成。自动管理专用 opencode serve 生命周期，每轮进度实时更新。
   - `--session <S101>` **（必需）** — 指定工作会话，loop agent 自动继承会话上下文，进度写入该会话目录
-  - `--model <provider/model>` — 指定模型（如 `deepseek/deepseek-v4-flash`），通过 `OPENCODE_CONFIG_CONTENT` 注入
   - `--label <名称>` — 任务标签，用于进度文件命名
+  - 模型从 `.opencode/serenity.json` 的 `loop.defaultModel` 读取，未配置则报错
   - 中断可恢复：从进度文件续跑，不重复已完成工作
+
+### 后台机制
+
+以下机制在后台自动运行，无需手动调用。
+
+- **Session-Keeper** — 在主 agent 的非 headless 会话中，自动跟踪 READ/WRITE 工具调用（write=3分，read=1分）和经过时间（1分/分钟）。累计积分达到阈值时，在用户消息中注入提醒，要求模型回应是否已更新 SESSION.md。提醒持续每轮注入直到收到有效 ACK。阈值通过 `.opencode/serenity.json` 的 `sessionKeeper.threshold` 配置（默认 100）。
+
+- **Safe Mode** — 安全模式禁用 bash 并激活写入黑名单。通过 TUI 斜杠命令 `/serenity-safe-mode on|off|status` 控制，或直接创建/删除 CCC 根目录的 `.serenity-safe-on` 标记文件。黑名单规则在 `.opencode/serenity.json` 的 `safeMode.blacklist` 中配置，支持前缀匹配和正则表达式（`regex:` 前缀）。
+
+- **Loop Default Model** — loop 工具的默认模型从 `.opencode/serenity.json` 的 `loop.defaultModel` 读取，无需每次传递 `--model` 参数。
+
+完整配置参考：在 TUI 中使用 `msm_admin ccc-config` 查看。
 
 ---
 
@@ -189,7 +201,7 @@ CCC 有明确的目录边界。Agent 对文件系统和版本控制的一切操�
 
 **路径隔离（P3）：** Agent 对文件系统的一切读写限定在 CCC 根目录内。它不会跑出去改你的系统文件。
 
-**Bash 控制（D19）：** 默认首选 `msm_exec`（有路径逃逸检查），而非裸 bash。可以通过 `/serenity-bash-off` 和 `/serenity-bash-on` 控制。
+**Safe Mode（安全模式）：** 安全模式下 bash 被禁用，且 write/edit 到黑名单路径的操作被拒绝。通过 `/serenity-safe-mode on|off|status` 控制，或在 CCC 根目录创建/删除 `.serenity-safe-on` 标记文件。黑名单规则由各 CCC 在 `.opencode/serenity.json` 中配置（支持前缀匹配和正则表达式）。
 
 **Subagent 继承：** Agent 启动的子 Agent 自动继承全部约束——不可能通过子 Agent 绕过安全规则。
 
@@ -272,7 +284,7 @@ cd opencode-serenity-plugin
 pnpm install
 
 pnpm typecheck    # TypeScript 类型检查
-pnpm test         # 413+ 测试（vitest）
+pnpm test         # 478+ 测试（vitest）
 pnpm build        # 编译 + 复制模板
 pnpm install      # 安装到本地 ~/.config/opencode/
 ```
@@ -283,4 +295,4 @@ pnpm install      # 安装到本地 ~/.config/opencode/
 
 详见 [CHANGELOG.md](./CHANGELOG.md)
 
-> **版本**: v0.5.41 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16
+> **版本**: v0.5.47 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16

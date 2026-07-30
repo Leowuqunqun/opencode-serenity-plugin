@@ -20,6 +20,7 @@ interface KeeperState {
   lastAckType: "recorded" | "skipped" | null;
   lastAckCode: string | null;
   consecutiveAckFailure: number;
+  lastResetAt: number;  // timestamp of last ACK or state creation (for time scoring)
 }
 
 type SessionId = string;
@@ -86,7 +87,7 @@ export function resetKeeperStore(): void {
 function getOrCreate(id: SessionId, threshold: number): KeeperState {
   let s = store.get(id);
   if (!s) {
-    s = { score: 0, threshold, pendingCode: null, pendingThreshold: 0, lastAckType: null, lastAckCode: null, consecutiveAckFailure: 0 };
+    s = { score: 0, threshold, pendingCode: null, pendingThreshold: 0, lastAckType: null, lastAckCode: null, consecutiveAckFailure: 0, lastResetAt: Date.now() };
     store.set(id, s);
   }
   return s;
@@ -195,6 +196,7 @@ export function processSessionKeeper(
     if (ack === "recorded" || ack === "skipped") {
       state.score = 0;
       state.pendingCode = null;
+      state.lastResetAt = Date.now();
       state.lastAckType = ack;
       state.lastAckCode = null;
       state.consecutiveAckFailure = 0;
@@ -205,10 +207,12 @@ export function processSessionKeeper(
     }
   }
 
-  // Step 2: accumulate score from tool uses since last ACK
+  // Step 2: accumulate score from tool uses + time since last reset
   if (!state.pendingCode) {
-    const newScore = countToolWeights(messages, WRITE_WEIGHT, READ_WEIGHT);
-    state.score = Math.max(newScore, state.score);
+    const toolScore = countToolWeights(messages, WRITE_WEIGHT, READ_WEIGHT);
+    const elapsedMinutes = Math.floor((Date.now() - state.lastResetAt) / 60000);
+    const totalScore = toolScore + elapsedMinutes;
+    state.score = Math.max(totalScore, state.score);
   }
 
   // Step 3: inject reminder if needed

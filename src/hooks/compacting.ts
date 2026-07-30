@@ -20,7 +20,7 @@
 import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady, clearPhase2Flag } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
-import { getActiveSession, setActiveSession, getLastActiveSession } from '../session/active-state.js';
+import { getActiveSession, setActiveSession, getLastActiveSession, getCapturedOcSessionId } from '../session/active-state.js';
 import { processSessionKeeper } from '../session/session-keeper.js';
 import pkg from '../../package.json' with { type: 'json' };
 
@@ -199,7 +199,7 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
 
   // ── 活跃会话自动恢复 ──
   // 当 Map 为空（进程重启/恢复会话）时，从历史消息中寻找 [SESSION CONTEXT] 模式恢复状态
-  const ocSessionId = (_input as any).sessionID as string | undefined;
+  const ocSessionId = getCapturedOcSessionId();
   if (ocSessionId) {
     const existing = getActiveSession(ocSessionId);
     if (!existing) {
@@ -236,6 +236,7 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
   console.error('[keeper] pre-check', JSON.stringify({
     needsPhase2: state.needsPhase2,
     hasOcSessionId: !!ocSessionId,
+    capturedFrom: 'tool.execute.before',
   }));
   if (!state.needsPhase2 && ocSessionId) {
     const active = getActiveSession(ocSessionId) ?? getLastActiveSession();

@@ -16,6 +16,17 @@ const store = new Map<string, ActiveSession>();
 // 全局最近活跃 session（不依赖 OpenCode sessionID，供 tool.definition 等无 sessionID 的 hook 使用）
 let lastActive: ActiveSession | null = null;
 
+// messages.transform hook 没有 sessionID 参数，从其他 hook 捕获
+let capturedOcSessionId: string | null = null;
+
+export function captureOcSessionId(id: string): void {
+  capturedOcSessionId = id;
+}
+
+export function getCapturedOcSessionId(): string | null {
+  return capturedOcSessionId;
+}
+
 export function setActiveSession(ocSessionId: string, info: ActiveSession): void {
   store.set(ocSessionId, info);
   lastActive = info;

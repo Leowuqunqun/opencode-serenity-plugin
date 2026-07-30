@@ -27,6 +27,7 @@ import { getState, ensureReady } from '../state.js';
 import { isHookEnabled, type HookConfig } from './util.js';
 import { log } from '../util/log.js';
 import { isSafeModeOn, readBlacklist, isPathBlacklisted } from '../safe-mode.js';
+import { captureOcSessionId } from '../session/active-state.js';
 
 type ToolArgs = Record<string, unknown>;
 
@@ -101,6 +102,8 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
   } catch {
     return;
   }
+
+  captureOcSessionId(input.sessionID);
 
   const state = getState();
   // SDK 1.15.13: tool.execute.before signature = (input, output) where output.args is the tool call's arguments

@@ -20,7 +20,7 @@
 import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady, clearPhase2Flag } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
-import { getActiveSession, setActiveSession, getLastActiveSession, getCapturedOcSessionId } from '../session/active-state.js';
+import { getActiveSession, setActiveSession, getLastActiveSession, getCapturedOcSessionId, captureOcSessionId } from '../session/active-state.js';
 import { processSessionKeeper } from '../session/session-keeper.js';
 import pkg from '../../package.json' with { type: 'json' };
 
@@ -393,6 +393,14 @@ const toolDefinitionImpl: NonNullable<Hooks['tool.definition']> = async (
   output.description = context + skillPart + '\n\n' + output.description;
 };
 
+/**
+ * chat.message — fires on every user message with sessionID.
+ * Captures ocSessionId for hooks that don't receive it (messages.transform input = {}).
+ */
+const chatMessageImpl: NonNullable<Hooks['chat.message']> = async (input, _output) => {
+  captureOcSessionId(input.sessionID);
+};
+
 /** 工厂：返回 compacting / system transform / tool definition 相关的 hooks 集合
  *
  * v1.12: 改用 safeCreateHook（factory pattern）
@@ -411,6 +419,12 @@ export function createCompactingHooks(config?: HookConfig): Partial<Hooks> {
   hooks['experimental.chat.messages.transform'] = safeCreateHook(
     'experimental.chat.messages.transform',
     () => messagesTransformImpl,
+    config,
+  );
+
+  hooks['chat.message'] = safeCreateHook(
+    'chat.message',
+    () => chatMessageImpl,
     config,
   );
 

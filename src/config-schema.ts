@@ -37,6 +37,7 @@ export const HOOK_NAMES = [
   'shell.env',
   'tool.execute.before',
   'tool.definition',
+  'chat.message',
   'experimental.chat.system.transform',
   'experimental.chat.messages.transform',
   'experimental.session.compacting',

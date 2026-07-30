@@ -30,6 +30,7 @@ type SessionId = string;
 const DEFAULT_THRESHOLD = 150;
 const WRITE_WEIGHT = 3;
 const READ_WEIGHT = 1;
+const DELEGATE_WEIGHT = 10;
 
 const READ_TOOLS = new Set([
   "read", "grep", "glob", "msm_list", "msm_admin", "msm_exec",
@@ -37,6 +38,10 @@ const READ_TOOLS = new Set([
 
 const WRITE_TOOLS = new Set([
   "write", "edit",
+]);
+
+const DELEGATE_TOOLS = new Set([
+  "task",
 ]);
 
 // cc_fs subcommands: read-only vs write
@@ -109,14 +114,16 @@ function rebuildFromHistory(messages: any[], threshold: number): KeeperState | n
   for (const msg of messages) {
     if (!msg) continue;
 
-    // 1. Accumulate tool weights (only after the first reset)
+      // 1. Accumulate tool weights (only after the first reset)
     if (foundReset) {
       for (const part of msg.parts ?? []) {
-        if (part.type !== "toolUse") continue;
-        const name: string = part.name ?? "";
-        const input: Record<string, unknown> = part.input ?? {};
+        if (!isToolCallPart(part)) continue;
+        const name = toolNameFromPart(part);
+        const input = toolInputFromPart(part);
 
-        if (WRITE_TOOLS.has(name)) {
+        if (DELEGATE_TOOLS.has(name)) {
+          score += DELEGATE_WEIGHT;
+        } else if (WRITE_TOOLS.has(name)) {
           score += WRITE_WEIGHT;
         } else if (name === "cc_fs") {
           const sub = String(input.subcommand ?? "");
@@ -134,10 +141,10 @@ function rebuildFromHistory(messages: any[], threshold: number): KeeperState | n
 
     // 2. Check for reset in this message
     for (const part of msg.parts ?? []) {
-      // session use tool call
-      if (part.type === "toolUse") {
-        const name: string = part.name ?? "";
-        const input: Record<string, unknown> = part.input ?? {};
+      // session use tool call (supports both "toolUse" and SDK "tool" format)
+      if (isToolCallPart(part)) {
+        const name = toolNameFromPart(part);
+        const input = toolInputFromPart(part);
         if (name === "session" && input.subcommand === "use") {
           foundReset = true;
           lastAckType = null;
@@ -211,6 +218,29 @@ function injectReminderMsg(text: string, code: string, sessionId: string): strin
   return text + REMINDER_TEXT.replace(/\{code\}/g, code).replace(/S###/, sessionId);
 }
 
+/** Extract tool name from a part (supports both "toolUse"/"toolResult" and SDK "tool" format) */
+function toolNameFromPart(part: any): string {
+  return (part as any).tool ?? (part as any).name ?? "";
+}
+
+/** Check if a part is a tool call (not a result) */
+function isToolCallPart(part: any): boolean {
+  if (part.type === "toolUse") return true;
+  if (part.type === "tool") {
+    const state = (part as any).state;
+    // SDK format: tool with state that is a call/running (not completed/error)
+    if (state && typeof state === "object" && (state.type === "call" || state.type === "running")) return true;
+    // Fallback: if no state or unknown, treat as call
+    if (!state) return true;
+  }
+  return false;
+}
+
+/** Extract tool input from a part */
+function toolInputFromPart(part: any): Record<string, unknown> {
+  return (part as any).input ?? (part as any).arguments ?? {};
+}
+
 function findLastAssistantText(messages: any[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
@@ -226,16 +256,18 @@ function findLastAssistantText(messages: any[]): string | null {
   return null;
 }
 
-function countToolWeights(messages: any[], writeWeight: number, readWeight: number): number {
+function countToolWeights(messages: any[], writeWeight: number, readWeight: number, delegateWeight: number): number {
   let score = 0;
   for (const msg of messages) {
     if (!msg) continue;
     for (const part of msg.parts ?? []) {
-      if (part.type !== "toolUse") continue;
-      const name: string = part.name ?? "";
-      const input: Record<string, unknown> = part.input ?? {};
+      if (!isToolCallPart(part)) continue;
+      const name = toolNameFromPart(part);
+      const input = toolInputFromPart(part);
 
-      if (WRITE_TOOLS.has(name)) {
+      if (DELEGATE_TOOLS.has(name)) {
+        score += delegateWeight;
+      } else if (WRITE_TOOLS.has(name)) {
         score += writeWeight;
       } else if (name === "cc_fs") {
         const sub = String(input.subcommand ?? "");
@@ -299,7 +331,7 @@ export function processSessionKeeper(
 
   // Step 2: accumulate score from tool uses + time since last reset
   if (!state.pendingCode) {
-    const toolScore = countToolWeights(messages, WRITE_WEIGHT, READ_WEIGHT);
+    const toolScore = countToolWeights(messages, WRITE_WEIGHT, READ_WEIGHT, DELEGATE_WEIGHT);
     const elapsedMinutes = Math.floor((Date.now() - state.lastResetAt) / 60000);
     const totalScore = toolScore + elapsedMinutes;
     state.score = Math.max(totalScore, state.score);

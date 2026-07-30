@@ -51,7 +51,10 @@ function writeMarker(root: string, name: string): void {
 describe('isSafeModeOn()', () => {
   it('default: OFF (no marker, no env)', () => {
     const root = setupCccRoot();
+    // Override server mode detection with env var
+    process.env.SERENITY_SAFE_MODE = 'false';
     expect(isSafeModeOn(root)).toBe(false);
+    delete process.env.SERENITY_SAFE_MODE;
     rmSync(root, { recursive: true, force: true });
   });
 

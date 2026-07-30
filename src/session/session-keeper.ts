@@ -9,7 +9,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { log } from "../util/log.js";
+// debug logs use console.error directly (log.ts is no-op in release)
 
 // ── Types ──
 
@@ -312,13 +312,13 @@ export function processSessionKeeper(
   const state = getOrCreate(ocSessionId, threshold, messages);
   state.threshold = threshold;
 
-  log.debug('keeper', 'process', {
+  console.error('[keeper] process', JSON.stringify({
     ocSessionId,
     score: state.score,
     threshold,
     pendingCode: state.pendingCode,
     msgCount: messages.length,
-  });
+  }));
 
   // Step 1: check for ACK in last assistant response
   if (state.pendingCode) {
@@ -344,9 +344,9 @@ export function processSessionKeeper(
     const elapsedMinutes = Math.floor((Date.now() - state.lastResetAt) / 60000);
     const totalScore = toolScore + elapsedMinutes;
     state.score = Math.max(totalScore, state.score);
-    log.debug('keeper', 'score', {
+    console.error('[keeper] score', JSON.stringify({
       toolScore, elapsedMinutes, totalScore, score: state.score,
-    });
+    }));
   }
 
   // Step 3: inject reminder if needed
@@ -360,7 +360,7 @@ export function processSessionKeeper(
     state.pendingCode = code;
     state.pendingThreshold = state.threshold;
     const reminder = injectReminderMsg("", code, sessionDirName).trimStart();
-    log.info('keeper', 'trigger', { code, score: state.score, threshold: state.threshold });
+    console.error('[keeper] trigger', JSON.stringify({ code, score: state.score, threshold: state.threshold }));
     return { reminder, code };
   }
 

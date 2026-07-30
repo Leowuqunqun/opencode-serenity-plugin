@@ -21,6 +21,7 @@ import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady, clearPhase2Flag } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
 import { getActiveSession, setActiveSession, getLastActiveSession } from '../session/active-state.js';
+import { processSessionKeeper } from '../session/session-keeper.js';
 import pkg from '../../package.json' with { type: 'json' };
 
 const VERSION: string = pkg.version;
@@ -225,6 +226,28 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
               }
               break;
             }
+          }
+        }
+      }
+    }
+  }
+
+  // ── Session-Keeper（正常会话阶段，非 Phase 2）──
+  if (!state.needsPhase2 && ocSessionId) {
+    const active = getActiveSession(ocSessionId) ?? getLastActiveSession();
+    if (active) {
+      const result = processSessionKeeper(
+        ocSessionId, messages, state.cwdRoot, active.dirName,
+      );
+      if (result.reminder) {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const msg = messages[i];
+          if (!msg || msg.info.role !== 'user') continue;
+          for (const part of msg.parts) {
+            if (part.type !== 'text') continue;
+            if (part.ignored || (part as any).synthetic) continue;
+            part.text = part.text + '\n\n' + result.reminder;
+            return;
           }
         }
       }

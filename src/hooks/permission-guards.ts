@@ -96,14 +96,15 @@ function classifyPath(value: string, cwdRoot: string): 'inside' | 'outside' | 's
 }
 
 const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (input, _output) => {
+  captureOcSessionId(input.sessionID);
+  console.error('[keeper] tool.execute.before captured sessionID:', input.sessionID);
+
   // v0.1: 阻塞等待 Phase 2 完成（失败时：放行所有 = plugin 不工作）
   try {
     await ensureReady();
   } catch {
     return;
   }
-
-  captureOcSessionId(input.sessionID);
 
   const state = getState();
   // SDK 1.15.13: tool.execute.before signature = (input, output) where output.args is the tool call's arguments

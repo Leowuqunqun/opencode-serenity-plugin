@@ -160,7 +160,7 @@ CCC 有明确的目录边界。Agent 对文件系统和版本控制的一切操�
 
 以下机制在后台自动运行，无需手动调用。
 
-- **Session-Keeper** — 在主 agent 的非 headless 会话中，自动跟踪工具调用积分（write/edit=3分，task=10分，read/grep/glob/msm=1分）+ 经过时间（1分/分钟）。累计达到阈值时通过 `tool.execute.after` 即时在工具返回中注入提醒（DCP 模式），要求模型回应 `[SESSION-KEEPER-recorded-{code}]` 或 `[SESSION-KEEPER-skipped-{code}]`。仅正确 code 的 ACK 清零。阈值通过 `.opencode/serenity.json` 的 `sessionKeeper.threshold` 配置（默认 150）。
+- **Session-Keeper** — 在主 agent 的非 headless 会话中，自动跟踪工具调用积分（write/edit=3分，task=10分，read/grep/glob/msm=1分）+ 经过时间（1分/分钟）。累计达到阈值时通过 `tool.execute.after` 即时在工具返回中注入提醒（DCP 模式），要求模型回应 `[SESSION-KEEPER-recorded-{code}]` 或 `[SESSION-KEEPER-skipped-{code}]`。提醒持续注入直至收到正确 code 的 ACK（text 或 reasoning part 均有效），ACK 后积分清零。会话恢复从历史消息中自动重建活跃会话。阈值通过 `.opencode/serenity.json` 的 `sessionKeeper.threshold` 配置（默认 150）。
 
 - **Safe Mode** — 安全模式禁用 bash 并激活写入黑名单。通过 TUI 斜杠命令 `/serenity-safe-mode on|off|status` 控制，或直接创建/删除 CCC 根目录的 `.serenity-safe-on` 标记文件。黑名单规则在 `.opencode/serenity.json` 的 `safeMode.blacklist` 中配置，支持前缀匹配和正则表达式（`regex:` 前缀）。
 
@@ -295,4 +295,4 @@ pnpm install      # 安装到本地 ~/.config/opencode/
 
 详见 [CHANGELOG.md](./CHANGELOG.md)
 
-> **版本**: v0.5.71 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16
+> **版本**: v0.7.0 &nbsp;|&nbsp; **许可**: MIT &nbsp;|&nbsp; **前置**: Node ≥ 20, OpenCode ≥ 1.16

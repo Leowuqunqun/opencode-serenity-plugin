@@ -1,5 +1,16 @@
 # 更新日志
 
+## v0.7.0 — 🛠️ Session-Keeper 全面修复与加固
+
+Session-Keeper 从 v0.5.48 到 v0.7.0 经过多轮修复，本次小版本整合所有改动：
+
+- **触发机制**：改为增量计分（`tool.execute.before` 实时累加）+ DCP 即时注入（`tool.execute.after` 工具返回中直接提醒），不再依赖遍历历史消息。
+- **计分规则**：write/edit=3分，task=10分，read/grep/glob/msm=1分，时间 1分/分钟；默认阈值 150。
+- **ACK 检测**：text 和 reasoning part 均有效；只有正确 code 才清零，未 ACK 每轮持续提醒。
+- **会话恢复**：反向扫描最近匹配 + 校验 `YYYY-MM-DD--` 前缀，杜绝子 agent 系统提示污染会话名。
+- **SDK 适配**：统一 ToolPart 格式（`type=="tool"`），移除废弃 toolUse/toolResult 分支。
+- **代码加固**：清理死字段、空安全防护、`removeActiveSession` 逻辑修复。
+
 ## v0.5.29 — 🧠 Todo 列表自动显示当前工作会话
 
 激活一个工作会话后，Agent 创建的每条 todo 列表顶部都会自动出现当前会话的标识（如 `SESSION: S035 — 插件长期开发`），一眼就知道"现在在哪个会话里干活"。这个标识项以已完成状态显示，不会跟待办任务混在一起。

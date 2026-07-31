@@ -234,6 +234,7 @@ export function addToolWeight(sessionId: string, toolName: string, args: Record<
 
   if (weight > 0) {
     state.score += weight;
+    console.error('[keeper] +weight', JSON.stringify({ tool: toolName, weight, score: state.score }));
   }
 }
 
@@ -296,6 +297,7 @@ export function processSessionKeeper(
     if (delta > 0) {
       state.score += delta;
       state.lastElapsedContribution = elapsedSinceReset;
+      console.error('[keeper] +time', JSON.stringify({ delta, score: state.score }));
     }
   }
 

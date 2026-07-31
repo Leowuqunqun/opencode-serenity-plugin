@@ -224,6 +224,9 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
                 }
               }
               if (dirName) {
+                // Validate dirName looks like a real session directory (prevent garbled matches)
+                const isValidDir = /^(?:\d{4}-\d{2}-\d{2}--|S\d{3,})/.test(dirName);
+                if (!isValidDir) continue;
                 const idMatch = dirName.match(/S(\d{3,})/);
                 const sessionId = idMatch ? `S${idMatch[1]}` : dirName;
                 setActiveSession(ocSessionId, { sessionId, dirName, mdPath });

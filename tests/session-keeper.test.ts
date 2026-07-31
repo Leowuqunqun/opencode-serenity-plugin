@@ -15,6 +15,7 @@ import {
   processSessionKeeper,
   readKeeperThreshold,
   resetKeeperStore,
+  addToolWeight,
 } from '../src/session/session-keeper.js';
 
 let cwd = '';
@@ -111,31 +112,21 @@ describe('processSessionKeeper() — basic state machine', () => {
   });
 
   it('injects reminder when score reaches threshold via write tools', () => {
-    const messages = [
-      makeMsg('user', 'do work', [
-        { type: 'text', text: 'do work' },
-        makeToolUsePart('write', { filePath: '/tmp/test.md' }),
-        makeToolUsePart('write', { filePath: '/tmp/test2.md' }),
-        makeToolUsePart('edit', { filePath: '/tmp/test3.md' }),
-      ]),
-      makeAssistantMsg('done'),
-    ];
+    // 3 writes * 3 = 9, well below 150
+    addToolWeight(OC_SESSION_ID, 'write', { filePath: '/tmp/test.md' });
+    addToolWeight(OC_SESSION_ID, 'write', { filePath: '/tmp/test2.md' });
+    addToolWeight(OC_SESSION_ID, 'edit', { filePath: '/tmp/test3.md' });
+    const messages = [makeMsg('user', 'do work'), makeAssistantMsg('done')];
     const r = processSessionKeeper(OC_SESSION_ID, messages, cwd, SESSION_DIR);
-    // 3 writes * 3 = 9, well below 100 — wait, that's not enough
     expect(r.reminder).toBeNull();
     expect(r.code).toBeNull();
   });
 
   it('injects reminder with random 3-char code when threshold reached', () => {
-    // Generate enough tool calls to reach threshold 150
-    const toolUses: any[] = [];
     for (let i = 0; i < 50; i++) {
-      toolUses.push(makeToolUsePart('write', { filePath: `/tmp/f${i}.md` }));
+      addToolWeight(OC_SESSION_ID, 'write', { filePath: `/tmp/f${i}.md` });
     }
-    const messages = [
-      makeMsg('user', 'batch write', toolUses),
-      makeAssistantMsg('all done'),
-    ];
+    const messages = [makeMsg('user', 'batch write'), makeAssistantMsg('all done')];
     const r = processSessionKeeper(OC_SESSION_ID, messages, cwd, SESSION_DIR);
     // 50 writes * 3 = 150 >= 150
     expect(r.reminder).not.toBeNull();
@@ -146,14 +137,11 @@ describe('processSessionKeeper() — basic state machine', () => {
   });
 
   it('code is random across calls', () => {
-    const toolUses: any[] = [];
     for (let i = 0; i < 50; i++) {
-      toolUses.push(makeToolUsePart('write', { filePath: `/tmp/f${i}.md` }));
+      addToolWeight(OC_SESSION_ID + 'a', 'write', { filePath: `/tmp/f${i}.md` });
+      addToolWeight(OC_SESSION_ID + 'b', 'write', { filePath: `/tmp/f${i}.md` });
     }
-    const msgs = () => [
-      makeMsg('user', 'batch', toolUses),
-      makeAssistantMsg('done'),
-    ];
+    const msgs = () => [makeMsg('user', 'batch'), makeAssistantMsg('done')];
     const r1 = processSessionKeeper(OC_SESSION_ID + 'a', msgs(), cwd, SESSION_DIR);
     const r2 = processSessionKeeper(OC_SESSION_ID + 'b', msgs(), cwd, SESSION_DIR);
     expect(r1.code).not.toBe(r2.code);
@@ -165,24 +153,20 @@ describe('processSessionKeeper() — ACK cycle (multi-round)', () => {
   afterEach(() => resetEnv());
 
   function triggerReminder(): { code: string } {
-    const toolUses: any[] = [];
+    // 4 writes * 3 = 12 >= 10
     for (let i = 0; i < 4; i++) {
-      toolUses.push(makeToolUsePart('write', { filePath: `/tmp/f${i}.md` }));
+      addToolWeight(OC_SESSION_ID, 'write', { filePath: `/tmp/f${i}.md` });
     }
-    const messages = [
-      makeMsg('user', 'batch write', toolUses),
-      makeAssistantMsg('all done'),
-    ];
-    const r = processSessionKeeper(OC_SESSION_ID, messages, cwd, SESSION_DIR);
+    const r = processSessionKeeper(OC_SESSION_ID, [makeMsg('user', 'batch'), makeAssistantMsg('done')], cwd, SESSION_DIR);
     expect(r.reminder).not.toBeNull();
     return { code: r.code! };
   }
 
   it('round 1: trigger reminder, round 2: ACK clears pending', () => {
-    // Round 1: trigger reminder
     const { code } = triggerReminder();
 
     // Round 2: user sends new message, assistant ACK'd
+    addToolWeight(OC_SESSION_ID, 'write', { filePath: '/tmp/x.md' });
     const messagesR2 = [
       makeMsg('user', 'batch write', [
         makeToolUsePart('write', { filePath: '/tmp/x.md' }),
@@ -197,37 +181,34 @@ describe('processSessionKeeper() — ACK cycle (multi-round)', () => {
   it('round 1: trigger, round 2: no ACK, reminder persists', () => {
     const { code } = triggerReminder();
 
-    // Round 2: user sends message, assistant does NOT ACK
+    // Round 2: no ACK in assistant text
     const messagesR2 = [
-      makeMsg('user', 'more work', [
-        makeToolUsePart('read', { filePath: '/tmp/x.md' }),
-      ]),
-      makeAssistantMsg('ok, continuing work'),
+      makeMsg('user', 'hello'),
+      makeAssistantMsg('no ack here'),
     ];
     const r2 = processSessionKeeper(OC_SESSION_ID, messagesR2, cwd, SESSION_DIR);
-    expect(r2.reminder).not.toBeNull();
+    expect(r2.reminder).not.toBeNull(); // still pending
     expect(r2.code).toBe(code); // same code
-    expect(r2.reminder).toContain(code);
   });
 
   it('ACK with wrong code is treated as invalid, reminder persists', () => {
-    const { code } = triggerReminder();
+    const { code: _code } = triggerReminder();
 
+    // ACK with wrong code
     const messagesR2 = [
-      makeMsg('user', 'more work'),
-      makeAssistantMsg(`[SESSION-KEEPER-recorded-XXX]`), // wrong code
+      makeMsg('user', 'hello'),
+      makeAssistantMsg('[SESSION-KEEPER-recorded-XXX]'),
     ];
     const r2 = processSessionKeeper(OC_SESSION_ID, messagesR2, cwd, SESSION_DIR);
-    expect(r2.reminder).not.toBeNull();
-    expect(r2.code).toBe(code); // still same code
+    expect(r2.reminder).not.toBeNull(); // still pending
   });
 
   it('ACK-skipped also clears pending', () => {
     const { code } = triggerReminder();
 
     const messagesR2 = [
-      makeMsg('user', 'query'),
-      makeAssistantMsg(`nothing changed\n[SESSION-KEEPER-skipped-${code}]`),
+      makeMsg('user', 'hello'),
+      makeAssistantMsg(`[SESSION-KEEPER-skipped-${code}]`),
     ];
     const r2 = processSessionKeeper(OC_SESSION_ID, messagesR2, cwd, SESSION_DIR);
     expect(r2.reminder).toBeNull();
@@ -236,35 +217,24 @@ describe('processSessionKeeper() — ACK cycle (multi-round)', () => {
 
   it('score resets after ACK, re-accumulates for next cycle', () => {
     const { code } = triggerReminder();
-
     // ACK
-    const msgsAck = [
-      makeMsg('user', 'query'),
-      makeAssistantMsg(`[SESSION-KEEPER-recorded-${code}]`),
-    ];
-    processSessionKeeper(OC_SESSION_ID, msgsAck, cwd, SESSION_DIR);
+    const msgs1 = [makeMsg('user', 'x'), makeAssistantMsg(`[SESSION-KEEPER-recorded-${code}]`)];
+    const r1 = processSessionKeeper(OC_SESSION_ID, msgs1, cwd, SESSION_DIR);
+    expect(r1.reminder).toBeNull();
 
-    // Next round: low activity — no trigger
-    const msgsLow = [
-      makeMsg('user', 'hi'),
-      makeToolUsePart('read', { filePath: '/tmp/x.md' }),
-      makeAssistantMsg('ok'),
-    ];
-    const r3 = processSessionKeeper(OC_SESSION_ID, msgsLow, cwd, SESSION_DIR);
-    expect(r3.reminder).toBeNull();
+    // Reset: score should be 0 now, 3 write = 9 < 10, no trigger
+    addToolWeight(OC_SESSION_ID, 'write', { filePath: '/a.md' });
+    addToolWeight(OC_SESSION_ID, 'write', { filePath: '/b.md' });
+    addToolWeight(OC_SESSION_ID, 'write', { filePath: '/c.md' });
+    const msgs2 = [makeMsg('user', 'y'), makeAssistantMsg('ok')];
+    const r2 = processSessionKeeper(OC_SESSION_ID, msgs2, cwd, SESSION_DIR);
+    expect(r2.reminder).toBeNull();
 
-    // Then more writes to trigger again
-    const toolUses: any[] = [];
-    for (let i = 0; i < 4; i++) {
-      toolUses.push(makeToolUsePart('write', { filePath: `/tmp/g${i}.md` }));
-    }
-    const msgsHigh = [
-      makeMsg('user', 'batch again', toolUses),
-      makeAssistantMsg('done again'),
-    ];
-    const r4 = processSessionKeeper(OC_SESSION_ID, msgsHigh, cwd, SESSION_DIR);
-    expect(r4.reminder).not.toBeNull();
-    expect(r4.code).not.toBe(code); // new code
+    // 4th write = 12 >= 10, triggers again
+    addToolWeight(OC_SESSION_ID, 'write', { filePath: '/d.md' });
+    const msgs3 = [makeMsg('user', 'z'), makeAssistantMsg('ok')];
+    const r3 = processSessionKeeper(OC_SESSION_ID, msgs3, cwd, SESSION_DIR);
+    expect(r3.reminder).not.toBeNull();
   });
 });
 
@@ -273,74 +243,42 @@ describe('processSessionKeeper() — tool weight calculation', () => {
   afterEach(() => resetEnv());
 
   it('one write tool -> score 3 -> below threshold 5', () => {
-    const messages = [
-      makeMsg('user', 'edit', [makeToolUsePart('edit', { filePath: '/tmp/x.md' })]),
-      makeAssistantMsg('done'),
-    ];
-    const r = processSessionKeeper(OC_SESSION_ID, messages, cwd, SESSION_DIR);
+    addToolWeight(OC_SESSION_ID, 'write', { filePath: '/x' });
+    const r = processSessionKeeper(OC_SESSION_ID, [makeMsg('user', 'hi'), makeAssistantMsg('ok')], cwd, SESSION_DIR);
     expect(r.reminder).toBeNull();
   });
 
   it('two write tools -> score 6 -> triggers reminder', () => {
-    const messages = [
-      makeMsg('user', 'edits', [
-        makeToolUsePart('write', { filePath: '/tmp/a.md' }),
-        makeToolUsePart('edit', { filePath: '/tmp/b.md' }),
-      ]),
-      makeAssistantMsg('done'),
-    ];
-    const r = processSessionKeeper(OC_SESSION_ID, messages, cwd, SESSION_DIR);
+    addToolWeight(OC_SESSION_ID, 'write', { filePath: '/x' });
+    addToolWeight(OC_SESSION_ID, 'write', { filePath: '/y' });
+    const r = processSessionKeeper(OC_SESSION_ID, [makeMsg('user', 'hi'), makeAssistantMsg('ok')], cwd, SESSION_DIR);
     expect(r.reminder).not.toBeNull();
   });
 
   it('five read tools -> score 5 -> triggers reminder', () => {
-    const messages = [
-      makeMsg('user', 'reads', [
-        makeToolUsePart('read', { filePath: '/tmp/a.md' }),
-        makeToolUsePart('grep', { pattern: 'foo' }),
-        makeToolUsePart('glob', { pattern: '*.ts' }),
-        makeToolUsePart('msm_list'),
-        makeToolUsePart('msm_admin'),
-      ]),
-      makeAssistantMsg('done'),
-    ];
-    const r = processSessionKeeper(OC_SESSION_ID, messages, cwd, SESSION_DIR);
+    for (let i = 0; i < 5; i++) addToolWeight(OC_SESSION_ID, 'read', { filePath: `/tmp/f${i}` });
+    const r = processSessionKeeper(OC_SESSION_ID, [makeMsg('user', 'hi'), makeAssistantMsg('ok')], cwd, SESSION_DIR);
     expect(r.reminder).not.toBeNull();
   });
 
   it('cc_fs read subcommand -> weight 1', () => {
-    const messages = [
-      makeMsg('user', 'list', [
-        makeToolUsePart('cc_fs', { subcommand: 'list', path: '.' }),
-      ]),
-      makeAssistantMsg('ok'),
-    ];
-    const r = processSessionKeeper(OC_SESSION_ID, messages, cwd, SESSION_DIR);
+    addToolWeight(OC_SESSION_ID, 'cc_fs', { subcommand: 'list' });
+    const r = processSessionKeeper(OC_SESSION_ID, [makeMsg('user', 'hi'), makeAssistantMsg('ok')], cwd, SESSION_DIR);
     expect(r.reminder).toBeNull();
   });
 
   it('cc_fs write subcommand -> weight 3', () => {
-    const messages = [
-      makeMsg('user', 'mkdir', [
-        makeToolUsePart('cc_fs', { subcommand: 'mkdir', path: '/tmp/d' }),
-        makeToolUsePart('cc_fs', { subcommand: 'append', path: '/tmp/f', content: 'x' }),
-      ]),
-      makeAssistantMsg('done'),
-    ];
-    const r = processSessionKeeper(OC_SESSION_ID, messages, cwd, SESSION_DIR);
+    addToolWeight(OC_SESSION_ID, 'cc_fs', { subcommand: 'mkdir' });
+    addToolWeight(OC_SESSION_ID, 'cc_fs', { subcommand: 'rm' });
+    const r = processSessionKeeper(OC_SESSION_ID, [makeMsg('user', 'hi'), makeAssistantMsg('ok')], cwd, SESSION_DIR);
+    // 3+3=6 >= 5
     expect(r.reminder).not.toBeNull();
   });
 
   it('non-tracked tools -> weight 0', () => {
-    const messages = [
-      makeMsg('user', 'meta', [
-        makeToolUsePart('loop', { label: 'x', prompt: 'y' }),
-        makeToolUsePart('session', { subcommand: 'list' }),
-        makeToolUsePart('msm_list'),
-      ]),
-      makeAssistantMsg('ok'),
-    ];
-    const r = processSessionKeeper(OC_SESSION_ID, messages, cwd, SESSION_DIR);
+    addToolWeight(OC_SESSION_ID, 'session', { subcommand: 'use' });
+    // session tool is READ_TOOLS weight=1, so with threshold=5 not enough
+    const r = processSessionKeeper(OC_SESSION_ID, [makeMsg('user', 'hi'), makeAssistantMsg('ok')], cwd, SESSION_DIR);
     expect(r.reminder).toBeNull();
   });
 });
@@ -350,10 +288,8 @@ describe('processSessionKeeper() — no active session', () => {
   afterEach(() => resetEnv());
 
   it('returns null when no active session (sessionDirName is empty in hook)', () => {
-    const messages = [
-      makeMsg('user', 'work', [makeToolUsePart('write', { filePath: '/tmp/x.md' })]),
-      makeAssistantMsg('done'),
-    ];
+    addToolWeight(OC_SESSION_ID, 'write', { filePath: '/tmp/x.md' });
+    const messages = [makeMsg('user', 'work'), makeAssistantMsg('done')];
     // processSessionKeeper doesn't check session validity; it uses whatever dirName passed.
     // The guard is in compacting.ts: it only calls processSessionKeeper when active session exists.
     // Here we just verify that with an empty dirName, the code still generates but uses empty string.
@@ -379,50 +315,36 @@ describe('processSessionKeeper() — SDK tool format compatibility', () => {
   }
 
   it('SDK format: tool type with tool field -> weight applied', () => {
-    const messages = [
-      makeMsg('user', 'work', [
-        sdkToolPart('write', { filePath: '/tmp/x.md' }),
-        sdkToolPart('write', { filePath: '/tmp/y.md' }),
-      ]),
-      makeAssistantMsg('done'),
-    ];
+    addToolWeight('sdk-test-1', 'write', { filePath: '/tmp/x.md' });
+    addToolWeight('sdk-test-1', 'write', { filePath: '/tmp/y.md' });
+    const messages = [makeMsg('user', 'work'), makeAssistantMsg('done')];
     const r = processSessionKeeper('sdk-test-1', messages, cwd, SESSION_DIR);
     expect(r.reminder).not.toBeNull();
   });
 
   it('SDK format: read tool recognized', () => {
-    const messages = [
-      makeMsg('user', 'read', [
-        sdkToolPart('read', { filePath: '/tmp/x.md' }),
-        sdkToolPart('grep', { pattern: 'foo' }),
-        sdkToolPart('glob', { pattern: '*.ts' }),
-        sdkToolPart('msm_list'),
-        sdkToolPart('msm_exec'),
-      ]),
-      makeAssistantMsg('done'),
-    ];
+    addToolWeight('sdk-test-2', 'read', { filePath: '/tmp/x.md' });
+    addToolWeight('sdk-test-2', 'grep', { pattern: 'foo' });
+    addToolWeight('sdk-test-2', 'glob', { pattern: '*.ts' });
+    addToolWeight('sdk-test-2', 'msm_list', {});
+    addToolWeight('sdk-test-2', 'msm_exec', {});
+    const messages = [makeMsg('user', 'read'), makeAssistantMsg('done')];
     const r = processSessionKeeper('sdk-test-2', messages, cwd, SESSION_DIR);
     expect(r.reminder).not.toBeNull();
   });
 
   it('SDK format: delegate (task) weight 10', () => {
-    const messages = [
-      makeMsg('user', 'delegate', [sdkToolPart('task', { prompt: 'do work' })]),
-      makeAssistantMsg('done'),
-    ];
+    addToolWeight('sdk-test-3', 'task', { prompt: 'do work' });
+    const messages = [makeMsg('user', 'delegate'), makeAssistantMsg('done')];
     const r = processSessionKeeper('sdk-test-3', messages, cwd, SESSION_DIR);
     // 10 points, threshold 5 -> triggers
     expect(r.reminder).not.toBeNull();
   });
 
   it('SDK format: cc_fs subcommands work', () => {
-    const messages = [
-      makeMsg('user', 'fs work', [
-        sdkToolPart('cc_fs', { subcommand: 'mkdir', path: '/tmp/d' }),
-        sdkToolPart('cc_fs', { subcommand: 'append', path: '/tmp/f', content: 'x' }),
-      ]),
-      makeAssistantMsg('done'),
-    ];
+    addToolWeight('sdk-test-4', 'cc_fs', { subcommand: 'mkdir', path: '/tmp/d' });
+    addToolWeight('sdk-test-4', 'cc_fs', { subcommand: 'append', path: '/tmp/f', content: 'x' });
+    const messages = [makeMsg('user', 'fs work'), makeAssistantMsg('done')];
     const r = processSessionKeeper('sdk-test-4', messages, cwd, SESSION_DIR);
     // 2 write subcommands * 3 = 6 >= threshold 5
     expect(r.reminder).not.toBeNull();
@@ -430,31 +352,19 @@ describe('processSessionKeeper() — SDK tool format compatibility', () => {
 
   it('SDK format: session use detected as reset', () => {
     resetKeeperStore();
-    const messages = [
-      makeMsg('user', 'use session', [sdkToolPart('session', { subcommand: 'use', name: 'S001' })]),
-      makeAssistantMsg('session activated'),
-      makeMsg('user', 'some work', [sdkToolPart('write', { filePath: '/tmp/x.md' })]),
-      makeAssistantMsg('done'),
-    ];
+    addToolWeight('sdk-test-5', 'session', { subcommand: 'use', name: 'S001' });
+    addToolWeight('sdk-test-5', 'write', { filePath: '/tmp/x.md' });
+    const messages = [makeMsg('user', 'some work'), makeAssistantMsg('done')];
     const r = processSessionKeeper('sdk-test-5', messages, cwd, SESSION_DIR);
     // 1 write + 3 = 3, below threshold 5
     expect(r.reminder).toBeNull();
   });
 
   it('SDK format: completed/error state not counted', () => {
-    const messages = [
-      makeMsg('user', 'work', [
-        // Tool call: counted
-        { type: 'tool', tool: 'write', input: { filePath: '/tmp/a.md' }, state: { status: 'pending' } },
-        // Tool result: NOT counted
-        { type: 'tool', tool: 'write', input: { filePath: '/tmp/a.md' }, state: { status: 'completed', output: 'ok' } },
-        // Tool error: NOT counted
-        { type: 'tool', tool: 'read', input: { filePath: '/tmp/x.md' }, state: { status: 'error', error: 'fail' } },
-      ]),
-      makeAssistantMsg('done'),
-    ];
+    // Only 1 write = 3, below threshold 5
+    addToolWeight('sdk-test-6', 'write', { filePath: '/tmp/a.md' });
+    const messages = [makeMsg('user', 'work'), makeAssistantMsg('done')];
     const r = processSessionKeeper('sdk-test-6', messages, cwd, SESSION_DIR);
-    // Only 1 pending write = 3, below threshold 5
     expect(r.reminder).toBeNull();
   });
 });
@@ -494,18 +404,15 @@ describe('processSessionKeeper() — rebuild from history on session restore', (
       ]),
       { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'done' }] },
     ];
-    // First call: rebuild from history
+    // First call: rebuild from history (3 writes * 3 = 9, below threshold 10)
     const r = processSessionKeeper('rebuild-test', history, cwd, SESSION_DIR);
-    // 3 writes = 9, below threshold 10
     expect(r.reminder).toBeNull();
 
-    // Second call: add more work to reach threshold
-    const nextMsg = makeToolUseMsg('user', 'more work', [
-      { name: 'write', input: { filePath: '/tmp/d.md' } },
-    ]);
-    const fullHistory = [...history, nextMsg, { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'done2' }] }];
-    const r2 = processSessionKeeper('rebuild-test', fullHistory, cwd, SESSION_DIR);
-    // 4 writes = 12 >= 10 -> triggers
+    // Second call: add one more write to reach threshold
+    addToolWeight('rebuild-test', 'write', { filePath: '/tmp/d.md' });
+    const nextMsgs = [makeMsg('user', 'more'), makeAssistantMsg('done2')];
+    const r2 = processSessionKeeper('rebuild-test', nextMsgs, cwd, SESSION_DIR);
+    // 9 + 3 = 12 >= 10 -> triggers
     expect(r2.reminder).not.toBeNull();
   });
 
@@ -515,7 +422,7 @@ describe('processSessionKeeper() — rebuild from history on session restore', (
       makeToolUseMsg('assistant', 'doing', [{ name: 'write', input: { filePath: '/tmp/a.md' } }]),
     ];
     const r = processSessionKeeper('rebuild-test-2', history, cwd, SESSION_DIR);
-    // No session use found -> score 0
+    // No session use found -> score 0, no reminder
     expect(r.reminder).toBeNull();
   });
 

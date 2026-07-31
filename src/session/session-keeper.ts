@@ -21,7 +21,9 @@ interface KeeperState {
   lastAckType: "recorded" | "skipped" | null;
   lastAckCode: string | null;
   consecutiveAckFailure: number;
-  lastResetAt: number;  // timestamp of last ACK or state creation (for time scoring)
+  lastResetAt: number;
+  /** Last known effective score for incremental delta tracking */
+  lastElapsedContribution: number;
 }
 
 type SessionId = string;
@@ -98,7 +100,7 @@ function getOrCreate(id: SessionId, threshold: number, messages?: any[]): Keeper
         return rebuilt;
       }
     }
-    s = { score: 0, threshold, pendingCode: null, pendingThreshold: 0, lastAckType: null, lastAckCode: null, consecutiveAckFailure: 0, lastResetAt: Date.now() };
+    s = { score: 0, threshold, pendingCode: null, pendingThreshold: 0, lastAckType: null, lastAckCode: null, consecutiveAckFailure: 0, lastResetAt: Date.now(), lastElapsedContribution: 0 };
     store.set(id, s);
   }
   return s;
@@ -178,7 +180,7 @@ function rebuildFromHistory(messages: any[], threshold: number): KeeperState | n
     return {
       score: 0, threshold, pendingCode: null, pendingThreshold: 0,
       lastAckType: null, lastAckCode: null, consecutiveAckFailure: 0,
-      lastResetAt: Date.now(),
+      lastResetAt: Date.now(), lastElapsedContribution: 0,
     };
   }
 
@@ -186,7 +188,7 @@ function rebuildFromHistory(messages: any[], threshold: number): KeeperState | n
     score: Math.min(score, threshold - 1),
     threshold, pendingCode: null, pendingThreshold: 0,
     lastAckType, lastAckCode: null, consecutiveAckFailure: 0,
-    lastResetAt: Date.now(),
+    lastResetAt: Date.now(), lastElapsedContribution: 0,
   };
 }
 
@@ -254,45 +256,34 @@ function findLastAssistantText(messages: any[]): string | null {
   return null;
 }
 
-function countToolWeights(messages: any[], writeWeight: number, readWeight: number, delegateWeight: number): number {
-  let score = 0;
-  let foundCalls = 0;
-  let skippedCalls = 0;
-  const sampledTypes: string[] = [];
-  for (const msg of messages) {
-    if (!msg) continue;
-    for (const part of msg.parts ?? []) {
-      if (sampledTypes.length < 10) sampledTypes.push(part.type ?? 'no-type');
-      if (!isToolCallPart(part)) { skippedCalls++; continue; }
-      foundCalls++;
-      const name = toolNameFromPart(part);
-      const input = toolInputFromPart(part);
-
-      if (DELEGATE_TOOLS.has(name)) {
-        score += delegateWeight;
-      } else if (WRITE_TOOLS.has(name)) {
-        score += writeWeight;
-      } else if (name === "cc_fs") {
-        const sub = String(input.subcommand ?? "");
-        if (WRITE_FS_SUBCOMMANDS.has(sub)) score += writeWeight;
-        else if (READ_FS_SUBCOMMANDS.has(sub)) score += readWeight;
-      } else if (name === "cc_git") {
-        const sub = String(input.subcommand ?? "");
-        if (WRITE_GIT_SUBCOMMANDS.has(sub)) score += writeWeight;
-        else if (READ_GIT_SUBCOMMANDS.has(sub)) score += readWeight;
-      } else if (READ_TOOLS.has(name)) {
-        score += readWeight;
-      }
-    }
+/** Increment keeper score for a tool execution. Called from tool.execute.before hook. */
+export function addToolWeight(sessionId: string, toolName: string, args: Record<string, unknown>): void {
+  let state = store.get(sessionId);
+  if (!state) {
+    state = { score: 0, threshold: DEFAULT_THRESHOLD, pendingCode: null, pendingThreshold: 0, lastAckType: null, lastAckCode: null, consecutiveAckFailure: 0, lastResetAt: Date.now(), lastElapsedContribution: 0 };
+    store.set(sessionId, state);
   }
-  console.error('[keeper] debug count', JSON.stringify({
-    totalParts: sampledTypes.length,
-    sampledTypes: [...new Set(sampledTypes)],
-    foundCalls,
-    skippedCalls,
-    score,
-  }));
-  return score;
+  if (state.pendingCode) return;
+
+  let weight = 0;
+  if (DELEGATE_TOOLS.has(toolName)) {
+    weight = DELEGATE_WEIGHT;
+  } else if (WRITE_TOOLS.has(toolName)) {
+    weight = WRITE_WEIGHT;
+  } else if (toolName === "cc_fs") {
+    const sub = String(args.subcommand ?? "");
+    weight = WRITE_FS_SUBCOMMANDS.has(sub) ? WRITE_WEIGHT : READ_WEIGHT;
+  } else if (toolName === "cc_git") {
+    const sub = String(args.subcommand ?? "");
+    weight = WRITE_GIT_SUBCOMMANDS.has(sub) ? WRITE_WEIGHT : READ_WEIGHT;
+  } else if (READ_TOOLS.has(toolName)) {
+    weight = READ_WEIGHT;
+  }
+
+  if (weight > 0) {
+    state.score += weight;
+    console.error('[keeper] +weight', JSON.stringify({ tool: toolName, weight, score: state.score }));
+  }
 }
 
 function detectAck(assistantText: string | null, expectedCode: string): "recorded" | "skipped" | "invalid" | null {
@@ -317,7 +308,6 @@ export function processSessionKeeper(
   sessionDirName: string,
 ): KeeperResult {
   const threshold = readKeeperThreshold(cwdRoot);
-  // Pass messages for state rebuilding on session restore (no existing state in store)
   const state = getOrCreate(ocSessionId, threshold, messages);
   state.threshold = threshold;
 
@@ -326,10 +316,6 @@ export function processSessionKeeper(
     score: state.score,
     threshold,
     pendingCode: state.pendingCode,
-    msgCount: messages.length,
-    partTypes: [...new Set(
-      messages.flatMap((m: any) => (m?.parts ?? []).map((p: any) => p.type ?? 'no-type'))
-    )].slice(0, 20),
   }));
 
   // Step 1: check for ACK in last assistant response
@@ -340,6 +326,7 @@ export function processSessionKeeper(
       state.score = 0;
       state.pendingCode = null;
       state.lastResetAt = Date.now();
+      state.lastElapsedContribution = 0;
       state.lastAckType = ack;
       state.lastAckCode = null;
       state.consecutiveAckFailure = 0;
@@ -350,15 +337,15 @@ export function processSessionKeeper(
     }
   }
 
-  // Step 2: accumulate score from tool uses + time since last reset
+  // Step 2: add elapsed time since last reset (incremental delta)
   if (!state.pendingCode) {
-    const toolScore = countToolWeights(messages, WRITE_WEIGHT, READ_WEIGHT, DELEGATE_WEIGHT);
-    const elapsedMinutes = Math.floor((Date.now() - state.lastResetAt) / 60000);
-    const totalScore = toolScore + elapsedMinutes;
-    state.score = Math.max(totalScore, state.score);
-    console.error('[keeper] score', JSON.stringify({
-      toolScore, elapsedMinutes, totalScore, score: state.score,
-    }));
+    const elapsedSinceReset = Math.floor((Date.now() - state.lastResetAt) / 60000);
+    const delta = elapsedSinceReset - state.lastElapsedContribution;
+    if (delta > 0) {
+      state.score += delta;
+      state.lastElapsedContribution = elapsedSinceReset;
+      console.error('[keeper] +time', JSON.stringify({ delta, score: state.score }));
+    }
   }
 
   // Step 3: inject reminder if needed

@@ -28,6 +28,7 @@ import { isHookEnabled, type HookConfig } from './util.js';
 import { log } from '../util/log.js';
 import { isSafeModeOn, readBlacklist, isPathBlacklisted } from '../safe-mode.js';
 import { captureOcSessionId } from '../session/active-state.js';
+import { addToolWeight } from '../session/session-keeper.js';
 
 type ToolArgs = Record<string, unknown>;
 
@@ -160,6 +161,8 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
       }
     }
   }
+
+  addToolWeight(input.sessionID, input.tool, args);
 
 };
 

@@ -203,7 +203,9 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
   if (ocSessionId) {
     const existing = getActiveSession(ocSessionId);
     if (!existing) {
-      outer: for (const msg of messages) {
+      outer: for (let mi = messages.length - 1; mi >= 0; mi--) {
+        const msg = messages[mi];
+        if (!msg) continue;
         for (const part of msg.parts ?? []) {
           const isToolResult = part.type === "tool" && part.state?.status === "completed";
           if (isToolResult) {

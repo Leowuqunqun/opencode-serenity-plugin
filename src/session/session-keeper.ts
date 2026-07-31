@@ -106,7 +106,9 @@ function getOrCreate(id: SessionId, threshold: number, messages?: any[]): Keeper
 function rebuildFromHistory(messages: any[], threshold: number): KeeperState | null {
   let lastAckType: "recorded" | "skipped" | null = null;
 
-  for (const msg of messages) {
+  // Scan in reverse: most recent session use / ACK wins
+  for (let mi = messages.length - 1; mi >= 0; mi--) {
+    const msg = messages[mi];
     if (!msg) continue;
 
     for (const part of msg.parts ?? []) {

@@ -205,8 +205,13 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
     if (!existing) {
       for (const msg of messages) {
         for (const part of (msg as any).parts ?? []) {
-          if (part.type === 'toolResult') {
-            const text = typeof part.output === 'string' ? part.output : '';
+          // Check both runtime types: 'toolResult' (undocumented) and 'tool' (SDK)
+          const isToolResult = part.type === 'toolResult' || (
+            part.type === 'tool' && part.state?.status === 'completed'
+          );
+          if (isToolResult) {
+            const output1 = part.output ?? part.state?.output ?? '';
+            const text = typeof output1 === 'string' ? output1 : '';
             if (text.includes('[SESSION CONTEXT] Activated:')) {
               const lines = text.split('\n');
               let dirName = '';
@@ -223,6 +228,7 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
                 const idMatch = dirName.match(/S(\d{3,})/);
                 const sessionId = idMatch ? `S${idMatch[1]}` : dirName;
                 setActiveSession(ocSessionId, { sessionId, dirName, mdPath });
+                console.error('[session-restore] recovered', JSON.stringify({ ocSessionId, sessionId, dirName }));
               }
               break;
             }

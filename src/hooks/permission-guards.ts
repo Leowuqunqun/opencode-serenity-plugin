@@ -26,7 +26,7 @@ import { isPathInside } from '../util/git.js';
 import { getState, ensureReady } from '../state.js';
 import { isHookEnabled, type HookConfig } from './util.js';
 import { log } from '../util/log.js';
-import { isSafeModeOn, readBlacklist, isPathBlacklisted } from '../safe-mode.js';
+import { isSafeModeOn, readBlacklist, matchBlacklistEntry } from '../safe-mode.js';
 import { captureOcSessionId } from '../session/active-state.js';
 import { addToolWeight } from '../session/session-keeper.js';
 
@@ -138,10 +138,11 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
     const blacklist = readBlacklist(state.cwdRoot);
     if (blacklist.length > 0) {
       for (const p of paths) {
-        if (isPathBlacklisted(p, blacklist)) {
+        const matched = matchBlacklistEntry(p, blacklist);
+        if (matched) {
           log.warn('guard', `write blocked by safe mode blacklist`, { path: p, tool: input.tool });
           throw new Error(
-            `[serenity] ${input.tool} to "${p}" is not allowed.`,
+            matched.message ?? `[serenity] ${input.tool} to "${p}" is not allowed.`,
           );
         }
       }

@@ -65,7 +65,7 @@ function discoverCccSubcommands(entries: MechEntry[]): string[] {
 /** 生成扩展提示 */
 function buildExtHint(hasSessionTool: boolean, hooks: string[], subcommands: string[]): string {
   if (!hasSessionTool) {
-    return '\n\n[CCC] 如需扩展会话能力，可注册 session-tool MSM (msm_admin register)，详见 session hook-develop-guide';
+    return '\n\n[CCC] 如需扩展会话能力，可注册 session-tool MSM (ccc_admin register)，详见 session hook-develop-guide';
   }
   const parts: string[] = [];
   if (hooks.length > 0) {
@@ -270,7 +270,7 @@ function getHookDevelopGuide(hasSessionTool: boolean): string {
     '     .opencode/skills/<ccc-name>/scripts/session-tool.ts',
     '',
     '2. 注册到 mech-registry.json：',
-    '     msm_admin register session-tool \\',
+    '     ccc_admin register session-tool \\',
     '       --path .opencode/skills/<ccc-name>/scripts/session-tool.ts \\',
     '       --category semi-mech \\',
     '       --description "CCC session 扩展: 钩子 + 自定义子命令" \\',
@@ -306,7 +306,7 @@ function getHookDevelopGuide(hasSessionTool: boolean): string {
     '',
     (hasSessionTool
       ? '✅ 当前 CCC 已注册 session-tool MSM'
-      : 'ℹ️  当前 CCC 尚未注册 session-tool MSM — 使用 msm_admin register 开始'),
+      : 'ℹ️  当前 CCC 尚未注册 session-tool MSM — 使用 ccc_admin register 开始'),
     '',
     '── 更多信息 ──',
     '',

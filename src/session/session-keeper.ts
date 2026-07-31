@@ -31,7 +31,7 @@ const READ_WEIGHT = 1;
 const DELEGATE_WEIGHT = 10;
 
 const READ_TOOLS = new Set([
-  "read", "grep", "glob", "msm_list", "msm_admin", "msm_exec",
+  "read", "grep", "glob", "msm_list", "ccc_admin", "msm_exec",
 ]);
 
 const WRITE_TOOLS = new Set([

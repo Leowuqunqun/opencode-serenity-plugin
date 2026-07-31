@@ -21,6 +21,7 @@ import {
   setSafeMode,
   readBlacklist,
   isPathBlacklisted,
+  matchBlacklistEntry,
 } from '../src/safe-mode.js';
 import { setState, resetState } from '../src/state.js';
 
@@ -138,6 +139,58 @@ describe('readBlacklist()', () => {
     const entries = readBlacklist(root);
     expect(entries).toHaveLength(1); // only /etc/
     rmSync(root, { recursive: true, force: true });
+  });
+
+  it('object form with custom message', () => {
+    const root = setupCccRoot({
+      safeMode: { blacklist: [{ pattern: '/etc/', message: '禁止修改系统目录' }] },
+    });
+    const entries = readBlacklist(root);
+    expect(entries).toEqual([{ type: 'prefix', pattern: '/etc/', message: '禁止修改系统目录' }]);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('mixed string + object forms', () => {
+    const root = setupCccRoot({
+      safeMode: {
+        blacklist: [
+          '/etc/',
+          { pattern: 'regex:\\.secret/', message: '禁止写入 .secret' },
+        ],
+      },
+    });
+    const entries = readBlacklist(root);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toEqual({ type: 'prefix', pattern: '/etc/' });
+    expect(entries[1]).toEqual({ type: 'regex', pattern: '\\.secret/', message: '禁止写入 .secret' });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('object form without message → undefined', () => {
+    const root = setupCccRoot({ safeMode: { blacklist: [{ pattern: '/tmp/' }] } });
+    const entries = readBlacklist(root);
+    expect(entries).toEqual([{ type: 'prefix', pattern: '/tmp/' }]);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('invalid object entries filtered out', () => {
+    const root = setupCccRoot({ safeMode: { blacklist: [{ message: 'no pattern' }, {}, 'regex:'] } });
+    const entries = readBlacklist(root);
+    expect(entries).toEqual([]);
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe('matchBlacklistEntry()', () => {
+  it('returns the matched entry with custom message', () => {
+    const entries = [
+      { type: 'prefix' as const, pattern: '/etc/', message: '禁止修改系统目录' },
+      { type: 'regex' as const, pattern: '\\.secret/' },
+    ];
+    const hit = matchBlacklistEntry('/etc/passwd', entries);
+    expect(hit).toEqual({ type: 'prefix', pattern: '/etc/', message: '禁止修改系统目录' });
+    expect(matchBlacklistEntry('/a/.secret/x', entries)).toEqual({ type: 'regex', pattern: '\\.secret/' });
+    expect(matchBlacklistEntry('/tmp/x', entries)).toBeNull();
   });
 });
 

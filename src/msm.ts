@@ -4,7 +4,7 @@
  * 工具集（3 个）：
  * - msm_list          : PRIMARY — 列出所有 MSM
  * - msm_exec          : PRIMARY — 执行 MSM / 协议元命令
- * - msm_admin         : 注册 / 注销 MSM（合并 register/deregister）
+ * - ccc_admin        : 注册 / 注销 MSM（合并 register/deregister）
  *
  * 注意：bash override (RR3) 已于 2026-06-08 移除。
  */
@@ -234,7 +234,7 @@ export const msmExecTool: ToolDefinition = tool({
   },
 });
 
-/* ===== v1.17 msm_admin tool（合并 msm_register + msm_deregister）=====
+/* ===== v1.17 ccc_admin tool（合并 msm_register + msm_deregister）=====
  *
  * 设计: 单 tool + action enum 替代两个对称 tool
  * - 减少 LLM 决策树宽度（4 tool slot → 1）
@@ -244,7 +244,7 @@ export const msmExecTool: ToolDefinition = tool({
  *
  * 历史：
  * - v1.1 增补：msm_register + msm_deregister 两个独立 tool
- * - v1.17 合并：msm_admin 单 tool（减少 slot 占用）
+ * - v1.17 合并：ccc_admin 单 tool（减少 slot 占用）
  */
 type RegisterInput = {
   name: string;
@@ -257,7 +257,7 @@ type RegisterInput = {
 
 /** 内部 register 实现（v1.17 从 msmRegisterTool 抽出） */
 async function registerMsmInner(input: RegisterInput): Promise<string> {
-  log.info('msm', 'msm_admin register called', { name: input.name, path: input.path });
+  log.info('msm', 'ccc_admin register called', { name: input.name, path: input.path });
   const state = getState();
 
   // 1. 读 registry（含 schema 信息）
@@ -300,7 +300,7 @@ async function registerMsmInner(input: RegisterInput): Promise<string> {
   // 6. 写回（保留 schema）
   file.entries.push(newEntry);
   writeRegistryFile(state.cwdRoot, state.cccName, file);
-  log.info('msm', 'msm_admin register wrote registry', { name: input.name, absPath });
+  log.info('msm', 'ccc_admin register wrote registry', { name: input.name, absPath });
 
   // 7. 自动 commit
   const relRegistry = `.opencode/skills/${state.cccName}/references/mech-registry.json`;
@@ -418,7 +418,7 @@ function checkMsmInner(): string {
 
 /** 内部 deregister 实现（v1.17 从 msmDeregisterTool 抽出） */
 async function deregisterMsmInner(input: DeregisterInput): Promise<string> {
-  log.info('msm', 'msm_admin deregister called', { name: input.name });
+  log.info('msm', 'ccc_admin deregister called', { name: input.name });
   const state = getState();
 
   const file = loadRegistryFile(state.cwdRoot, state.cccName);
@@ -429,7 +429,7 @@ async function deregisterMsmInner(input: DeregisterInput): Promise<string> {
 
   const removed = file.entries.splice(idx, 1)[0]!;
   writeRegistryFile(state.cwdRoot, state.cccName, file);
-  log.info('msm', 'msm_admin deregister wrote registry', { name: input.name, path: removed.path });
+  log.info('msm', 'ccc_admin deregister wrote registry', { name: input.name, path: removed.path });
 
   const relRegistry = `.opencode/skills/${state.cccName}/references/mech-registry.json`;
   try {
@@ -443,16 +443,17 @@ async function deregisterMsmInner(input: DeregisterInput): Promise<string> {
 
 export const msmAdminTool: ToolDefinition = tool({
   description:
-    'Register, deregister, get the MSM development guide, or run quality checks. ' +
-    '**v1.17**: replaces the old msm_register + msm_deregister tools with a single tool + action enum. ' +
-    'Auto-commits the registry change as "chore(msm): register <name>" or "chore(msm): deregister <name>". ' +
-    'Use action=guide to get the MSM development handbook (script conventions, testing, registration). ' +
-    'Use action=check to run DC-M1~M4 quality checks on all MSM scripts. ' +
-     'Use action=ccc-config to get CCC-level configuration reference (serenity.json features).',
+    'CCC MSM (Mech & Semi-Mech) 注册表管理工具。' +
+    '维护当前 CCC 的 mech-registry.json，支持注册/注销 MSM、获取开发手册、运行品质检查、查看 CCC 配置。' +
+    'action=register：注册新 MSM（需 name/path/description/category），自动 git commit。' +
+    'action=deregister：注销 MSM，自动 git commit。' +
+    'action=guide：MSM 开发手册（脚本规范、测试、注册约定）。' +
+    'action=check：对全部 MSM 脚本运行 DC-M1~M4 品质检查。' +
+    'action=ccc-config：输出 CCC 配置参考——.opencode/serenity.json 中 loop.defaultModel / sessionKeeper.threshold / safeMode.blacklist 的具体 JSON 写法与示例。',
   args: {
     action: z
       .enum(['register', 'deregister', 'guide', 'check', 'ccc-config'])
-      .describe('operation: register (add MSM), deregister (remove), guide (show development handbook), check (run DC-M1~M4 quality checks), ccc-config (get CCC configuration reference)'),
+      .describe('operation: register (add MSM), deregister (remove), guide (show development handbook), check (run DC-M1~M4 quality checks), ccc-config (get CCC config reference with concrete JSON examples)'),
     name: z
       .string()
       .optional()
@@ -522,7 +523,7 @@ export const msmAdminTool: ToolDefinition = tool({
           '  • stdout = business output, stderr = errors',
           '  • Path args → flag name or description must contain path/file/dir',
           '',
-          'Register: msm_admin register --name <name> --path <path>',
+          'Register: ccc_admin register --name <name> --path <path>',
           '  --description "<desc>" --category mech|semi-mech',
           '',
           'SQC checks: DC-M1 (test file), DC-M2 (main guard), DC-M3 (registered), DC-M4 (path flags)',
@@ -543,60 +544,87 @@ export const msmAdminTool: ToolDefinition = tool({
         '',
         '── 1. loop.defaultModel ──',
         '',
-        'Default model for loop tool headless sessions.',
-        'When set, loop does not require explicit --model flag.',
+        'loop 工具 headless 会话的默认模型。',
+        '设置后 loop 无需显式传 --model 参数。',
         '',
-        '  { "loop": { "defaultModel": "provider/model-name" } }',
+        '  配置：',
+        '    { "loop": { "defaultModel": "provider/model-name" } }',
         '',
-        '  Example:',
+        '  示例：',
         '    { "loop": { "defaultModel": "opencode-go/deepseek-v4-flash" } }',
+        '',
+        '  未配置时：loop 工具报错，要求显式 --model 或先配置 defaultModel。',
         '',
         '',
         '── 2. sessionKeeper.threshold ──',
         '',
-        'Session persistence reminder mechanism for primary (non-headless) agent.',
-        'Tracks READ/WRITE tool activity (weighted) and elapsed time. When score',
-        'reaches threshold, injects a reminder into the user message requiring the',
-        'model to ACK with a random code.',
+        'Session-Keeper 提醒机制的积分阈值（非 headless 主 agent 会话）。',
+        '跟踪工具调用（加权）和经过时间；score 达到 threshold 时注入提醒，',
+        '要求模型回 ACK code。',
         '',
-        '  { "sessionKeeper": { "threshold": 100 } }',
+        '  配置：',
+        '    { "sessionKeeper": { "threshold": 100 } }',
         '',
-        '  Score formula: tool_score + elapsed_minutes_since_last_reset',
-        '    write/edit = 3pt, read/grep/glob/etc = 1pt, time = 1pt/min',
-        '  Default threshold: 100 (roughly 33 writes or 100 minutes of inactivity)',
-        '  Setting threshold to 0 triggers reminder on every round.',
+        '  计分公式：tool_score + elapsed_minutes_since_last_reset',
+        '    write/edit = 3 分，task = 10 分，read/grep/glob/msm 等 = 1 分',
+        '    时间 = 1 分/分钟',
+        '  默认值：150',
+        '  说明：',
+        '    - 阈值越低，提醒越频繁；0 表示每轮都触发',
+        '    - 达到阈值后注入提醒，直至收到正确 code 的 ACK 才清零',
         '',
         '',
         '── 3. safeMode.blacklist ──',
         '',
-        'Safe mode combines two protections when enabled:',
-        '  - bash tool is disabled',
-        '  - write/edit to blacklisted paths is blocked',
+        'Safe Mode 启用时包含两层保护：',
+        '  - bash 工具被禁用',
+        '  - write/edit 到黑名单路径被拦截',
         '',
-        'Toggled via TUI slash command /serenity-safe-mode on|off|status,',
-        'or by creating/removing `.serenity-safe-on` marker in the CCC root.',
+        '切换方式：TUI 斜杠命令 /serenity-safe-mode on|off|status，',
+        '或创建/删除 CCC 根目录的 `.serenity-safe-on` 标记文件。',
         '',
-        '  { "safeMode": { "blacklist": ["/etc/", "regex:\.secret/"] } }',
+        '  blacklist 数组内每条可以是字符串或对象：',
         '',
-        '  Pattern types:',
-        '    prefix match  — plain string, matches paths starting with it',
-        '    regex match   — prefix "regex:", followed by a RegExp pattern',
+        '  A. 字符串形式（前缀或正则）：',
+        '    "/etc/"            — 前缀匹配，拦截以 /etc/ 开头的路径',
+        '    "regex:\.secret/"  — 正则匹配（regex: 前缀），拦截含 .secret/ 的路径',
         '',
-        '  Examples:',
-        '    "/etc/"              — blocks /etc/passwd, /etc/ssh/config',
-        '    "regex:\.git/"       — blocks any path containing .git/',
-        '    "regex:^/var/log"    — blocks /var/log/syslog, /var/log/auth.log',
+        '  B. 对象形式（可带自定义拦截原因）：',
+        '    {',
+        '      "pattern": "/etc/",',
+        '      "message": "禁止修改系统目录 /etc/"',
+        '    }',
+        '    - pattern：必填，规则同字符串形式（前缀或 regex: 前缀）',
+        '    - message：可选。命中该条时抛出的拦截提示，用于告知拦截原因；',
+        '      不设置时使用默认提示：',
+        '      [serenity] <tool> to "<path>" is not allowed.',
         '',
-        '  Safe mode is OFF by default in TUI, ON by default in server mode.',
-        '  Also activated by legacy `.serenity-bash-off` marker (backward compat).',
+        '  匹配规则：',
+        '    - 前缀匹配：路径以 pattern 开头即命中',
+        '    - 正则匹配：RegExp 对路径执行 test，命中即拦截',
+        '    - 非法条目（非字符串、缺 pattern、空 regex）自动过滤',
+        '',
+        '  完整示例：',
+        '    {',
+        '      "safeMode": {',
+        '        "blacklist": [',
+        '          "/etc/",',
+        '          { "pattern": "regex:\.secret/", "message": "禁止写入 .secret 目录" },',
+        '          { "pattern": "/root/", "message": "不允许修改 root 用户文件" }',
+        '        ]',
+        '      }',
+        '    }',
+        '',
+        '  Safe Mode 默认：TUI 关闭，server 模式开启。',
+        '  兼容旧标记：`.serenity-bash-off` 视同 safe mode 开启。',
         '',
         '',
-        '── File location ──',
+        '── 配置文件位置 ──',
         '',
-        'All config lives in a single file:',
+        '所有配置集中在单文件：',
         '  <CCC-root>/.opencode/serenity.json',
         '',
-        'Example with all options:',
+        '包含全部选项的完整示例：',
         '',
         '  {',
         '    "loop": {',
@@ -606,7 +634,10 @@ export const msmAdminTool: ToolDefinition = tool({
         '      "threshold": 100',
         '    },',
         '    "safeMode": {',
-        '      "blacklist": ["/etc/", "regex:\.secret/"]',
+        '      "blacklist": [',
+        '        "/etc/",',
+        '        { "pattern": "regex:\.secret/", "message": "禁止写入 .secret 目录" }',
+        '      ]',
         '    }',
         '  }',
       ].join('\n');
@@ -614,7 +645,7 @@ export const msmAdminTool: ToolDefinition = tool({
     if (input.action === 'register') {
       if (!input.name || !input.path || !input.description || !input.category) {
         throw new Error(
-          'msm_admin: action=register requires name, path, description, category. '
+          'ccc_admin: action=register requires name, path, description, category. '
         );
       }
       return await registerMsmInner({
@@ -627,10 +658,10 @@ export const msmAdminTool: ToolDefinition = tool({
       });
     }
     if (!input.name) {
-      throw new Error('msm_admin: action=deregister requires name');
+      throw new Error('ccc_admin: action=deregister requires name');
     }
     return await deregisterMsmInner({ name: input.name });
   },
 });
 
-/* 最终 4 tool slot：bash (override) + msm_list + msm_exec + msm_admin */
+/* 最终 4 tool slot：bash (override) + msm_list + msm_exec + ccc_admin */

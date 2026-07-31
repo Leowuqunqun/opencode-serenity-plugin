@@ -235,7 +235,7 @@ function loadRegistry(opts: { registryPath?: string } = {}): RegistryFile {
   // D6 bootstrap 行为分流 (S028 v0.0.3 收口):
   // - 无 registryPath (CLI 模式): ensureRegistryFile 不存在则创建空, 让 --list 等元命令在冷启动可用
   // - 有 registryPath (in-process 模式): 不 bootstrap, 文件不存在 → 抛 MSM_REGISTRY_NOT_FOUND
-  //   (避免覆盖 msm_admin 已写的注册表; msm.ts loadMechRegistry 也会兜底返回 [])
+  //   (避免覆盖 ccc_admin 已写的注册表; msm.ts loadMechRegistry 也会兜底返回 [])
   if (!opts.registryPath) {
     ensureRegistryFile(path);
   } else if (!existsSync(path)) {
@@ -244,7 +244,7 @@ function loadRegistry(opts: { registryPath?: string } = {}): RegistryFile {
       "system",
       `caller-supplied registry path 不存在: ${path}`,
       { path },
-      "确认 msm_admin register 已创建该文件, 或检查 cwdRoot/.opencode/skills/<inst>/ 是否正确",
+      "确认 ccc_admin register 已创建该文件, 或检查 cwdRoot/.opencode/skills/<inst>/ 是否正确",
     );
   }
   try {
@@ -377,7 +377,7 @@ function runBusinessMsm(entry: RegistryEntry, businessArgs: string[], cwd: strin
         "system",
         `业务 MSM 脚本文件不存在: ${absPath}`,
         { msmName: entry.name, path: entry.path },
-        "确认 msm_admin register 的参数 path 正确，或脚本文件未被删除",
+        "确认 ccc_admin register 的参数 path 正确，或脚本文件未被删除",
       ),
     );
   }

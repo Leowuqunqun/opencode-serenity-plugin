@@ -109,6 +109,8 @@ export function setSafeMode(v: boolean, cwdRoot?: string): void {
 export interface BlacklistEntry {
   type: "prefix" | "regex";
   pattern: string;
+  /** 自定义拦截提示（可选）；未设置时使用默认提示 */
+  message?: string;
 }
 
 export function readBlacklist(cwdRoot: string): BlacklistEntry[] {
@@ -117,20 +119,48 @@ export function readBlacklist(cwdRoot: string): BlacklistEntry[] {
     if (!existsSync(configPath)) return [];
     const raw = readFileSync(configPath, "utf-8");
     const parsed = JSON.parse(raw);
-    const patterns: string[] = parsed?.safeMode?.blacklist;
+    const patterns: unknown[] = parsed?.safeMode?.blacklist;
     if (!Array.isArray(patterns) || patterns.length === 0) return [];
-    return patterns.map((p) => {
-      if (typeof p !== "string") return null;
-      if (p.startsWith("regex:")) {
-        const rest = p.slice(6);
-        if (!rest) return null;
-        return { type: "regex" as const, pattern: rest };
+    return patterns.map((item): BlacklistEntry | null => {
+      // 支持两种形式：
+      //   string："/etc/" 或 "regex:..."
+      //   object：{ "pattern": "/etc/", "message": "自定义提示" }
+      let raw: string;
+      let message: string | undefined;
+      if (typeof item === "string") {
+        raw = item;
+      } else if (item && typeof item === "object" && typeof (item as { pattern?: unknown }).pattern === "string") {
+        raw = (item as { pattern: string }).pattern;
+        const m = (item as { message?: unknown }).message;
+        message = typeof m === "string" ? m : undefined;
+      } else {
+        return null;
       }
-      return { type: "prefix" as const, pattern: p };
+      if (raw.startsWith("regex:")) {
+        const rest = raw.slice(6);
+        if (!rest) return null;
+        return { type: "regex" as const, pattern: rest, message };
+      }
+      return { type: "prefix" as const, pattern: raw, message };
     }).filter((e): e is BlacklistEntry => e !== null);
   } catch {
     return [];
   }
+}
+
+/** 匹配命中黑名单的条目（返回 null 表示未命中） */
+export function matchBlacklistEntry(targetPath: string, entries: BlacklistEntry[]): BlacklistEntry | null {
+  for (const entry of entries) {
+    if (entry.type === "prefix") {
+      if (targetPath.startsWith(entry.pattern)) return entry;
+    } else if (entry.type === "regex") {
+      try {
+        const re = new RegExp(entry.pattern);
+        if (re.test(targetPath)) return entry;
+      } catch { /* invalid regex → skip */ }
+    }
+  }
+  return null;
 }
 
 /**
@@ -138,15 +168,5 @@ export function readBlacklist(cwdRoot: string): BlacklistEntry[] {
  * Only called when safe mode is ON.
  */
 export function isPathBlacklisted(targetPath: string, entries: BlacklistEntry[]): boolean {
-  for (const entry of entries) {
-    if (entry.type === "prefix") {
-      if (targetPath.startsWith(entry.pattern)) return true;
-    } else if (entry.type === "regex") {
-      try {
-        const re = new RegExp(entry.pattern);
-        if (re.test(targetPath)) return true;
-      } catch { /* invalid regex → skip */ }
-    }
-  }
-  return false;
+  return matchBlacklistEntry(targetPath, entries) !== null;
 }

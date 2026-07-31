@@ -1,5 +1,5 @@
 /**
- * msm_admin 单测 (v1.17)
+ * ccc_admin 单测 (v1.17)
  *
  * 覆盖:
  * 1. action='register' 成功（v1 schema → 写回仍 v1）
@@ -12,7 +12,7 @@
  * 8. action='deregister' 失败：name 不存在 → MsmNotInRegistryError
  * 9. round-trip: register → deregister → 状态回到初始
  *
- * v1.17 变更：合并原 msm_register + msm_deregister → msm_admin
+ * v1.17 变更：合并原 msm_register + msm_deregister → ccc_admin
  * - action enum 区分两个分支
  * - register 失败时缺 path/description/category 抛 plain Error（不是 SerenityError）
  */
@@ -75,7 +75,7 @@ function readRegistry(cwd: string, name: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-describe('msm_admin action=register (v1.17 — 合并自 v1.1 msm_register)', () => {
+describe('ccc_admin action=register (v1.17 — 合并自 v1.1 msm_register)', () => {
   beforeEach(() => {
     resetState();
   });
@@ -239,7 +239,7 @@ describe('msm_admin action=register (v1.17 — 合并自 v1.1 msm_register)', ()
   });
 });
 
-describe('msm_admin action=deregister (v1.17 — 合并自 v1.1 msm_deregister)', () => {
+describe('ccc_admin action=deregister (v1.17 — 合并自 v1.1 msm_deregister)', () => {
   beforeEach(() => {
     resetState();
   });

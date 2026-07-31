@@ -69,7 +69,7 @@ describe('plugin entry', () => {
       // bash 已不再注册 (RR3 于 2026-06-08 移除)
       expect(hooks.tool['msm_list']).toBeDefined();
       expect(hooks.tool['msm_exec']).toBeDefined();
-      expect(hooks.tool['msm_admin']).toBeDefined();
+      expect(hooks.tool['ccc_admin']).toBeDefined();
     }
     expect(hooks['tool.execute.before']).toBeDefined();
     expect(hooks['experimental.chat.system.transform']).toBeDefined();

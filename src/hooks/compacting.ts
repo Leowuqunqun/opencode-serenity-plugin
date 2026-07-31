@@ -54,7 +54,7 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
       '',
       `  msm_list  — list all registered MSM tools (name | skill | category | description)`,
       `  msm_exec  — safely execute a registered MSM by name with string array args`,
-      `  msm_admin — register/deregister MSMs, run quality checks, view dev guide`,
+      `  ccc_admin — register/deregister MSMs, run quality checks, view dev guide`,
       `  cc-fs     — file operations strictly within Root (root/resolve/list/mkdir/rm/mv/cp/touch/tree/append)`,
       `  session   — session lifecycle (list/show/create/use/close/health/qa/archive/summary)`,
       `  cc-ck     — validate CCC three principles (P1 rooted / P2 git-managed / P3 binary permissions)`,

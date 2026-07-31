@@ -341,5 +341,12 @@ export function processSessionKeeper(
     return { reminder, code };
   }
 
+  // Reset score after each LLM round (new round = fresh count)
+  if (!state.pendingCode) {
+    state.score = 0;
+    state.lastResetAt = Date.now();
+    state.lastElapsedContribution = 0;
+  }
+
   return { reminder: null, code: null };
 }

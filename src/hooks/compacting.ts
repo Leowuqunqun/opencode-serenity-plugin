@@ -229,7 +229,6 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
                 const idMatch = dirName.match(/S(\d{3,})/);
                 const sessionId = idMatch ? `S${idMatch[1]}` : dirName;
                 setActiveSession(ocSessionId, { sessionId, dirName, mdPath });
-                console.error('[session-restore] recovered', JSON.stringify({ ocSessionId, sessionId, dirName }));
               }
               break outer;
             }

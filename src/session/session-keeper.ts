@@ -246,7 +246,6 @@ export function triggerOnToolResult(sessionId: string, toolOutput: string, sessi
 
   const code = randomCode();
   state.pendingCode = code;
-  console.error('[keeper] trigger', JSON.stringify({ code, score: state.score, threshold: state.threshold }));
   const reminder = injectReminderMsg("", code, sessionDirName).trimStart();
   return toolOutput + "\n\n" + reminder;
 }
@@ -309,7 +308,6 @@ export function processSessionKeeper(
     const code = randomCode();
     state.pendingCode = code;
     const reminder = injectReminderMsg("", code, sessionDirName).trimStart();
-    console.error('[keeper] trigger', JSON.stringify({ code, score: state.score, threshold: state.threshold }));
     return { reminder, code };
   }
 

@@ -120,7 +120,7 @@ function rebuildFromHistory(messages: any[], threshold: number): KeeperState | n
           lastAckType = null;
         }
       }
-      if (part.type === "text" && msg.info?.role === "assistant") {
+      if ((part.type === "text" || part.type === "reasoning") && msg.info?.role === "assistant") {
         const match = (part.text ?? "").match(ACK_PATTERN);
         if (match) {
           lastAckType = match[1] as "recorded" | "skipped";
@@ -198,7 +198,7 @@ function findLastAssistantText(messages: any[]): string | null {
     const msg = messages[i];
     if (!msg || msg.info?.role !== "assistant") continue;
     for (const part of msg.parts ?? []) {
-      if (part.type === "text") {
+      if (part.type === "text" || part.type === "reasoning") {
         const t = part.text ?? "";
         if (t.trim()) return t;
       }

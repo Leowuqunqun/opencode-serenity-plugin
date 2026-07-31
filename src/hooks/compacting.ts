@@ -203,9 +203,8 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
   if (ocSessionId) {
     const existing = getActiveSession(ocSessionId);
     if (!existing) {
-      for (const msg of messages) {
+      outer: for (const msg of messages) {
         for (const part of (msg as any).parts ?? []) {
-          // Check both runtime types: 'toolResult' (undocumented) and 'tool' (SDK)
           const isToolResult = part.type === 'toolResult' || (
             part.type === 'tool' && part.state?.status === 'completed'
           );
@@ -230,7 +229,7 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
                 setActiveSession(ocSessionId, { sessionId, dirName, mdPath });
                 console.error('[session-restore] recovered', JSON.stringify({ ocSessionId, sessionId, dirName }));
               }
-              break;
+              break outer;
             }
           }
         }

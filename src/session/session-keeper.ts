@@ -47,17 +47,12 @@ const DELEGATE_TOOLS = new Set([
   "task",
 ]);
 
-// cc_fs subcommands: read-only vs write
-const READ_FS_SUBCOMMANDS = new Set([
-  "root", "resolve", "exists", "list", "relative", "tree", "info", "find",
-]);
-
+// cc_fs subcommands: write operations
 const WRITE_FS_SUBCOMMANDS = new Set([
   "mkdir", "rm", "mv", "cp", "touch", "append",
 ]);
 
-// cc_git subcommands: read vs write
-const READ_GIT_SUBCOMMANDS = new Set(["status", "log", "diff"]);
+// cc_git subcommands: write operations
 const WRITE_GIT_SUBCOMMANDS = new Set(["commit", "push"]);
 
 const ACK_PATTERN = /\[SESSION-KEEPER-(recorded|skipped)-([A-Za-z0-9]{3})\]/;
@@ -107,51 +102,23 @@ function getOrCreate(id: SessionId, threshold: number, messages?: any[]): Keeper
 }
 
 /** Rebuild keeper state from message history (after session restore/reconnect).
- *  Finds the most recent `session use` or ACK marker as reset point,
- *  then accumulates tool weights after it for estimated score. */
+ *  Fresh start: score=0, only find last reset point (session use/ACK) for state tracking.
+ *  Incremental tool counting via addToolWeight takes over from here. */
 function rebuildFromHistory(messages: any[], threshold: number): KeeperState | null {
-  let score = 0;
-  let foundReset = false;
   let lastAckType: "recorded" | "skipped" | null = null;
+  let foundReset = false;
 
   for (const msg of messages) {
     if (!msg) continue;
 
-      // 1. Accumulate tool weights (only after the first reset)
-    if (foundReset) {
-      for (const part of msg.parts ?? []) {
-        if (!isToolCallPart(part)) continue;
-        const name = toolNameFromPart(part);
-        const input = toolInputFromPart(part);
-
-        if (DELEGATE_TOOLS.has(name)) {
-          score += DELEGATE_WEIGHT;
-        } else if (WRITE_TOOLS.has(name)) {
-          score += WRITE_WEIGHT;
-        } else if (name === "cc_fs") {
-          const sub = String(input.subcommand ?? "");
-          if (WRITE_FS_SUBCOMMANDS.has(sub)) score += WRITE_WEIGHT;
-          else if (READ_FS_SUBCOMMANDS.has(sub)) score += READ_WEIGHT;
-        } else if (name === "cc_git") {
-          const sub = String(input.subcommand ?? "");
-          if (WRITE_GIT_SUBCOMMANDS.has(sub)) score += WRITE_WEIGHT;
-          else if (READ_GIT_SUBCOMMANDS.has(sub)) score += READ_WEIGHT;
-        } else if (READ_TOOLS.has(name)) {
-          score += READ_WEIGHT;
-        }
-      }
-    }
-
-    // 2. Check for reset in this message
     for (const part of msg.parts ?? []) {
-      // session use tool call (supports both "toolUse" and SDK "tool" format)
+      // session use tool call as reset point
       if (isToolCallPart(part)) {
         const name = toolNameFromPart(part);
         const input = toolInputFromPart(part);
         if (name === "session" && input.subcommand === "use") {
           foundReset = true;
           lastAckType = null;
-          score = 0;
         }
       }
       // session use result
@@ -160,7 +127,6 @@ function rebuildFromHistory(messages: any[], threshold: number): KeeperState | n
         if (text.includes("[SESSION CONTEXT] Activated:")) {
           foundReset = true;
           lastAckType = null;
-          score = 0;
         }
       }
       // ACK in assistant text
@@ -170,25 +136,21 @@ function rebuildFromHistory(messages: any[], threshold: number): KeeperState | n
         if (match) {
           foundReset = true;
           lastAckType = match[1] as "recorded" | "skipped";
-          score = 0;
         }
       }
     }
   }
 
-  if (!foundReset) {
-    return {
-      score: 0, threshold, pendingCode: null, pendingThreshold: 0,
-      lastAckType: null, lastAckCode: null, consecutiveAckFailure: 0,
-      lastResetAt: Date.now(), lastElapsedContribution: 0,
-    };
-  }
-
   return {
-    score: Math.min(score, threshold - 1),
-    threshold, pendingCode: null, pendingThreshold: 0,
-    lastAckType, lastAckCode: null, consecutiveAckFailure: 0,
-    lastResetAt: Date.now(), lastElapsedContribution: 0,
+    score: 0,
+    threshold,
+    pendingCode: null,
+    pendingThreshold: 0,
+    lastAckType,
+    lastAckCode: null,
+    consecutiveAckFailure: 0,
+    lastResetAt: foundReset ? Date.now() : Date.now(),
+    lastElapsedContribution: 0,
   };
 }
 

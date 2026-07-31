@@ -393,26 +393,19 @@ describe('processSessionKeeper() — rebuild from history on session restore', (
     const history = [
       { info: { role: 'user' }, parts: [{ type: 'text', text: 'hi' }] },
       { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'hello' }] },
-      // session use
       { info: { role: 'user' }, parts: [{ type: 'text', text: 'use session' }] },
       { info: { role: 'assistant' }, parts: [{ type: 'toolResult', output: 'Session S001 active\n[SESSION CONTEXT] Activated: S001' }] },
-      // work after session use
-      makeToolUseMsg('user', 'do work', [
-        { name: 'write', input: { filePath: '/tmp/a.md' } },
-        { name: 'write', input: { filePath: '/tmp/b.md' } },
-        { name: 'write', input: { filePath: '/tmp/c.md' } },
-      ]),
-      { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'done' }] },
     ];
-    // First call: rebuild from history (3 writes * 3 = 9, below threshold 10)
+    // Rebuild: score=0 (fresh start)
     const r = processSessionKeeper('rebuild-test', history, cwd, SESSION_DIR);
     expect(r.reminder).toBeNull();
 
-    // Second call: add one more write to reach threshold
+    // Add 4 writes = 12 >= 10 -> triggers
+    addToolWeight('rebuild-test', 'write', { filePath: '/tmp/a.md' });
+    addToolWeight('rebuild-test', 'write', { filePath: '/tmp/b.md' });
+    addToolWeight('rebuild-test', 'write', { filePath: '/tmp/c.md' });
     addToolWeight('rebuild-test', 'write', { filePath: '/tmp/d.md' });
-    const nextMsgs = [makeMsg('user', 'more'), makeAssistantMsg('done2')];
-    const r2 = processSessionKeeper('rebuild-test', nextMsgs, cwd, SESSION_DIR);
-    // 9 + 3 = 12 >= 10 -> triggers
+    const r2 = processSessionKeeper('rebuild-test', [makeMsg('user', 'more'), makeAssistantMsg('done2')], cwd, SESSION_DIR);
     expect(r2.reminder).not.toBeNull();
   });
 

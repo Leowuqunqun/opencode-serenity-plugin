@@ -21,7 +21,7 @@ import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady, clearPhase2Flag } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
 import { getActiveSession, setActiveSession, getLastActiveSession, getCapturedOcSessionId, captureOcSessionId } from '../session/active-state.js';
-import { processSessionKeeper, triggerOnToolResult } from '../session/session-keeper.js';
+import { processSessionKeeper, triggerOnToolResult, resetForNextRound } from '../session/session-keeper.js';
 import pkg from '../../package.json' with { type: 'json' };
 
 const VERSION: string = pkg.version;
@@ -268,6 +268,7 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
         }
       }
     }
+    resetForNextRound(ocSessionId);
   }
 
   // ── Phase 2 强制访谈 ──

@@ -21,7 +21,7 @@ import type { Hooks } from '@opencode-ai/plugin';
 import { getState, ensureReady, clearPhase2Flag } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
 import { getActiveSession, setActiveSession, getLastActiveSession, getCapturedOcSessionId, captureOcSessionId } from '../session/active-state.js';
-import { processSessionKeeper } from '../session/session-keeper.js';
+import { processSessionKeeper, triggerOnToolResult } from '../session/session-keeper.js';
 import pkg from '../../package.json' with { type: 'json' };
 
 const VERSION: string = pkg.version;
@@ -406,6 +406,19 @@ const chatMessageImpl: NonNullable<Hooks['chat.message']> = async (input, _outpu
   captureOcSessionId(input.sessionID);
 };
 
+/**
+ * tool.execute.after — inject keeper reminder into tool output when score reaches threshold.
+ * DCP pattern: assistant sees reminder immediately in tool result, not next user message.
+ */
+const toolExecuteAfterImpl: NonNullable<Hooks['tool.execute.after']> = async (input, output) => {
+  const active = getLastActiveSession();
+  if (!active) return;
+  const modified = triggerOnToolResult(input.sessionID, output.output, active.dirName);
+  if (modified) {
+    output.output = modified;
+  }
+};
+
 /** 工厂：返回 compacting / system transform / tool definition 相关的 hooks 集合
  *
  * v1.12: 改用 safeCreateHook（factory pattern）
@@ -442,6 +455,12 @@ export function createCompactingHooks(config?: HookConfig): Partial<Hooks> {
   hooks['tool.definition'] = safeCreateHook(
     'tool.definition',
     () => toolDefinitionImpl,
+    config,
+  );
+
+  hooks['tool.execute.after'] = safeCreateHook(
+    'tool.execute.after',
+    () => toolExecuteAfterImpl,
     config,
   );
 

@@ -243,9 +243,25 @@ export function addToolWeight(sessionId: string, toolName: string, args: Record<
   }
 
   if (weight > 0) {
-    state.score += weight;
-    console.error('[keeper] +weight', JSON.stringify({ tool: toolName, weight, score: state.score }));
+  state.score += weight;
+  console.error('[keeper] +weight', JSON.stringify({ tool: toolName, weight, score: state.score }));
   }
+}
+
+/** Check if score reached threshold and return reminder text for tool output injection.
+ *  Called from tool.execute.after hook for immediate feedback (DCP pattern). */
+export function triggerOnToolResult(sessionId: string, toolOutput: string, sessionDirName: string): string | null {
+  const state = store.get(sessionId);
+  if (!state || state.pendingCode) return null;
+  if (state.score < state.threshold) return null;
+
+  const code = randomCode();
+  state.pendingCode = code;
+  state.pendingThreshold = state.threshold;
+  console.error('[keeper] trigger', JSON.stringify({ code, score: state.score, threshold: state.threshold }));
+
+  const reminder = injectReminderMsg("", code, sessionDirName).trimStart();
+  return toolOutput + "\n\n" + reminder;
 }
 
 function detectAck(assistantText: string | null, expectedCode: string): "recorded" | "skipped" | "invalid" | null {

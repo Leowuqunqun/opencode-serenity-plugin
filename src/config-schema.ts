@@ -36,6 +36,7 @@ import type { Hooks } from '@opencode-ai/plugin';
 export const HOOK_NAMES = [
   'shell.env',
   'tool.execute.before',
+  'tool.execute.after',
   'tool.definition',
   'chat.message',
   'experimental.chat.system.transform',

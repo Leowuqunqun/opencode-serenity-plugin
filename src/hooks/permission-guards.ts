@@ -98,7 +98,6 @@ function classifyPath(value: string, cwdRoot: string): 'inside' | 'outside' | 's
 
 const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (input, _output) => {
   captureOcSessionId(input.sessionID);
-  console.error('[keeper] tool.execute.before captured sessionID:', input.sessionID);
 
   // v0.1: 阻塞等待 Phase 2 完成（失败时：放行所有 = plugin 不工作）
   try {
@@ -110,7 +109,7 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
   const state = getState();
   // SDK 1.15.13: tool.execute.before signature = (input, output) where output.args is the tool call's arguments
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const args = (_output as any)?.args ?? {};
+  const args = _output?.args ?? {};
   const paths = extractPathsFromArgs(args);
 
   // v1.6: edit + write 一起 hard block（read 已有；webfetch A2 决定不动）

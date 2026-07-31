@@ -9,7 +9,6 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-// debug logs use console.error directly (log.ts is no-op in release)
 
 // ── Types ──
 
@@ -106,35 +105,26 @@ function getOrCreate(id: SessionId, threshold: number, messages?: any[]): Keeper
  *  Incremental tool counting via addToolWeight takes over from here. */
 function rebuildFromHistory(messages: any[], threshold: number): KeeperState | null {
   let lastAckType: "recorded" | "skipped" | null = null;
-  let foundReset = false;
 
   for (const msg of messages) {
     if (!msg) continue;
 
     for (const part of msg.parts ?? []) {
-      // session use tool call as reset point
       if (isToolCallPart(part)) {
         const name = toolNameFromPart(part);
         const input = toolInputFromPart(part);
         if (name === "session" && input.subcommand === "use") {
-          foundReset = true;
           lastAckType = null;
         }
       }
-      // session use result
-      if (part.type === "toolResult") {
-        const text: string = typeof part.output === "string" ? part.output : "";
-        if (text.includes("[SESSION CONTEXT] Activated:")) {
-          foundReset = true;
+      if (isToolResultPart(part)) {
+        if (toolOutputText(part).includes("[SESSION CONTEXT] Activated:")) {
           lastAckType = null;
         }
       }
-      // ACK in assistant text
       if (part.type === "text" && msg.info?.role === "assistant") {
-        const text: string = part.text ?? "";
-        const match = text.match(ACK_PATTERN);
+        const match = (part.text ?? "").match(ACK_PATTERN);
         if (match) {
-          foundReset = true;
           lastAckType = match[1] as "recorded" | "skipped";
         }
       }
@@ -149,7 +139,7 @@ function rebuildFromHistory(messages: any[], threshold: number): KeeperState | n
     lastAckType,
     lastAckCode: null,
     consecutiveAckFailure: 0,
-    lastResetAt: foundReset ? Date.now() : Date.now(),
+    lastResetAt: Date.now(),
     lastElapsedContribution: 0,
   };
 }
@@ -183,24 +173,29 @@ function injectReminderMsg(text: string, code: string, sessionId: string): strin
   return text + REMINDER_TEXT.replace(/\{code\}/g, code).replace(/S###/, sessionId);
 }
 
-/** Extract tool name from a part: supports all known hook formats */
+/** Extract tool name from a part (SDK ToolPart.tool field) */
 function toolNameFromPart(part: any): string {
-  return (part as any).tool ?? (part as any).name ?? (part as any).function ?? "";
+  return part.tool ?? "";
 }
 
-/** Check if a part is a tool call (not a result).
- *  SDK format: one part per tool call, state evolves pending→completed.
- *  In messages.transform, all prior tool parts are "completed" — count them all. */
+/** Check if a part is a tool call (SDK ToolPart, type === "tool") */
 function isToolCallPart(part: any): boolean {
-  if (part.type === "toolUse" || part.type === "functionCall") return true;
-  if (part.type === "toolResult" || part.type === "functionResponse") return false;
-  if (part.type === "tool") return true;
-  return false;
+  return part.type === "tool";
 }
 
-/** Extract tool input from a part */
+/** Extract tool input from a part (legacy .input field for tests) */
 function toolInputFromPart(part: any): Record<string, unknown> {
-  return (part as any).input ?? (part as any).arguments ?? (part as any).args ?? {};
+  return part.input ?? {};
+}
+
+/** Check if a part is a completed tool result */
+function isToolResultPart(part: any): boolean {
+  return part.type === "tool" && part.state?.status === "completed";
+}
+
+/** Get output text from a completed tool part */
+function toolOutputText(part: any): string {
+  return typeof (part.state as any)?.output === "string" ? (part.state as any).output : "";
 }
 
 function findLastAssistantText(messages: any[]): string | null {
@@ -244,7 +239,6 @@ export function addToolWeight(sessionId: string, toolName: string, args: Record<
 
   if (weight > 0) {
   state.score += weight;
-  console.error('[keeper] +weight', JSON.stringify({ tool: toolName, weight, score: state.score }));
   }
 }
 
@@ -289,13 +283,6 @@ export function processSessionKeeper(
   const state = getOrCreate(ocSessionId, threshold, messages);
   state.threshold = threshold;
 
-  console.error('[keeper] process', JSON.stringify({
-    ocSessionId,
-    score: state.score,
-    threshold,
-    pendingCode: state.pendingCode,
-  }));
-
   // Step 1: check for ACK in last assistant response
   if (state.pendingCode) {
     const lastText = findLastAssistantText(messages);
@@ -322,7 +309,6 @@ export function processSessionKeeper(
     if (delta > 0) {
       state.score += delta;
       state.lastElapsedContribution = elapsedSinceReset;
-      console.error('[keeper] +time', JSON.stringify({ delta, score: state.score }));
     }
   }
 

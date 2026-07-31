@@ -204,13 +204,11 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
     const existing = getActiveSession(ocSessionId);
     if (!existing) {
       outer: for (const msg of messages) {
-        for (const part of (msg as any).parts ?? []) {
-          const isToolResult = part.type === 'toolResult' || (
-            part.type === 'tool' && part.state?.status === 'completed'
-          );
+        for (const part of msg.parts ?? []) {
+          const isToolResult = part.type === "tool" && part.state?.status === "completed";
           if (isToolResult) {
-            const output1 = part.output ?? part.state?.output ?? '';
-            const text = typeof output1 === 'string' ? output1 : '';
+            const output1 = (part.state as any)?.output ?? "";
+            const text = typeof output1 === "string" ? output1 : "";
             if (text.includes('[SESSION CONTEXT] Activated:')) {
               const lines = text.split('\n');
               let dirName = '';
@@ -238,18 +236,8 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
   }
 
   // ── Session-Keeper（正常会话阶段，非 Phase 2）──
-  console.error('[keeper] pre-check', JSON.stringify({
-    needsPhase2: state.needsPhase2,
-    hasOcSessionId: !!ocSessionId,
-    capturedFrom: 'tool.execute.before',
-  }));
   if (!state.needsPhase2 && ocSessionId) {
     const active = getActiveSession(ocSessionId) ?? getLastActiveSession();
-    console.error('[keeper] hook', JSON.stringify({
-      ocSessionId,
-      active: !!active,
-      needsPhase2: state.needsPhase2,
-    }));
     if (active) {
       const result = processSessionKeeper(
         ocSessionId, messages, state.cwdRoot, active.dirName,

@@ -53,11 +53,11 @@ function makeAssistantMsg(text: string): any {
 }
 
 function makeToolUse(name: string, input?: Record<string, unknown>): any {
-  return { type: 'toolUse', name, input: input ?? {} };
+  return { type: 'tool', tool: name, input: input ?? {} };
 }
 
 function makeToolUsePart(name: string, input?: Record<string, unknown>): any {
-  return { type: 'toolUse', name, input: input ?? {} };
+  return { type: 'tool', tool: name, input: input ?? {} };
 }
 
 function makeMsg(role: string, text: string, parts?: any[]): any {
@@ -381,8 +381,8 @@ describe('processSessionKeeper() — rebuild from history on session restore', (
       parts: [
         { type: 'text', text },
         ...tools.map((t: any) => ({
-          type: 'toolUse',
-          name: t.name ?? t.tool ?? t,
+          type: 'tool',
+          tool: t.name ?? t.tool ?? t,
           input: t.input ?? {},
         })),
       ],
@@ -394,7 +394,7 @@ describe('processSessionKeeper() — rebuild from history on session restore', (
       { info: { role: 'user' }, parts: [{ type: 'text', text: 'hi' }] },
       { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'hello' }] },
       { info: { role: 'user' }, parts: [{ type: 'text', text: 'use session' }] },
-      { info: { role: 'assistant' }, parts: [{ type: 'toolResult', output: 'Session S001 active\n[SESSION CONTEXT] Activated: S001' }] },
+      { info: { role: 'assistant' }, parts: [{ type: 'tool', state: { status: 'completed', output: 'Session S001 active\n[SESSION CONTEXT] Activated: S001' } }] },
     ];
     // Rebuild: score=0 (fresh start)
     const r = processSessionKeeper('rebuild-test', history, cwd, SESSION_DIR);
@@ -422,7 +422,7 @@ describe('processSessionKeeper() — rebuild from history on session restore', (
   it('rebuild with prior ACK resets score to zero', () => {
     const history = [
       { info: { role: 'user' }, parts: [{ type: 'text', text: 'use' }] },
-      { info: { role: 'assistant' }, parts: [{ type: 'toolResult', output: '[SESSION CONTEXT] Activated: S001' }] },
+      { info: { role: 'assistant' }, parts: [{ type: 'tool', state: { status: 'completed', output: '[SESSION CONTEXT] Activated: S001' } }] },
       makeToolUseMsg('user', 'work', [{ name: 'write', input: { filePath: '/tmp/a.md' } }]),
       { info: { role: 'assistant' }, parts: [{ type: 'text', text: 'updated\n[SESSION-KEEPER-recorded-ABC]' }] },
     ];

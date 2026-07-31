@@ -224,16 +224,13 @@ function toolNameFromPart(part: any): string {
   return (part as any).tool ?? (part as any).name ?? (part as any).function ?? "";
 }
 
-/** Check if a part is a tool call (not a result) */
+/** Check if a part is a tool call (not a result).
+ *  SDK format: one part per tool call, state evolves pending→completed.
+ *  In messages.transform, all prior tool parts are "completed" — count them all. */
 function isToolCallPart(part: any): boolean {
   if (part.type === "toolUse" || part.type === "functionCall") return true;
   if (part.type === "toolResult" || part.type === "functionResponse") return false;
-  if (part.type === "tool" && part.state) {
-    const s = part.state.status;
-    if (s === "pending" || s === "running") return true;
-    if (s === "completed" || s === "error") return false;
-    return true; // unknown status but type is "tool" — treat as call
-  }
+  if (part.type === "tool") return true;
   return false;
 }
 

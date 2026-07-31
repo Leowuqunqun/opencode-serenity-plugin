@@ -349,13 +349,3 @@ export function processSessionKeeper(
 
   return { reminder: null, code: null };
 }
-
-/** Reset keeper score for next LLM round. Called once per messages.transform cycle. */
-export function resetForNextRound(sessionId: string): void {
-  const state = store.get(sessionId);
-  if (state && !state.pendingCode) {
-    state.score = 0;
-    state.lastResetAt = Date.now();
-    state.lastElapsedContribution = 0;
-  }
-}

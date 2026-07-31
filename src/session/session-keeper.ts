@@ -259,10 +259,15 @@ function findLastAssistantText(messages: any[]): string | null {
 
 function countToolWeights(messages: any[], writeWeight: number, readWeight: number, delegateWeight: number): number {
   let score = 0;
+  let foundCalls = 0;
+  let skippedCalls = 0;
+  const sampledTypes: string[] = [];
   for (const msg of messages) {
     if (!msg) continue;
     for (const part of msg.parts ?? []) {
-      if (!isToolCallPart(part)) continue;
+      if (sampledTypes.length < 10) sampledTypes.push(part.type ?? 'no-type');
+      if (!isToolCallPart(part)) { skippedCalls++; continue; }
+      foundCalls++;
       const name = toolNameFromPart(part);
       const input = toolInputFromPart(part);
 
@@ -283,6 +288,13 @@ function countToolWeights(messages: any[], writeWeight: number, readWeight: numb
       }
     }
   }
+  console.error('[keeper] debug count', JSON.stringify({
+    totalParts: sampledTypes.length,
+    sampledTypes: [...new Set(sampledTypes)],
+    foundCalls,
+    skippedCalls,
+    score,
+  }));
   return score;
 }
 
@@ -318,6 +330,9 @@ export function processSessionKeeper(
     threshold,
     pendingCode: state.pendingCode,
     msgCount: messages.length,
+    partTypes: [...new Set(
+      messages.flatMap((m: any) => (m?.parts ?? []).map((p: any) => p.type ?? 'no-type'))
+    )].slice(0, 20),
   }));
 
   // Step 1: check for ACK in last assistant response

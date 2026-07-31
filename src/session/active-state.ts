@@ -43,7 +43,12 @@ export function getLastActiveSession(): ActiveSession | null {
 
 export function removeActiveSession(ocSessionId: string): void {
   store.delete(ocSessionId);
-  if (lastActive && !store.has(ocSessionId)) {
-    lastActive = null;
+  if (lastActive) {
+    // Only nullify if the removed session was the last-active one
+    let stillExists = false;
+    for (const [_key, val] of store) {
+      if (val === lastActive) { stillExists = true; break; }
+    }
+    if (!stillExists) lastActive = null;
   }
 }

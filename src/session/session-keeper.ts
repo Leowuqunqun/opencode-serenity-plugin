@@ -240,7 +240,7 @@ export function addToolWeight(sessionId: string, toolName: string, args: Record<
   }
 
   if (weight > 0) {
-  state.score += weight;
+    state.score += weight;
   }
 }
 

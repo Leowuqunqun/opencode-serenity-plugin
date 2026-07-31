@@ -248,7 +248,7 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
         // Inject into the last user message (DCP pattern: only modify user messages)
         for (let i = messages.length - 1; i >= 0; i--) {
           const msg = messages[i];
-          if (!msg || msg.info.role !== 'user') continue;
+          if (!msg || msg.info?.role !== 'user') continue;
           for (const part of msg.parts) {
             if (part.type !== 'text') continue;
             if (part.ignored || (part as any).synthetic) continue;
@@ -262,10 +262,9 @@ const messagesTransformImpl: NonNullable<Hooks['experimental.chat.messages.trans
 
   // ── Phase 2 强制访谈 ──
   if (!state.needsPhase2 || !state.phase2Prompt) return;
-  // 从后往前找最后一个真实用户消息（跳过 synthetic / ignored / non-user）
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
-    if (!msg || msg.info.role !== 'user') continue;
+    if (!msg || msg.info?.role !== 'user') continue;
 
     for (const part of msg.parts) {
       if (part.type !== 'text') continue;

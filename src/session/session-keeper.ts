@@ -16,12 +16,8 @@ interface KeeperState {
   score: number;
   threshold: number;
   pendingCode: string | null;
-  pendingThreshold: number;
   lastAckType: "recorded" | "skipped" | null;
-  lastAckCode: string | null;
-  consecutiveAckFailure: number;
   lastResetAt: number;
-  /** Last known effective score for incremental delta tracking */
   lastElapsedContribution: number;
 }
 
@@ -94,7 +90,7 @@ function getOrCreate(id: SessionId, threshold: number, messages?: any[]): Keeper
         return rebuilt;
       }
     }
-    s = { score: 0, threshold, pendingCode: null, pendingThreshold: 0, lastAckType: null, lastAckCode: null, consecutiveAckFailure: 0, lastResetAt: Date.now(), lastElapsedContribution: 0 };
+    s = { score: 0, threshold, pendingCode: null, lastAckType: null, lastResetAt: Date.now(), lastElapsedContribution: 0 };
     store.set(id, s);
   }
   return s;
@@ -137,10 +133,7 @@ function rebuildFromHistory(messages: any[], threshold: number): KeeperState | n
     score: 0,
     threshold,
     pendingCode: null,
-    pendingThreshold: 0,
     lastAckType,
-    lastAckCode: null,
-    consecutiveAckFailure: 0,
     lastResetAt: Date.now(),
     lastElapsedContribution: 0,
   };
@@ -219,7 +212,7 @@ function findLastAssistantText(messages: any[]): string | null {
 export function addToolWeight(sessionId: string, toolName: string, args: Record<string, unknown>): void {
   let state = store.get(sessionId);
   if (!state) {
-    state = { score: 0, threshold: DEFAULT_THRESHOLD, pendingCode: null, pendingThreshold: 0, lastAckType: null, lastAckCode: null, consecutiveAckFailure: 0, lastResetAt: Date.now(), lastElapsedContribution: 0 };
+    state = { score: 0, threshold: DEFAULT_THRESHOLD, pendingCode: null, lastAckType: null, lastResetAt: Date.now(), lastElapsedContribution: 0 };
     store.set(sessionId, state);
   }
   if (state.pendingCode) return;
@@ -253,9 +246,7 @@ export function triggerOnToolResult(sessionId: string, toolOutput: string, sessi
 
   const code = randomCode();
   state.pendingCode = code;
-  state.pendingThreshold = state.threshold;
   console.error('[keeper] trigger', JSON.stringify({ code, score: state.score, threshold: state.threshold }));
-
   const reminder = injectReminderMsg("", code, sessionDirName).trimStart();
   return toolOutput + "\n\n" + reminder;
 }
@@ -295,12 +286,6 @@ export function processSessionKeeper(
       state.lastResetAt = Date.now();
       state.lastElapsedContribution = 0;
       state.lastAckType = ack;
-      state.lastAckCode = null;
-      state.consecutiveAckFailure = 0;
-    } else if (ack === "invalid") {
-      state.consecutiveAckFailure++;
-    } else {
-      state.consecutiveAckFailure++;
     }
   }
 
@@ -323,7 +308,6 @@ export function processSessionKeeper(
   if (state.score >= state.threshold) {
     const code = randomCode();
     state.pendingCode = code;
-    state.pendingThreshold = state.threshold;
     const reminder = injectReminderMsg("", code, sessionDirName).trimStart();
     console.error('[keeper] trigger', JSON.stringify({ code, score: state.score, threshold: state.threshold }));
     return { reminder, code };

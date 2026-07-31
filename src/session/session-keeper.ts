@@ -59,15 +59,15 @@ const REMINDER_TEXT =
   "\u2501".repeat(80) + "\n" +
   "[Session-Keeper] Active session (S###).\n" +
   "\n" +
-  "Recent activity suggests decisions or actions may have been made.\n" +
-  "If so, update SESSION.md now.\n" +
+  "DO NOT ignore this message. Append the ACK code below to your response.\n" +
+  "DO NOT stop ongoing work — continue your task while acknowledging.\n" +
   "\n" +
-  "Then append to your response:\n" +
+  "If session progress should be recorded:\n" +
   "  [SESSION-KEEPER-recorded-{code}]\n" +
-  "If nothing to record:\n" +
+  "If nothing to record this round:\n" +
   "  [SESSION-KEEPER-skipped-{code}]\n" +
   "\n" +
-  "You must use the exact code above. Do not reuse codes from previous rounds.\n" +
+  "Use the exact code above. Codes are single-use; do not reuse from prior rounds.\n" +
   "\u2501".repeat(80);
 
 // ── State ──

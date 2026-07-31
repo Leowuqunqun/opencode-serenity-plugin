@@ -252,14 +252,8 @@ export function addToolWeight(sessionId: string, toolName: string, args: Record<
  *  Called from tool.execute.after hook for immediate feedback (DCP pattern). */
 export function triggerOnToolResult(sessionId: string, toolOutput: string, sessionDirName: string): string | null {
   const state = store.get(sessionId);
-  if (!state || state.pendingCode) {
-    console.error('[keeper] trigger skipped', JSON.stringify({ reason: !state ? 'no-state' : 'pending' }));
-    return null;
-  }
-  if (state.score < state.threshold) {
-    console.error('[keeper] trigger below threshold', JSON.stringify({ score: state.score, threshold: state.threshold }));
-    return null;
-  }
+  if (!state || state.pendingCode) return null;
+  if (state.score < state.threshold) return null;
 
   const code = randomCode();
   state.pendingCode = code;

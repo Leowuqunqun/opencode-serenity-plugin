@@ -8,6 +8,14 @@
 - **修复**：改用 `findNodeBin()`（`which node`），与 loop-tool 一致；`start` 返回新增 `log` 字段（日志路径），失败路径可查。
 - **新增测试**：`findNodeBin` 回归测试（真实 spawn 验证 node 可执行）。
 
+## v0.8.2 — 📖 ccc-config resident 使用指南
+
+`ccc_admin ccc-config` 的 resident 段扩展为完整使用指南：
+
+- **设计理念（DESIGN RATIONALE）**：双 while 循环、mind.md 即身份、时间界限、目的性不能重、约束继承。
+- **使用方式（USAGE GUIDE）**：配置/心智文件创建、start/status/stop 三步、状态值语义、恢复流程、每轮行为、STOP 提前了结、SQC 首选用例。
+- **运维注意事项（OPERATIONAL NOTES）**：gitignore、端口、detached 守护、日志路径、权限模型、失败排查。
+
 ## v0.8.0 — 🏠 resident 顶层常驻 Agent（M0）+ acc_kit 通用能力工具
 
 首个顶层常驻 agent 功能（RFC《永存 Agent 载体设计》M0）：

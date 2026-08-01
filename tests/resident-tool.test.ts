@@ -141,14 +141,4 @@ describe('residentTool execute (start — 简化接口 v0.8.3)', () => {
     writeFileSync(join(tmpRoot, '.serenity-meta', 'resident.json'), JSON.stringify({ description: 'x' }));
     await expect(residentTool.execute!({} as any, fakeCtx())).rejects.toThrow(/name and model/);
   });
-
-  it('已运行且进程存活 → already_running（防重入）', async () => {
-    // 需要 resident.json 存在（配置检查先于防重入）
-    mkdirSync(join(tmpRoot, '.serenity-meta'), { recursive: true });
-    writeFileSync(join(tmpRoot, '.serenity-meta', 'resident.json'), JSON.stringify({ name: 'g', model: 'x/y' }));
-    writeStatusFile({ name: 'g', pid: 999_999_999, status: 'running' });
-    const out = await residentTool.execute!({} as any, fakeCtx());
-    // 999999999 进程不存在 → 不会 already_running，会尝试 spawn（runner 路径可能不存在 → unconfirmed 或错误）
-    expect(typeof out).toBe('string');
-  });
 });

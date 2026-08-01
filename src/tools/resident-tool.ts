@@ -103,10 +103,10 @@ function effectiveProcessState(st: StatusFile): { alive: boolean; isOurs: boolea
 
 export const residentTool: ToolDefinition = tool({
   description:
-    'Resident tool — 启动 CCC 顶层常驻 agent（居民）。' +
-    '读 .serenity-meta/resident.json 声明。调用即启动，start 后挂起常驻（后台 detached 进程）。' +
-    'runner 内部双层循环：外层永存，内层生命周期（lifetimeMs）到期自我了结并续命。' +
-    '已在运行时返回 already_running。无需查询/停止——它设计为持续运行。',
+    'Resident tool — 启动 CCC 顶层常驻 agent（居民）并挂住。' +
+    '读 .serenity-meta/resident.json 声明。调用后阻塞（像 loop 一样 hang 住），' +
+    '直到 resident 停止才返回——它持续运行、自行维护心智。' +
+    '已在运行时返回 already_running（不重复启动）。',
   args: {},
   execute: async (_input, ctx) => {
     await ensureReady();
@@ -145,7 +145,7 @@ export const residentTool: ToolDefinition = tool({
       // pid 存活但不是 resident-runner（PID 复用）→ 视为 stale，继续启动
     }
 
-    // 3. spawn runner（detached + unref；日志重定向到文件；挂 error 监听）
+    // 3. spawn runner（阻塞挂住，像 loop 一样：await close 直到 resident 退出）
     const port = residentPort(config.name, cccName);
     const runner = runnerPath();
     const logFd = openSync(runnerLogFile(port), 'a');
@@ -154,53 +154,50 @@ export const residentTool: ToolDefinition = tool({
       stdio: ['ignore', logFd, logFd],
       detached: true,
     });
-    child.unref();
-    child.on('error', (err) => {
-      try { writeFileSyncLog(`spawn error: ${err.message}`); } catch {}
+    // 不 unref()——保持在本进程事件循环中，才能 await close 阻塞
+    const spawnError: Error | null = await new Promise<Error | null>((resolve) => {
+      child.once('error', (err) => {
+        try { writeFileSyncLog(`spawn error: ${err.message}`); } catch {}
+        resolve(err);
+      });
+      child.once('close', () => resolve(null));
     });
 
-    // 4. 等 status.json 出现（runner 启动成功标志），最多 20s
-    const deadline = Date.now() + 20_000;
-    while (Date.now() < deadline) {
-      const st = readStatusFile(cwdRoot);
-      if (st && st.pid > 0 && isPidAlive(st.pid)) {
-        const { isOurs } = effectiveProcessState(st);
-        if (isOurs || st.status === 'initializing') {
-          return JSON.stringify(
-            {
-              ok: true,
-              started: true,
-              name: st.name,
-              pid: st.pid,
-              port: st.port,
-              status: st.status,
-              log: runnerLogFile(st.port || port),
-              note: st.status === 'initializing'
-                ? 'resident spawned; initializing (model validation / server boot)'
-                : 'resident started in background (detached)',
-            },
-            null,
-            2,
-          );
-        }
-      }
-      if (st && st.status === 'error') {
-        return JSON.stringify(
-          { ok: false, reason: 'runner_error', error: st.lastError ?? 'unknown' },
-          null,
-          2,
-        );
-      }
-      await new Promise((r) => setTimeout(r, 500));
+    // 用户取消 → 杀 runner 进程组（runner + serve 一锅端）
+    const killGroup = () => {
+      try { process.kill(-child.pid!, 'SIGTERM'); } catch {}
+    };
+    if (ctx.abort.aborted) {
+      killGroup();
+      throw new Error('resident start 已被用户取消');
+    }
+    const onAbort = () => killGroup();
+    ctx.abort.addEventListener('abort', onAbort);
+
+    // 4. 阻塞等待 runner 退出（resident 常驻，只有 stop/死亡/宿主死才退出）
+    const exitCode = await new Promise<number>((resolve) => {
+      child.on('close', (code) => resolve(code ?? -1));
+    });
+    ctx.abort.removeEventListener('abort', onAbort);
+
+    if (ctx.abort.aborted) {
+      throw new Error('resident start 已被用户取消');
+    }
+    if (spawnError) {
+      throw new Error(`resident start 失败: ${spawnError.message} (log: ${runnerLogFile(port)})`);
+    }
+    if (exitCode !== 0) {
+      throw new Error(`resident 进程退出 (exit=${exitCode}); log: ${runnerLogFile(port)}`);
     }
 
     return JSON.stringify(
       {
-        ok: false,
-        reason: 'unconfirmed',
-        note: 'runner spawned but no status within 20s; check log',
-        pid: child.pid ?? 0,
+        ok: true,
+        stopped: true,
+        name: config.name,
+        port,
         log: runnerLogFile(port),
+        note: 'resident stopped; mind was solidified to .serenity-meta/mind.md',
       },
       null,
       2,

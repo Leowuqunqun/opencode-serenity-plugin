@@ -654,10 +654,12 @@ export const msmAdminTool: ToolDefinition = tool({
         '  CCC usage is intentionally SIMPLE — there is exactly ONE action:',
         '    resident       // (no arguments) start the resident, then it stays up',
         '',
-        '  Calling "resident" starts the daemon and returns immediately.',
+        '  Calling "resident" starts the daemon and BLOCKS (like loop): the call',
+        '  stays open while the resident runs. It returns only when the resident',
+        '  stops (killed / machine shutdown). So: call it, it hangs, it runs.',
         '  If already running, it returns {ok:false, reason:"already_running"}.',
-        '  You do NOT query status or stop it — it is designed to keep running.',
-        '  (To stop: find its PID in .serenity-meta/resident.status.json and kill it.)',
+        '  To stop: find its PID in .serenity-meta/resident.status.json and kill it;',
+        '  the call then returns with the resident\'s final state.',
         '',
         '',
         '  ════════════════════════════════════════════',
@@ -725,8 +727,9 @@ export const msmAdminTool: ToolDefinition = tool({
         '    stop it. Port is derived from CCC name + resident name (31000-61000).',
         '  - Logs: /tmp/serenity-bg-task/resident-<port>.log (runner)',
         '    and /tmp/serenity-bg-task/server-<port>.log (serve).',
-        '  - If calling "resident" returns ok:false, read the log in the returned',
-        '    "log" field to see why.',
+        '  - The "resident" call blocks until the daemon stops. Run it in the',
+        '    background if you do not want the session to wait (e.g. in a loop,',
+        '    a separate serve, or a dedicated opencode instance).',
       ].join('\n');
     }
     if (input.action === 'register') {

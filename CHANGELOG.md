@@ -1,5 +1,14 @@
 # 更新日志
 
+## v0.8.4 — ⏳ resident start 改为阻塞挂住（像 loop）
+
+根据用户反馈（"start 后为何立即返回，像 loop 一样 hang 住即可"）：
+
+- **`resident` 调用改为阻塞**：spawn runner 后不再立即返回，而是 `await close` 挂住，直到 resident 停止（被杀/机器关机）才返回。
+- **移除 `unref()` 和 20s 状态轮询**：逻辑与 loop-tool 的阻塞模式一致。
+- 返回：正常停止时 `{ok:true, stopped:true}`；异常退出/取消时抛错。
+- ccc-config 文档更新：说明"调用会阻塞挂住，运行结束后返回；需后台时放进 loop/独立 serve"。
+
 ## v0.8.3 — 🧹 resident 接口极简化为 start-only
 
 根据用户反馈（"设计过于复杂，CCC 难以理解"）简化 resident 接口：

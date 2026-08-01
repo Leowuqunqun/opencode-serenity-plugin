@@ -1,12 +1,13 @@
 # 更新日志
 
-## v0.8.1 — 🐛 resident spawn 修复（S063 反馈）
+## v0.8.3 — 🧹 resident 接口极简化为 start-only
 
-修复 S063 发现的 `resident start` 永远 `unconfirmed` / `status` 永远 `unknown` 问题：
+根据用户反馈（"设计过于复杂，CCC 难以理解"）简化 resident 接口：
 
-- **根因**：`resident-tool` 用 `spawn(process.execPath, ...)` 启动 runner，但 `process.execPath` 是 opencode 二进制（Bun 编译）而非 node，runner 启动即崩，从未写 status.json。
-- **修复**：改用 `findNodeBin()`（`which node`），与 loop-tool 一致；`start` 返回新增 `log` 字段（日志路径），失败路径可查。
-- **新增测试**：`findNodeBin` 回归测试（真实 spawn 验证 node 可执行）。
+- **`resident` tool 去掉 action 参数**：调用即 `start`，start 后挂起常驻，无需查询/停止。
+- **移除 `status` / `stop` action**：CCC 只需理解"resident = 启动并保持运行"。
+- **ccc-config resident 段同步简化**：改为 SETUP / HOW IT WORKS / NOTES 三节，突出单一用法 `resident`（无参数）。
+- 防重入保留：已运行返回 `already_running`；停止方式在文档注明（kill PID）。
 
 ## v0.8.2 — 📖 ccc-config resident 使用指南
 

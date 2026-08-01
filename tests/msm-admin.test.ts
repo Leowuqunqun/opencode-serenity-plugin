@@ -348,18 +348,13 @@ describe('ccc_admin action=ccc-config (v1.17 + v0.8 resident)', () => {
 
       // resident 段（v0.8 M0）
       expect(result).toContain('4. resident (top-level persistent agent)');
-      expect(result).toContain('DESIGN RATIONALE');
-      expect(result).toContain('Double while loop');
-      expect(result).toContain('mind.md = the ONLY persistent memory');
-      expect(result).toContain('Purpose-free by design');
-      expect(result).toContain('USAGE GUIDE');
+      expect(result).toContain('SETUP');
+      expect(result).toContain('HOW IT WORKS');
+      expect(result).toContain('resident       // (no arguments) start the resident');
       expect(result).toContain('.serenity-meta/resident.json');
-      expect(result).toContain('resident start');
-      expect(result).toContain('resident status');
-      expect(result).toContain('resident stop');
-      expect(result).toContain('OPERATIONAL NOTES');
       expect(result).toContain('cycle.lifetimeMs');
-      expect(result).toContain('mind.md = the ONLY persistent memory');
+      expect(result).toContain('mind.md is its ONLY memory');
+      expect(result).toContain('SQC quality cycle');
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

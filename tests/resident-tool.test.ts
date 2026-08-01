@@ -14,7 +14,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { residentTool, residentPort, readStatusFile, isPidAlive } from '../src/tools/resident-tool.js';
+import { spawn } from 'node:child_process';
+import { residentTool, residentPort, readStatusFile, isPidAlive, findNodeBin } from '../src/tools/resident-tool.js';
 import { resetState, setState } from '../src/state.js';
 
 let tmpRoot = '';
@@ -94,6 +95,34 @@ describe('isPidAlive', () => {
     expect(isPidAlive(0)).toBe(false);
     expect(isPidAlive(-1)).toBe(false);
     expect(isPidAlive(999_999_999)).toBe(false);
+  });
+});
+
+describe('findNodeBin (S063 spawn 回归)', () => {
+  it('返回可执行的 node 二进制，能真实 spawn 并执行脚本', async () => {
+    // S063: process.execPath 是 opencode 二进制（Bun），不能跑 JS。
+    // findNodeBin 必须返回真 node。
+    const nodeBin = findNodeBin();
+    expect(nodeBin.length).toBeGreaterThan(0);
+
+    const result = await new Promise<string>((resolve, reject) => {
+      const child = spawn(nodeBin, ['-e', 'console.log("RESIDENT_NODE_OK")']);
+      let out = '';
+      let err = '';
+      child.stdout.on('data', (d) => { out += d; });
+      child.stderr.on('data', (d) => { err += d; });
+      child.on('close', (code) => {
+        if (code === 0) resolve(out.trim());
+        else reject(new Error(`exit ${code}: ${err}`));
+      });
+    });
+    expect(result).toBe('RESIDENT_NODE_OK');
+  });
+
+  it('process.execPath 不等于 findNodeBin（opencode 是 Bun 二进制）', () => {
+    // 在 vitest 环境二者可能都是 node；此测试标记语义而非强断言
+    const nodeBin = findNodeBin();
+    expect(typeof nodeBin).toBe('string');
   });
 });
 

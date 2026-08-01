@@ -28,6 +28,16 @@ import { isResidentRunner } from './resident-core.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/** 查找 node 二进制（复制 loop-tool.findNodeBin）：
+ *  process.execPath 是 opencode 二进制（Bun 编译），不能直接跑 TS/JS runner */
+export function findNodeBin(): string {
+  try {
+    return execSync('which node', { encoding: 'utf-8' }).trim() || 'node';
+  } catch {
+    return 'node';
+  }
+}
+
 const META_DIRNAME = '.serenity-meta';
 const STATUS_FILENAME = 'resident.status.json';
 const PID_DIR = '/tmp/serenity-bg-task';
@@ -164,7 +174,8 @@ export const residentTool: ToolDefinition = tool({
       const port = residentPort(config.name, cccName);
       const runner = runnerPath();
       const logFd = openSync(runnerLogFile(port), 'a');
-      const child = spawn(process.execPath, [runner, cwdRoot, String(port), String(process.pid)], {
+      const nodeBin = findNodeBin();
+      const child = spawn(nodeBin, [runner, cwdRoot, String(port), String(process.pid)], {
         stdio: ['ignore', logFd, logFd],
         detached: true,
       });
@@ -189,6 +200,7 @@ export const residentTool: ToolDefinition = tool({
                 pid: st.pid,
                 port: st.port,
                 status: st.status,
+                log: runnerLogFile(st.port || port),
                 note: st.status === 'initializing'
                   ? 'resident spawned; initializing (model validation / server boot)'
                   : 'resident started in background (detached)',
@@ -209,7 +221,13 @@ export const residentTool: ToolDefinition = tool({
       }
 
       return JSON.stringify(
-        { ok: false, reason: 'unconfirmed', note: 'runner spawned but no status within 20s; check resident log', pid: child.pid ?? 0 },
+        {
+          ok: false,
+          reason: 'unconfirmed',
+          note: 'runner spawned but no status within 20s; check log',
+          pid: child.pid ?? 0,
+          log: runnerLogFile(port),
+        },
         null,
         2,
       );

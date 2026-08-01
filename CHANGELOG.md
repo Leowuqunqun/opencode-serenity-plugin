@@ -1,5 +1,25 @@
 # 更新日志
 
+## v0.8.1 — 🐛 resident spawn 修复（S063 反馈）
+
+修复 S063 发现的 `resident start` 永远 `unconfirmed` / `status` 永远 `unknown` 问题：
+
+- **根因**：`resident-tool` 用 `spawn(process.execPath, ...)` 启动 runner，但 `process.execPath` 是 opencode 二进制（Bun 编译）而非 node，runner 启动即崩，从未写 status.json。
+- **修复**：改用 `findNodeBin()`（`which node`），与 loop-tool 一致；`start` 返回新增 `log` 字段（日志路径），失败路径可查。
+- **新增测试**：`findNodeBin` 回归测试（真实 spawn 验证 node 可执行）。
+
+## v0.8.0 — 🏠 resident 顶层常驻 Agent（M0）+ acc_kit 通用能力工具
+
+首个顶层常驻 agent 功能（RFC《永存 Agent 载体设计》M0）：
+
+- **`resident` tool**：`start` / `status` / `stop`。双层 while 循环——外层永存，内层生命周期（`lifetimeMs`）到期自我了结（写心智 → 新 session → 新周期）。
+- **心智协议**：`mind.md` 是唯一持久记忆，每轮原子固化（tmp+rename），agent 可死、磁盘即恢复源。
+- **时间界限**：`lifetimeMs` 到期 agent 自我了结；每轮 POST 超时 = `min(timeoutMs, 剩余+grace)`。
+- **可靠性**：锁 O_EXCL 防并发 start、serve 崩溃自愈、stop PID 身份校验、异步 curl + abort（SIGTERM 不延迟）、端口 CCC 盐化、remainingMs 每生命周期刷新。
+- **`acc_kit` tool**：`cc_ck` 升级——`health`（CCC 三原则）/ `time` / `wait`。
+- **配置**：`.serenity-meta/resident.json` + `mind.md`；`ccc_admin ccc-config` 增加 resident 配置段。
+- 551+ tests 全绿；2 轮静态审查（实现正确性 + 并发时序）高危修复全部落地。
+
 ## v0.7.0 — 🛠️ Session-Keeper 全面修复与加固
 
 Session-Keeper 从 v0.5.48 到 v0.7.0 经过多轮修复，本次小版本整合所有改动：

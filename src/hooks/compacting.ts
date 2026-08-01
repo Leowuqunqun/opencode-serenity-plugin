@@ -57,7 +57,7 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
       `  ccc_admin — register/deregister MSMs, run quality checks, view dev guide`,
       `  cc-fs     — file operations strictly within Root (root/resolve/list/mkdir/rm/mv/cp/touch/tree/append)`,
       `  session   — session lifecycle (list/show/create/use/close/health/qa/archive/summary)`,
-      `  cc-ck     — validate CCC three principles (P1 rooted / P2 git-managed / P3 binary permissions)`,
+      `  acc_kit   — ACC utility kit (health: CCC three principles / time: now / wait: sleep N seconds)`,
       `  eap       — return the full EAP cognitive quality framework`,
       `  neat      — return the full Neat design collaboration protocol`,
       '',

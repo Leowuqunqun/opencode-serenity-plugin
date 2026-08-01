@@ -28,11 +28,12 @@ import {
 } from './msm.js';
 import { fileSystemTool } from './fs/file-system-tool.js';
 import { sessionTool } from './session/session-tool.js';
-import { cccStatusTool } from './ccc-status.js';
+import { accKitTool } from './acc-kit.js';
 import { eapTool } from './eap-tool.js';
 import { neatTool } from './neat-tool.js';
 import { ccGitTool } from './git/cc-git-tool.js';
 import { loopTool, cleanupAllLoops } from './tools/loop-tool.js';
+import { residentTool } from './tools/resident-tool.js';
 import { createPermissionGuards } from './hooks/permission-guards.js';
 import { createCompactingHooks } from './hooks/compacting.js';
 import { createShellEnv } from './hooks/shell-env.js';
@@ -61,11 +62,12 @@ const plugin: Plugin = async (input) => {
       ccc_admin: msmAdminTool,
       cc_fs: fileSystemTool, // v0.1 D4: 跨实例文件系统工具 (D20: renamed to cc-fs)
       session: sessionTool, // v0.1 D5: 通用会话管理工具
-      cc_ck: cccStatusTool, // v0.3 D18: CCC 三原则状态检查
+      acc_kit: accKitTool,  // v0.8: ACC 通用能力工具包 (cc_ck 升级：health/time/wait)
       eap: eapTool,        // v0.3: EAP 认知质量框架 (渐进式披露)
       neat: neatTool,      // v0.3: Neat 设计协作协议 (渐进式披露)
       cc_git: ccGitTool,   // v0.4: CCC git 管理工具 (status/commit/push/log/pull)
       loop: loopTool,      // v0.5: Loop tool — 外部驱动可靠循环
+      resident: residentTool, // v0.8 M0: Resident — 顶层常驻 agent (start/status/stop)
     },
     dispose: async () => { cleanupAllLoops(); },
     ...createPermissionGuards(),

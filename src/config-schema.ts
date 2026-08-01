@@ -249,3 +249,53 @@ export function parseMechEntry(input: unknown): SafeParseResult<MechEntry> {
 export function parseHookConfig(input: unknown): SafeParseResult<HookConfig> {
   return hookConfigSchema.safeParse(input);
 }
+
+// ── ResidentConfig (v0.8 M0 — 顶层常驻 agent) ──
+
+/**
+ * ResidentConfig = 顶层 resident agent 声明（.serenity-meta/resident.json）
+ *
+ * M0 设计要点:
+ * - 目的性不能重：不含 task/constraints 字段，任务从 mind.md 队列动态取
+ * - 时间界限：cycle.lifetimeMs 到期结束当前生命周期（双层 while）
+ * - 约束继承普通 agent：不单独定义 constraints
+ */
+export const residentConfigSchema = z
+  .object({
+    name: z.string().min(1).describe('resident 名称（CCC 唯一）'),
+    description: z.string().min(1).describe('身份描述，注入模板'),
+    model: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/)
+      .describe('模型 provider/model'),
+    mind: z
+      .object({
+        file: z.string().min(1).describe('mind.md 路径（相对 CCC root，必须存在）'),
+      })
+      .describe('心智文件'),
+    cycle: z
+      .object({
+        type: z.literal('forever').describe('常驻类型'),
+        intervalMs: z.number().int().positive().describe('每轮唤醒间隔'),
+        timeoutMs: z.number().int().positive().describe('单轮响应超时'),
+        lifetimeMs: z.number().int().positive().describe('生命周期时长，到期结束当前周期'),
+      })
+      .refine((c) => c.lifetimeMs > c.intervalMs, {
+        message: 'cycle.lifetimeMs must be > cycle.intervalMs',
+        path: ['cycle', 'lifetimeMs'],
+      })
+      .refine((c) => c.timeoutMs >= c.intervalMs, {
+        message: 'cycle.timeoutMs must be >= cycle.intervalMs',
+        path: ['cycle', 'timeoutMs'],
+      })
+      .describe('循环配置'),
+  })
+  .describe('.serenity-meta/resident.json');
+
+/** 派生 TS 类型 */
+export type ResidentConfig = z.infer<typeof residentConfigSchema>;
+
+/** 解析 ResidentConfig（safeParse，不抛错） */
+export function parseResidentConfig(input: unknown): SafeParseResult<ResidentConfig> {
+  return residentConfigSchema.safeParse(input);
+}

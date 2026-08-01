@@ -326,3 +326,34 @@ describe('msm_admin round-trip (v1.17)', () => {
     }
   });
 });
+
+describe('ccc_admin action=ccc-config (v1.17 + v0.8 resident)', () => {
+  beforeEach(() => {
+    resetState();
+  });
+
+  it('输出 resident 配置参考段', async () => {
+    const { cwd } = setupRepo();
+    try {
+      setState({ activated: true, cwdRoot: cwd, cccName: 'home-serenity' });
+      const result = await msmAdminTool.execute(
+        { action: 'ccc-config' } as any,
+        fakeCtx(cwd),
+      ) as string;
+
+      // 既有段
+      expect(result).toContain('1. loop.defaultModel');
+      expect(result).toContain('2. sessionKeeper.threshold');
+      expect(result).toContain('3. safeMode.blacklist');
+
+      // resident 段（v0.8 M0）
+      expect(result).toContain('4. resident (top-level persistent agent)');
+      expect(result).toContain('.serenity-meta/resident.json');
+      expect(result).toContain('resident start');
+      expect(result).toContain('cycle.lifetimeMs');
+      expect(result).toContain('mind.md is the resident');
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+});

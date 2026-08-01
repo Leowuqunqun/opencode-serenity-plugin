@@ -23,6 +23,8 @@ import {
   parseMechEntry,
   parseMechRegistryFile,
   parseHookConfig,
+  residentConfigSchema,
+  parseResidentConfig,
 } from '../src/config-schema.js';
 
 describe('mechEntrySchema (v1.13)', () => {
@@ -300,5 +302,64 @@ describe('parseMechEntry / parseMechRegistryFile / parseHookConfig (v1.13 工具
   it('parseHookConfig 接受 { k: bool }', () => {
     expect(parseHookConfig({ 'shell.env': false }).success).toBe(true);
     expect(parseHookConfig({ 'shell.env': 'no' }).success).toBe(false);
+  });
+});
+
+describe('residentConfigSchema (v0.8 M0)', () => {
+  const valid = {
+    name: 'guardian',
+    description: 'CCC resident',
+    model: 'minimax-cn-coding-plan/MiniMax-M3',
+    mind: { file: '.serenity-meta/mind.md' },
+    cycle: {
+      type: 'forever' as const,
+      intervalMs: 3600000,
+      timeoutMs: 7200000,
+      lifetimeMs: 21600000,
+    },
+  };
+
+  it('接受完整有效 ResidentConfig', () => {
+    const result = residentConfigSchema.safeParse(valid);
+    expect(result.success).toBe(true);
+  });
+
+  it('缺少必要字段 → 拒绝', () => {
+    expect(residentConfigSchema.safeParse({ name: 'x' }).success).toBe(false);
+    expect(residentConfigSchema.safeParse({ ...valid, model: '' }).success).toBe(false);
+    expect(residentConfigSchema.safeParse({ ...valid, mind: {} }).success).toBe(false);
+  });
+
+  it('model 必须 provider/model 格式', () => {
+    expect(residentConfigSchema.safeParse({ ...valid, model: 'no-slash' }).success).toBe(false);
+  });
+
+  it('cycle.type 必须 forever', () => {
+    expect(
+      residentConfigSchema.safeParse({
+        ...valid,
+        cycle: { ...valid.cycle, type: 'once' },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('关系校验：lifetimeMs > intervalMs，timeoutMs >= intervalMs', () => {
+    expect(
+      residentConfigSchema.safeParse({
+        ...valid,
+        cycle: { ...valid.cycle, lifetimeMs: 1000, intervalMs: 3600000 },
+      }).success,
+    ).toBe(false);
+    expect(
+      residentConfigSchema.safeParse({
+        ...valid,
+        cycle: { ...valid.cycle, timeoutMs: 500, intervalMs: 3600000 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('parseResidentConfig 返回 Result 风格', () => {
+    expect(parseResidentConfig(valid).success).toBe(true);
+    expect(parseResidentConfig({}).success).toBe(false);
   });
 });

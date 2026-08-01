@@ -133,7 +133,8 @@ CCC 有明确的目录边界。Agent 对文件系统和版本控制的一切操�
 
 - **`cc-fs`** — 15 种文件操作（`root` / `resolve` / `exists` / `list` / `tree` / `relative` / `mkdir` / `rm` / `mv` / `cp` / `touch` / `append` / `reveal` / `info` / `find`），全部路径逃逸自动阻断。
 - **`cc-git`** — 高频 Git 操作：`status` / `commit` / `push` / `log` / `pull`。非快进推送自动输出建议，冲突解决走 bash。
-- **`cc-ck`** — 无参数。三原则健康检查：.serenity 存在？Git 管理？配置完整？
+- **`acc_kit`** — ACC 通用能力工具包：`health`（三原则健康检查）/ `time`（当前时间）/ `wait`（等待 N 秒）。
+- **`resident`** — 顶层常驻 agent（居民）：`start` / `status` / `stop`。双层循环，生命周期自我了结。
 
 ### 跨对话的工作记忆
 

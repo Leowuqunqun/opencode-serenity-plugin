@@ -134,7 +134,8 @@ A CCC has a clear filesystem boundary. Every file and git operation stays inside
 
 - **`cc-fs`** — 15 file operations (`root` / `resolve` / `exists` / `list` / `tree` / `relative` / `mkdir` / `rm` / `mv` / `cp` / `touch` / `append` / `reveal` / `info` / `find`), all with auto path-escape blocking.
 - **`cc-git`** — High-frequency git operations: `status` / `commit` / `push` / `log` / `pull`. Non-fast-forward pushes output suggestions; conflict resolution goes through bash.
-- **`cc-ck`** — No parameters. Three-principle health check: .serenity present? Git-managed? Config complete?
+- **`acc_kit`** — ACC utility kit: `health` (three-principle check) / `time` (current time) / `wait` (sleep N seconds).
+- **`resident`** — Top-level persistent agent (resident): `start` / `status` / `stop`. Double-loop, lifetime self-termination.
 
 ### Cross-conversation working memory
 

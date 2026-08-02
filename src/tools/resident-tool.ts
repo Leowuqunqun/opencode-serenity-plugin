@@ -164,44 +164,53 @@ export const residentTool: ToolDefinition = tool({
     });
 
     // 用户取消 → 杀 runner 进程组（runner + serve 一锅端）
+    // detached:true 时 child 是新进程组 leader，kill(-pid) 杀整组。
     const killGroup = () => {
       try { process.kill(-child.pid!, 'SIGTERM'); } catch {}
+      // 兜底：进程组可能已消失，直接杀单个 pid
+      try { process.kill(child.pid!, 'SIGTERM'); } catch {}
     };
-    if (ctx.abort.aborted) {
-      killGroup();
-      throw new Error('resident start 已被用户取消');
-    }
+
+    // abort 触发时可靠杀进程组；同时用轮询确保进程真正退出（超时强杀 SIGKILL）
     const onAbort = () => killGroup();
     ctx.abort.addEventListener('abort', onAbort);
+    if (ctx.abort.aborted) onAbort();
 
-    // 4. 阻塞等待 runner 退出（resident 常驻，只有 stop/死亡/宿主死才退出）
-    const exitCode = await new Promise<number>((resolve) => {
-      child.on('close', (code) => resolve(code ?? -1));
-    });
-    ctx.abort.removeEventListener('abort', onAbort);
+    try {
+      // 4. 阻塞等待 runner 退出（resident 常驻，只有 stop/死亡/中断/宿主死才退出）
+      const exitCode = await new Promise<number>((resolve) => {
+        child.on('close', (code) => resolve(code ?? -1));
+      });
+      if (ctx.abort.aborted) {
+        throw new Error('resident start 已被用户取消');
+      }
+      if (spawnError) {
+        throw new Error(`resident start 失败: ${spawnError.message} (log: ${runnerLogFile(port)})`);
+      }
+      if (exitCode !== 0) {
+        throw new Error(`resident 进程退出 (exit=${exitCode}); log: ${runnerLogFile(port)}`);
+      }
 
-    if (ctx.abort.aborted) {
-      throw new Error('resident start 已被用户取消');
+      return JSON.stringify(
+        {
+          ok: true,
+          stopped: true,
+          name: config.name,
+          port,
+          log: runnerLogFile(port),
+          note: 'resident stopped; mind was solidified to .serenity-meta/mind.md',
+        },
+        null,
+        2,
+      );
+    } finally {
+      ctx.abort.removeEventListener('abort', onAbort);
+      // 若工具被中断但进程仍存活（abort 监听未触发/竞态），此处兜底强杀
+      if (ctx.abort.aborted) {
+        try { process.kill(-child.pid!, 'SIGKILL'); } catch {}
+        try { process.kill(child.pid!, 'SIGKILL'); } catch {}
+      }
     }
-    if (spawnError) {
-      throw new Error(`resident start 失败: ${spawnError.message} (log: ${runnerLogFile(port)})`);
-    }
-    if (exitCode !== 0) {
-      throw new Error(`resident 进程退出 (exit=${exitCode}); log: ${runnerLogFile(port)}`);
-    }
-
-    return JSON.stringify(
-      {
-        ok: true,
-        stopped: true,
-        name: config.name,
-        port,
-        log: runnerLogFile(port),
-        note: 'resident stopped; mind was solidified to .serenity-meta/mind.md',
-      },
-      null,
-      2,
-    );
   },
 });
 

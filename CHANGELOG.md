@@ -1,5 +1,14 @@
 # 更新日志
 
+## v0.8.5 — 🛑 resident 中断清理加固（S110 用户反馈）
+
+用户反馈"start 被中断后 resident 没有停止进程"，修复中断清理可靠性：
+
+- **abort 处理加固**：killGroup 同时杀进程组（`-pid`）和单个 pid（进程组可能已消失）；abort 已触发时立即执行。
+- **finally 兜底强杀**：工具 promise 被中断后，finally 检查 `abort.aborted` 并 SIGKILL 兜底，杜绝残留进程。
+- **新增测试**：真实 detached 进程组 abort 中断 → SIGTERM 清理 + close 触发（548 全绿）。
+- ccc-config 文档更新：说明中断时 resident 进程也会被杀（与 loop 一致）。
+
 ## v0.8.4 — ⏳ resident start 改为阻塞挂住（像 loop）
 
 根据用户反馈（"start 后为何立即返回，像 loop 一样 hang 住即可"）：

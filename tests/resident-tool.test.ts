@@ -142,3 +142,41 @@ describe('residentTool execute (start — 简化接口 v0.8.3)', () => {
     await expect(residentTool.execute!({} as any, fakeCtx())).rejects.toThrow(/name and model/);
   });
 });
+
+describe('abort 中断清理（detached 进程组，S110 用户反馈）', () => {
+  it('abort 触发后 detached 进程组被 SIGTERM 杀掉，close 触发', async () => {
+    // 用真实 node 脚本模拟 resident-runner：detached 新进程组，SIGTERM 时退出
+    const nodeBin = findNodeBin();
+    const script = [
+      "process.on('SIGTERM', () => { process.exit(0); });",
+      "setInterval(() => {}, 1000);", // 保持存活
+    ].join('\n');
+
+    const child = spawn(nodeBin, ['-e', script], { detached: true, stdio: 'ignore' });
+    const ac = new AbortController();
+
+    let closeFired = false;
+    const closePromise = new Promise<number>((resolve) => {
+      child.on('close', (code) => { closeFired = true; resolve(code ?? -1); });
+    });
+
+    // 模拟中断：abort 触发 → 杀进程组（与 resident-tool 的 killGroup 相同）
+    const onAbort = () => {
+      try { process.kill(-child.pid!, 'SIGTERM'); } catch {}
+      try { process.kill(child.pid!, 'SIGTERM'); } catch {}
+    };
+    ac.signal.addEventListener('abort', onAbort);
+
+    // 给进程一点启动时间，然后中断
+    await new Promise((r) => setTimeout(r, 300));
+    ac.abort();
+
+    const exitCode = await Promise.race([
+      closePromise,
+      new Promise<number>((_, rej) => setTimeout(() => rej(new Error('close 未在 3s 内触发')), 3000)),
+    ]);
+    expect(closeFired).toBe(true);
+    expect(exitCode).toBe(0);
+    ac.signal.removeEventListener('abort', onAbort);
+  });
+});

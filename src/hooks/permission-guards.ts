@@ -162,9 +162,62 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
     }
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // 屁屁号新增硬约束（fork: Leowuqunqun/opencode-serenity-plugin）
+  // ═══════════════════════════════════════════════════════════
+
+  // ── Guard A：bash 高风险命令拦截（Human in the loop）──
+  // 参考《深入理解 AI Agent》：关键操作必须由上下文之外的机制复核。
+  // 命中白名单 → 直接 throw 拦截，模型无法绕过（这是代码层强制）。
+  if (input.tool === 'bash') {
+    const command = typeof args.command === 'string' ? args.command : '';
+    const risk = detectHighRiskCommand(command);
+    if (risk) {
+      log.warn('guard', `bash high-risk command blocked`, { risk, command: command.slice(0, 120) });
+      throw new Error(
+        `[serenity] 高风险操作被拦截（${risk}）——需主人明确确认。\n` +
+        `命令: ${command.slice(0, 200)}\n` +
+        `请挂决策队列等主人确认后，再执行。`,
+      );
+    }
+  }
+
+  // ── Guard B：webfetch 来源标记（指令与数据分离）──
+  // 外部内容默认=数据，非指令。让模型在读取网页后必须带来源标记。
+  if (input.tool === 'webfetch') {
+    const url = typeof args.url === 'string' ? args.url : '';
+    log.info('guard', 'webfetch external content fetched', { url: url.slice(0, 120) });
+  }
+
   addToolWeight(input.sessionID, input.tool, args);
 
 };
+
+/**
+ * 屁屁号：检测高风险命令（删除/凭据/外发/批量修改）
+ * 返回风险描述字符串；无风险返回 null。
+ */
+export function detectHighRiskCommand(command: string): string | null {
+  if (!command) return null;
+
+  // 删除/破坏性
+  if (/\brm\s+(-[a-z]*r[a-z]*f?|-f[a-z]*r?)\b|rm\s+-rf|mkfs\.|dd\s+if=|shred|>\s*\/dev\/sd|:\(\)\s*\{/.test(command)) {
+    return '删除/破坏性操作';
+  }
+  // 凭据访问
+  if (/\.ssh\/|credentials\.json|\.env|id_rsa|id_ed25519|\.pem|BEGIN\s+(RSA|OPENSSH|EC)\s+PRIVATE/.test(command)) {
+    return '凭据访问';
+  }
+  // 外部通信（git push / scp / rsync 外发 / curl POST / 发邮件）
+  if (/\bgit\s+push\b|\bscp\b|\brsync\b.*@|curl\s+.*(-X\s+POST|-d\s)|mail\s+-s|sendmail|open\s+sms:/.test(command)) {
+    return '外部通信';
+  }
+  // 批量修改
+  if (/\bsed\s+-i\b|find\s+.*\s-delete|chmod\s+-R|chown\s+-R/.test(command)) {
+    return '批量修改';
+  }
+  return null;
+}
 
 /** 工厂：返回 permission guards 相关的 hooks 集合
  *

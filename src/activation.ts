@@ -53,16 +53,25 @@ export function tryActivateSync(input: PluginInput, getClient?: GetClient): Sync
   const cwd = input.directory;
   log.info('phase1', 'start sync activation', { cwd });
 
-  // Phase 1 — RR6 同步检查
+  // Phase 1 — RR6 同步检查（屁屁号 fork：允许非 git 目录）
+  // 原逻辑：必须 git repo 才激活。fork 新增降级：若 cwd 下存在 .serenity，
+  // 直接用 cwd 作为 cccRoot（非 git 目录也可用 CCC，但 RR5 路径限制仍生效）。
   let cwdRoot: string;
   try {
     cwdRoot = findGitRoot(cwd);
     log.info('phase1', 'RR6 ok: cwd in git repo', { cwdRoot });
   } catch (err) {
-    const reason = formatErrorMessage(err, 'RR6: cwd not in git repo');
-    log.warn('phase1', 'RR6 failed', { reason, cwd });
-    markDisabled(reason);
-    return { ok: false, reason };
+    // fork: 降级尝试 —— cwd 或上级目录有 .serenity 就直接用该目录
+    const localSerenity = awaitLocalSerenityRoot(cwd);
+    if (localSerenity) {
+      cwdRoot = localSerenity;
+      log.warn('phase1', 'RR6 degraded: not a git repo, but .serenity found (fork)', { cwdRoot, cwd });
+    } else {
+      const reason = formatErrorMessage(err, 'RR6: cwd not in git repo');
+      log.warn('phase1', 'RR6 failed', { reason, cwd });
+      markDisabled(reason);
+      return { ok: false, reason };
+    }
   }
 
   // Phase 1 — RR1 同步检查（必须在宁静号根目录）
@@ -183,4 +192,23 @@ async function activateAsync(cwdRoot: string, getClient?: GetClient): Promise<vo
 
 function formatErrorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
+}
+
+/**
+ * 屁屁号 fork：在非 git 目录中寻找 .serenity 标记（RR6 降级）。
+ * 从 cwd 向上逐级查找，找到含 .serenity 的目录即返回（CCC 根），否则 null。
+ */
+function awaitLocalSerenityRoot(startDir: string): string | null {
+  let dir = startDir;
+  for (let i = 0; i < 10; i++) {
+    try {
+      if (existsSync(join(dir, '.serenity'))) return dir;
+    } catch {
+      return null;
+    }
+    const parent = dir === '/' ? null : join(dir, '..');
+    if (!parent || parent === dir) break;
+    dir = parent;
+  }
+  return null;
 }

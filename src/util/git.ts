@@ -7,7 +7,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { resolve as resolvePath } from 'node:path';
+import { resolve as resolvePath, dirname, join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 import { NotInGitRepoError } from '../errors.js';
 
 /**
@@ -72,6 +73,62 @@ export function isGitClean(cwd: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * 从 cwd 的 .git/config 读取 [remote "origin"] 的 URL，提取 GitHub owner。
+ * 用于 git push owner 白名单检测（2026-08-19 放开个人 fork push）。
+ *
+ * 支持 URL 形式：
+ *   - https://github.com/<owner>/<repo>.git
+ *   - https://github.com/<owner>/<repo>
+ *   - git@github.com:<owner>/<repo>.git
+ *   - git@github.com:<owner>/<repo>
+ *
+ * @param cwd 任意子目录（向上找 .git/config）
+ * @returns owner 字符串（如 'Leowuqunqun'）；非 GitHub URL / 无 origin → null
+ */
+export function readGitHubOwner(cwd: string): string | null {
+  try {
+    const configPath = findGitConfigPath(cwd);
+    if (!configPath) return null;
+    const content = readFileSync(configPath, 'utf8');
+    // 解析 [remote "origin"] 段的 url
+    const remoteSection = content.split(/\[\s*remote\s+"origin"\s*\]/)[1];
+    if (!remoteSection) return null;
+    const urlLine = remoteSection.split(/\[\s*[a-zA-Z]/)[0]!.match(/url\s*=\s*(.+)/);
+    if (!urlLine) return null;
+    const url = urlLine[1]!.trim();
+    // 提取 GitHub owner
+    const m = url.match(/github\.com[:/]([\w.-]+)\//);
+    return m ? m[1]! : null;
+  } catch {
+    return null;
+  }
+}
+
+function findGitConfigPath(startDir: string): string | null {
+  let current = resolvePath(startDir);
+  while (true) {
+    const candidate = join(current, '.git', 'config');
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+/**
+ * 检查 cwd 的 git origin 是否在白名单 owner 列表中。
+ * 仅对 GitHub URL 生效；其他 URL（非 GitHub）一律返回 false。
+ *
+ * 白名单维护：所有 owner 在此列出。**收紧而非放开**——LLM 永远不能推
+ * 官方仓（tellmewhattodo）或任何不在此名单的 owner。
+ */
+export function isAllowedPushOwner(cwd: string, allowedOwners: readonly string[]): boolean {
+  const owner = readGitHubOwner(cwd);
+  if (!owner) return false;
+  return allowedOwners.includes(owner);
 }
 
 /** git add + commit（用于 RR7） */

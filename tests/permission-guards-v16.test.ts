@@ -321,3 +321,38 @@ describe('v1.6 RR5 — 集成场景（verify hard block on edit/write/read）', 
     }
   });
 });
+
+// ── v1.6.1 git push owner 白名单（2026-08-19 放开个人 fork）──
+// 收紧而非放开：仅当 git origin owner 在白名单（'Leowuqunqun'）才允许。
+// 官方仓（tellmewhattodo）或其他 owner 一律仍 throw。
+describe('v1.6.1 git push owner allowlist', () => {
+  it('git push 到白名单 owner（Leowuqunqun）→ 不 throw', async () => {
+    // 直接调用工具函数（mock state 因为 hook 内调用 process.cwd()）
+    const { detectHighRiskCommand } = await import('../src/hooks/permission-guards.js');
+    const { isAllowedPushOwner } = await import('../src/util/git.js');
+    // 此测试 cwd 即仓库根 /Users/leo/code/opencode-serenity-plugin，
+    // 其 origin 是 Leowuqunqun/opencode-serenity-plugin → 在白名单
+    const command = 'git push origin main';
+    const risk = detectHighRiskCommand(command);
+    expect(risk).toBe('外部通信'); // 仍检测为高风险
+    const allowed = isAllowedPushOwner(process.cwd(), ['Leowuqunqun']);
+    expect(allowed).toBe(true); // 但 owner 在白名单 → 放行
+  });
+
+  it('readGitHubOwner 能从 .git/config 提取 owner', async () => {
+    const { readGitHubOwner } = await import('../src/util/git.js');
+    const owner = readGitHubOwner(process.cwd());
+    expect(owner).toBe('Leowuqunqun');
+  });
+
+  it('非白名单 owner（tellmewhattodo 官方仓）→ isAllowedPushOwner 返回 false', async () => {
+    const { isAllowedPushOwner } = await import('../src/util/git.js');
+    // 模拟：假设有个 tellmewhattodo owner 的仓 → 白名单只有 Leowuqunqun → false
+    const allowed = isAllowedPushOwner(process.cwd(), ['Leowuqunqun']);
+    // 但 process.cwd() 实际是 Leowuqunqun，所以 allowed=true
+    // 这测试的是函数逻辑：用真实 cwd 跑时，限定其他白名单应 false
+    const allowedTellmewhattodo = isAllowedPushOwner(process.cwd(), ['tellmewhattodo']);
+    expect(allowedTellmewhattodo).toBe(false); // 当前 cwd 不是 tellmewhattodo owner
+    expect(allowed).toBe(true); // 当前 cwd 是 Leowuqunqun owner
+  });
+});

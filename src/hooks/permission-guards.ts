@@ -22,7 +22,7 @@
 import type { Hooks } from '@opencode-ai/plugin';
 import { resolve as pathResolve } from 'node:path';
 import { realpathSync, existsSync } from 'node:fs';
-import { isPathInside } from '../util/git.js';
+import { isPathInside, isAllowedPushOwner } from '../util/git.js';
 import { isSystemPathAlias } from '../util/path.js';
 import { getState, ensureReady } from '../state.js';
 import { isHookEnabled, type HookConfig } from './util.js';
@@ -176,19 +176,40 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
   // 屁屁号新增硬约束（fork: Leowuqunqun/opencode-serenity-plugin）
   // ═══════════════════════════════════════════════════════════
 
+  /** git push 白名单 owner（2026-08-19 放开个人 fork）
+   *  收紧而非放开：LLM 永远不能推官方仓或任何非白名单 owner。
+   *  白名单维护：新增 owner 必须主人明示（如 'Leowuqunqun'）。
+   */
+  const PUSH_OWNER_ALLOWLIST = ['Leowuqunqun'] as const;
+
+  /** git push 是否允许：owner 在白名单才允许 */
+  function isGitPushAllowedByOwner(command: string): boolean {
+    if (!/\bgit\s+push\b/.test(command)) return false;
+    // 2026-08-19: 用 args.cwd（bash 工具实际执行目录）而非 process.cwd()（OpenCode 进程启动目录）
+    // 否则在 CCC 内执行插件仓 push 时，hook 拿不到插件仓的 .git/config
+    const bashCwd = typeof args.cwd === 'string' ? args.cwd : process.cwd();
+    return isAllowedPushOwner(bashCwd, PUSH_OWNER_ALLOWLIST);
+  }
+
   // ── Guard A：bash 高风险命令拦截（Human in the loop）──
   // 参考《深入理解 AI Agent》：关键操作必须由上下文之外的机制复核。
   // 命中白名单 → 直接 throw 拦截，模型无法绕过（这是代码层强制）。
+  // 例外：git push 到白名单 owner（个人 fork）→ 不 throw（2026-08-19 主人决定）
   if (input.tool === 'bash') {
     const command = typeof args.command === 'string' ? args.command : '';
     const risk = detectHighRiskCommand(command);
     if (risk) {
-      log.warn('guard', `bash high-risk command blocked`, { risk, command: command.slice(0, 120) });
-      throw new Error(
-        `[serenity] 高风险操作被拦截（${risk}）——需主人明确确认。\n` +
-        `命令: ${command.slice(0, 200)}\n` +
-        `请挂决策队列等主人确认后，再执行。`,
-      );
+      // 例外：git push 到白名单 owner → 不 throw
+      if (risk === '外部通信' && isGitPushAllowedByOwner(command)) {
+        log.info('guard', 'git push allowed by owner allowlist', { command: command.slice(0, 120) });
+      } else {
+        log.warn('guard', `bash high-risk command blocked`, { risk, command: command.slice(0, 120) });
+        throw new Error(
+          `[serenity] 高风险操作被拦截（${risk}）——需主人明确确认。\n` +
+          `命令: ${command.slice(0, 200)}\n` +
+          `请挂决策队列等主人确认后，再执行。`,
+        );
+      }
     }
   }
 

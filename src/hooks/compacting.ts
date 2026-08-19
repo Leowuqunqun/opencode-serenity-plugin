@@ -22,9 +22,101 @@ import { getState, ensureReady, clearPhase2Flag } from '../state.js';
 import { safeCreateHook, type HookConfig } from './util.js';
 import { getActiveSession, setActiveSession, getLastActiveSession, getCapturedOcSessionId, captureOcSessionId } from '../session/active-state.js';
 import { processSessionKeeper, triggerOnToolResult } from '../session/session-keeper.js';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import pkg from '../../package.json' with { type: 'json' };
 
 const VERSION: string = pkg.version;
+
+/**
+ * Health Gate 目录注入（测试隔离用）。
+ * 生产环境不设置 → 用真实 ~/AGENT_SESSIONS；测试设置 → 用临时目录，避免依赖真实环境状态。
+ */
+let healthGateSessionsDirOverride: string | undefined = undefined;
+export function setHealthGateSessionsDir(dir?: string): void {
+  healthGateSessionsDirOverride = dir;
+}
+
+/**
+ * 构建 Health Gate 块（机制自健康快照，硬门禁注入）。
+ *
+ * 读取：
+ *  - /tmp/pigha-auto-fix-result.txt（自动修复结果，含"待 LLM 处理"标记）
+ *  - ~/AGENT_SESSIONS/.watchdog-status（机制自健康状态）
+ *  - ~/AGENT_SESSIONS/checkpoints/（checkpoint 残留 = 异常退出信号）
+ *  - ~/AGENT_SESSIONS/.resident-need-attention（resident 需要关注标记）
+ *
+ * 无任何未清零项 → 返回 null（不注入，避免噪音）。
+ * 有未清零项 → 返回显眼门禁块（Agent 无法跳过）。
+ */
+export function buildHealthGateBlock(sessionsDirOverride?: string): string | null {
+  const home = homedir();
+  const sessionsDir = sessionsDirOverride ?? join(home, 'AGENT_SESSIONS');
+  const gateIssues: string[] = [];
+
+  // 1. auto-fix 结果（待 LLM 处理项）
+  try {
+    const fixResultPath = '/tmp/pigha-auto-fix-result.txt';
+    if (existsSync(fixResultPath)) {
+      const content = readFileSync(fixResultPath, 'utf8');
+      if (content.includes('待 LLM 处理: 有')) {
+        gateIssues.push('auto-fix: 存在待 LLM 处理的强制清单（见 /tmp/pigha-auto-fix-result.txt）');
+      }
+    }
+  } catch { /* ignore */ }
+
+  // 2. watchdog 状态
+  try {
+    const watchdogPath = join(sessionsDir, '.watchdog-status');
+    if (existsSync(watchdogPath)) {
+      const status = readFileSync(watchdogPath, 'utf8');
+      if (status.includes('⚠️') || status.includes('❌')) {
+        gateIssues.push('watchdog: 机制自健康异常（见 ~/AGENT_SESSIONS/.watchdog-status）');
+      }
+    }
+  } catch { /* ignore */ }
+
+  // 3. checkpoint 残留（30+ 分钟未更新 = 异常退出）
+  try {
+    const cpDir = join(sessionsDir, 'checkpoints');
+    if (existsSync(cpDir)) {
+      const now = Date.now();
+      for (const name of readdirSync(cpDir)) {
+        if (!name.endsWith('.md')) continue;
+        const full = join(cpDir, name);
+        const stat = statSync(full);
+        const ageMin = (now - stat.mtimeMs) / 60000;
+        if (ageMin >= 30) {
+          gateIssues.push(`checkpoint: 残留 ${name}（${Math.floor(ageMin)} 分钟未更新 = 上次会话疑似异常退出）`);
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
+  // 4. resident 需要关注标记
+  try {
+    const flagPath = join(sessionsDir, '.resident-need-attention');
+    if (existsSync(flagPath)) {
+      gateIssues.push('resident: 有巡检发现的问题待处理（读 ~/AGENT_SESSIONS/RESIDENT-REPORT.md）');
+    }
+  } catch { /* ignore */ }
+
+  if (gateIssues.length === 0) return null;
+
+  const lines = ['', '=== Serenity Health Gate ===', ''];
+  lines.push('⚠️ 门禁未清零（硬性：以下问题必须先处理，全部清零后才可开始新任务）');
+  lines.push('');
+  for (const issue of gateIssues) {
+    lines.push(`  • ${issue}`);
+  }
+  lines.push('');
+  lines.push('铁律：第一句话必须是报告以上问题+处理进度，而不是问用户今天做什么。');
+  lines.push('  处理方式：先跑 bash ~/.opencode/skills/leo-home-sqc/scripts/pigha-auto-fix.sh，');
+  lines.push('  然后按清单逐项处理；全部清零后再进入正常任务。');
+  lines.push('');
+  return lines.join('\n');
+}
 
 const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform']> = async (
   _input,
@@ -137,6 +229,17 @@ const systemTransformImpl: NonNullable<Hooks['experimental.chat.system.transform
       '',
     ].join('\n');
     output.system.push(block);
+  }
+
+  // ── 注入 Health Gate（机制自健康快照，硬门禁：不经过 LLM 判断，插件直接注入）──
+  // 读取 auto-fix 结果 / watchdog 状态 / checkpoint 残留 / resident 标记
+  // 有未清零项时，Agent 的 system prompt 从一开始就带着门禁状态，无法跳过
+  const healthMarker = '=== Serenity Health Gate ===';
+  if (!output.system.some(s => typeof s === 'string' && s.includes(healthMarker))) {
+    const healthBlock = buildHealthGateBlock(healthGateSessionsDirOverride);
+    if (healthBlock) {
+      output.system.push(healthBlock);
+    }
   }
 
   // 注入 SKILL.md 全文

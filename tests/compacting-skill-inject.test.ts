@@ -11,9 +11,12 @@
  * 7. session.compacting 仍正常工作
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { setState, resetState, markReady } from '../src/state.js';
-import { createCompactingHooks } from '../src/hooks/compacting.js';
+import { createCompactingHooks, setHealthGateSessionsDir } from '../src/hooks/compacting.js';
 import { INACTIVE_STATE, type SerenityState } from '../src/types/index.js';
 
 function makeState(overrides: Partial<SerenityState> = {}): SerenityState {
@@ -28,8 +31,19 @@ function makeState(overrides: Partial<SerenityState> = {}): SerenityState {
 }
 
 describe('v1.4 system.transform SKILL.md injection', () => {
+  // 隔离 Health Gate：用空临时目录，避免读到真实 ~/AGENT_SESSIONS 的残留标记
+  let fakeSessions: string;
+
   beforeEach(() => {
     resetState();
+    fakeSessions = mkdtempSync(join(tmpdir(), 'skill-inject-'));
+    mkdirSync(join(fakeSessions, 'checkpoints'), { recursive: true });
+    setHealthGateSessionsDir(fakeSessions);
+  });
+
+  afterEach(() => {
+    setHealthGateSessionsDir(undefined);
+    rmSync(fakeSessions, { recursive: true, force: true });
   });
 
   it('plugin 激活 + skillContent 有值 → constraints block + SKILL.md 都注入', async () => {

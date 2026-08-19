@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -52,7 +52,8 @@ describe('activation.tryActivateSync (v0.1 two-phase init)', () => {
     const result = tryActivateSync(fakeInput(tmp));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.cwdRoot).toBe(tmp);
+      // macOS /var→/private/var：cwdRoot 是 git realpath，tmp 需归一化
+      expect(result.cwdRoot).toBe(realpathSync(tmp));
       // Phase 1 同步完成后：state 仍 INACTIVE（Phase 2 后台跑）
       // Phase 2 完成后：state.activated = true
       await waitForReady();

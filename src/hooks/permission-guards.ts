@@ -23,6 +23,7 @@ import type { Hooks } from '@opencode-ai/plugin';
 import { resolve as pathResolve } from 'node:path';
 import { realpathSync, existsSync } from 'node:fs';
 import { isPathInside } from '../util/git.js';
+import { isSystemPathAlias } from '../util/path.js';
 import { getState, ensureReady } from '../state.js';
 import { isHookEnabled, type HookConfig } from './util.js';
 import { log } from '../util/log.js';
@@ -85,8 +86,17 @@ function classifyPath(value: string, cwdRoot: string): 'inside' | 'outside' | 's
   if (existsSync(abs)) {
     try {
       const real = realpathSync(abs);
-      if (real !== abs) return 'symlink';
-      if (!isPathInside(cwdRoot, real)) return 'symlink';
+      // 2026-08-19: 修复 macOS /var→/private/var 系统符号链接误判。
+      // real !== abs 不一定攻击：/var、/tmp、/etc 是系统级别名。
+      // 安全关键 = real 是否在容器内。
+      if (real !== abs && !isSystemPathAlias(abs, real)) return 'symlink';
+      let rootReal = cwdRoot;
+      try {
+        rootReal = realpathSync(cwdRoot);
+      } catch {
+        rootReal = cwdRoot;
+      }
+      if (!isPathInside(rootReal, real)) return 'symlink';
     } catch {
       return 'unparseable';
     }

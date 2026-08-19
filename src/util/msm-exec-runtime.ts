@@ -387,7 +387,12 @@ function runBusinessMsm(entry: RegistryEntry, businessArgs: string[], cwd: strin
     // msm-exec-runtime 这里只 spawn，不再做二次校验（避免重复）
 
     const state = getState();
-    const child = spawn("npx", ["tsx", absPath, ...businessArgs], {
+    // 2026-08-19: 按脚本扩展名选择解释器（屁屁号 shell 派 MSM 兼容）
+    //   .sh → bash ｜ .ts → npx tsx ｜ 其他 → 默认 npx tsx
+    const isShell = absPath.endsWith('.sh');
+    const cmd = isShell ? 'bash' : 'npx';
+    const cmdArgs = isShell ? [absPath, ...businessArgs] : ['tsx', absPath, ...businessArgs];
+    const child = spawn(cmd, cmdArgs, {
       cwd,
       env: state.activated
         ? {

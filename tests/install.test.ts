@@ -28,7 +28,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync, mkdirSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync, mkdirSync, statSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, isAbsolute, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -145,8 +145,10 @@ describe('resolvePluginEntries', () => {
     expect(result.id).toBe(PLUGIN_ID);
     expect(result.server.id).toBe(PLUGIN_ID);
     expect(result.tui.id).toBe(PLUGIN_ID);
-    expect(result.server.absPath).toBe(join(pkgRoot, 'dist', 'index.js'));
-    expect(result.tui.absPath).toBe(join(pkgRoot, 'dist', 'tui.js'));
+    // macOS /var→/private/var：resolvePluginEntries 用 realpathSync，pkgRoot 需归一化
+    const pkgRootReal = realpathSync(pkgRoot);
+    expect(result.server.absPath).toBe(join(pkgRootReal, 'dist', 'index.js'));
+    expect(result.tui.absPath).toBe(join(pkgRootReal, 'dist', 'tui.js'));
     expect(result.server.path.startsWith('file://')).toBe(true);
     expect(result.tui.path.startsWith('file://')).toBe(true);
   });
@@ -157,7 +159,8 @@ describe('resolvePluginEntries', () => {
     symlinkSync(realPkg, linkPkg);
     const result = resolvePluginEntries(linkPkg);
     // server.absPath 应指向 real pkg,不是 symlink
-    expect(result.server.absPath).toBe(join(realPkg, 'dist', 'index.js'));
+    // macOS /var→/private/var：realpathSync 返回真实路径，断言侧归一化
+    expect(result.server.absPath).toBe(join(realpathSync(realPkg), 'dist', 'index.js'));
     expect(result.server.absPath.includes('link-pkg')).toBe(false);
   });
 
@@ -175,7 +178,8 @@ describe('resolveInstallPathFromBin', () => {
     mkdirSync(join(pkgRoot, 'bin'), { recursive: true });
     writeFileSync(binFile, '#!/usr/bin/env node', 'utf8');
     const installPath = resolveInstallPathFromBin(binFile);
-    expect(installPath).toBe(pkgRoot);
+    // macOS /var→/private/var：resolveInstallPathFromBin 用 realpathSync
+    expect(installPath).toBe(realpathSync(pkgRoot));
   });
 
   it('symlink bin → 解析到真实 pkg', () => {
@@ -186,7 +190,7 @@ describe('resolveInstallPathFromBin', () => {
     const globalBinLink = join(tmpDir, 'global-bin-link');
     symlinkSync(realBin, globalBinLink);
     const installPath = resolveInstallPathFromBin(globalBinLink);
-    expect(installPath).toBe(realPkg);
+    expect(installPath).toBe(realpathSync(realPkg));
   });
 
   it('相对路径 → 抛错', () => {

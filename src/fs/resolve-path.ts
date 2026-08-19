@@ -25,7 +25,18 @@ export function findSerenityRoot(cwd: string): string {
   // 向上遍历到根
   while (true) {
     const marker = resolve(current, '.serenity');
-    if (existsSync(marker) && statSync(marker).isFile()) {
+    // 支持两种形态（2026-08-19 兼容屁屁号目录形态）：
+    //   文件形态：<root>/.serenity 为普通文件
+    //   目录形态：<root>/.serenity/ccc-name 标记文件（天工凭据目录占用）
+    let isMarker = false;
+    if (existsSync(marker)) {
+      if (statSync(marker).isFile()) {
+        isMarker = true;
+      } else if (statSync(marker).isDirectory()) {
+        isMarker = existsSync(resolve(marker, 'ccc-name'));
+      }
+    }
+    if (isMarker) {
       return current;
     }
     // 到达根目录

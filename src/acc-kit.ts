@@ -10,7 +10,7 @@
  *   wait   — 等待指定秒数
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import { z } from 'zod';
@@ -26,9 +26,15 @@ function cccHealthCheck(directory: string): string {
 
   const root = findSerenityRoot(directory);
 
-  // P1: .serenity file exists and is non-empty
+  // P1: .serenity marker exists (文件形态 或 目录形态含 ccc-name)
   const serenityPath = resolve(root, '.serenity');
-  const p1Pass = existsSync(serenityPath);
+  const p1Pass = existsSync(serenityPath)
+    ? statSync(serenityPath).isFile()
+      ? true
+      : statSync(serenityPath).isDirectory()
+        ? existsSync(resolve(serenityPath, 'ccc-name'))
+        : false
+    : false;
 
   // P2: git-managed — state.activated implies git check passed (RR6)
   const p2Pass = state.activated;

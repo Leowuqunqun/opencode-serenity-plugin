@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isPathInside, findGitRoot } from '../src/util/git.js';
@@ -40,6 +40,8 @@ describe('util/git', () => {
     writeFileSync(join(tmp, 'a.txt'), 'a');
     execFileSync('git', ['add', '.'], { cwd: tmp, stdio: 'ignore' });
     execFileSync('git', ['commit', '-m', 'init'], { cwd: tmp, stdio: 'ignore' });
-    expect(findGitRoot(tmp)).toBe(tmp);
+    // macOS /var→/private/var：git 返回 realpath，tmp 需归一化后比较
+    const tmpReal = realpathSync(tmp);
+    expect(findGitRoot(tmp)).toBe(tmpReal);
   });
 });

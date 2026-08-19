@@ -31,6 +31,7 @@
 import { resolve as resolvePath } from 'node:path';
 import { realpathSync, existsSync } from 'node:fs';
 import { isPathInside } from './util/git.js';
+import { isSystemPathAlias } from './util/path.js';
 import { MsmPathEscapeError, MsmSymlinkError } from './errors.js';
 
 /** 原始 flag 字段（v1 schema 用 `flag`，v0 schema 用 `name`） */
@@ -228,10 +229,27 @@ export function validatePathArgsFromTokens(
       } catch {
         throw new MsmSymlinkError('msm_exec', flagName, value, abs, 'realpath resolution failed');
       }
+      // 2026-08-19: 修复 macOS /var → /private/var 系统符号链接误判。
+      // 原逻辑 real !== abs 即判 symlink，但 macOS 的 /var、/tmp 等是系统级
+      // 符号链接，realpath 后会带 /private 前缀，导致所有 /var 下路径误报。
+      // 方案：仅当 real 与 abs 不同时，判断是否为"系统级前缀别名"——
+      //   系统别名：real 的父级目录是系统路径（/var→/private/var, /tmp→/private/tmp,
+      //              /etc→/private/etc 等），且 real 仍在容器内 → 放行
+      //   用户 symlink：real 与 abs 不同且非系统别名 → 仍按原逻辑 throw（保持严格）
       if (real !== abs) {
-        throw new MsmSymlinkError('msm_exec', flagName, value, abs, `symlink detected: ${abs} → ${real}`);
+        const isSystemAlias = isSystemPathAlias(abs, real);
+        if (!isSystemAlias) {
+          throw new MsmSymlinkError('msm_exec', flagName, value, abs, `symlink detected: ${abs} → ${real}`);
+        }
       }
-      if (!isPathInside(cwdRoot, real)) {
+      // 边界检查：real 必须仍在容器内（用归一化后的 rootReal 比较）
+      let rootReal = cwdRoot;
+      try {
+        rootReal = realpathSync(cwdRoot);
+      } catch {
+        rootReal = cwdRoot; // cwdRoot 不存在时回退
+      }
+      if (!isPathInside(rootReal, real)) {
         throw new MsmSymlinkError('msm_exec', flagName, value, abs, `symlink points outside cwdRoot: ${real}`);
       }
     }

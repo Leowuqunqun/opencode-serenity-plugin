@@ -182,13 +182,40 @@ const toolExecuteBeforeImpl: NonNullable<Hooks['tool.execute.before']> = async (
    */
   const PUSH_OWNER_ALLOWLIST = ['Leowuqunqun'] as const;
 
+  /**
+   * 从 git push 命令中推断真实的目标 repo 目录（2026-08-19 v2 增强）。
+   * 解决 OpenCode 进程 process.cwd() 与 LLM 实际操作的 git repo 不同的问题。
+   *
+   * 推断优先级：
+   *   1. args.cwd（如果 bash 工具调用时显式传了）
+   *   2. 命令中 `cd <path> &&/;` 后面的 path（解析为绝对路径）
+   *   3. 命令中 `git -C <path>` 后面的 path
+   *   4. fallback process.cwd()
+   */
+  function inferPushRepoDir(command: string, fallbackCwd: string): string {
+    // 优先级 1：args.cwd
+    if (typeof args.cwd === 'string' && args.cwd) {
+      return args.cwd;
+    }
+    // 优先级 2：cd <path> &&/; git push
+    const cdMatch = command.match(/\bcd\s+(\S+)\s*[;&|]/);
+    if (cdMatch) {
+      return pathResolve(cdMatch[1]!);
+    }
+    // 优先级 3：git -C <path> push
+    const gitCMatch = command.match(/\bgit\s+-C\s+(\S+)/);
+    if (gitCMatch) {
+      return pathResolve(gitCMatch[1]!);
+    }
+    // fallback
+    return fallbackCwd;
+  }
+
   /** git push 是否允许：owner 在白名单才允许 */
   function isGitPushAllowedByOwner(command: string): boolean {
     if (!/\bgit\s+push\b/.test(command)) return false;
-    // 2026-08-19: 用 args.cwd（bash 工具实际执行目录）而非 process.cwd()（OpenCode 进程启动目录）
-    // 否则在 CCC 内执行插件仓 push 时，hook 拿不到插件仓的 .git/config
-    const bashCwd = typeof args.cwd === 'string' ? args.cwd : process.cwd();
-    return isAllowedPushOwner(bashCwd, PUSH_OWNER_ALLOWLIST);
+    const repoDir = inferPushRepoDir(command, process.cwd());
+    return isAllowedPushOwner(repoDir, PUSH_OWNER_ALLOWLIST);
   }
 
   // ── Guard A：bash 高风险命令拦截（Human in the loop）──
